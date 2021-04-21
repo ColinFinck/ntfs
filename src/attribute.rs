@@ -304,8 +304,8 @@ where
     T: Read + Seek,
 {
     pub(crate) fn new(fs: &'a mut T, file: &NtfsFile) -> Self {
-        let start = file.position + file.header.first_attribute_offset as u64;
-        let end = file.position + file.header.used_size as u64;
+        let start = file.position() + file.first_attribute_offset() as u64;
+        let end = file.position() + file.used_size() as u64;
         let items_range = start..end;
 
         Self { fs, items_range }

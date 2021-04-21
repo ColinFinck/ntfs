@@ -38,16 +38,16 @@ pub(crate) struct NtfsFileRecordHeader {
     record_header: NtfsRecordHeader,
     sequence_number: u16,
     hard_link_count: u16,
-    pub(crate) first_attribute_offset: u16,
+    first_attribute_offset: u16,
     flags: u16,
-    pub(crate) used_size: u32,
+    used_size: u32,
     allocated_size: u32,
     base_file_record: u64,
     next_attribute_number: u16,
 }
 
 bitflags! {
-    struct NtfsFileRecordFlags: u16 {
+    pub struct NtfsFileFlags: u16 {
         /// Record is in use.
         const IN_USE = 0x0001;
         /// Record is a directory.
@@ -56,8 +56,8 @@ bitflags! {
 }
 
 pub struct NtfsFile {
-    pub(crate) header: NtfsFileRecordHeader,
-    pub(crate) position: u64,
+    header: NtfsFileRecordHeader,
+    position: u64,
 }
 
 impl NtfsFile {
@@ -74,11 +74,40 @@ impl NtfsFile {
         Ok(file)
     }
 
+    pub fn allocated_size(&self) -> u32 {
+        self.header.allocated_size
+    }
+
     pub fn attributes<'a, T>(&self, fs: &'a mut T) -> NtfsAttributes<'a, T>
     where
         T: Read + Seek,
     {
         NtfsAttributes::new(fs, &self)
+    }
+
+    pub(crate) fn first_attribute_offset(&self) -> u16 {
+        self.header.first_attribute_offset
+    }
+
+    /// Returns flags set for this NTFS file as specified by [`NtfsFileFlags`].
+    pub fn flags(&self) -> NtfsFileFlags {
+        NtfsFileFlags::from_bits_truncate(self.header.flags)
+    }
+
+    pub fn hard_link_count(&self) -> u16 {
+        self.header.hard_link_count
+    }
+
+    pub fn position(&self) -> u64 {
+        self.position
+    }
+
+    pub fn sequence_number(&self) -> u16 {
+        self.header.sequence_number
+    }
+
+    pub fn used_size(&self) -> u32 {
+        self.header.used_size
     }
 
     fn validate_signature(&self) -> Result<()> {
