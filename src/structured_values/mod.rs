@@ -42,4 +42,6 @@ pub enum NtfsStructuredValue {
     StandardInformation(NtfsStandardInformation),
     FileName(NtfsFileName),
     ObjectId(NtfsObjectId),
+    VolumeInformation(NtfsVolumeInformation),
+    VolumeName(NtfsVolumeName),
 }

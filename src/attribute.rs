@@ -7,6 +7,7 @@ use crate::ntfs_file::NtfsFile;
 use crate::string::NtfsString;
 use crate::structured_values::{
     NtfsFileName, NtfsObjectId, NtfsStandardInformation, NtfsStructuredValue,
+    NtfsVolumeInformation, NtfsVolumeName,
 };
 use binread::io::{Read, Seek, SeekFrom};
 use binread::{BinRead, BinReaderExt};
@@ -253,8 +254,16 @@ impl NtfsAttribute {
                 Ok(NtfsStructuredValue::ObjectId(inner))
             }
             NtfsAttributeType::SecurityDescriptor => panic!("TODO"),
-            NtfsAttributeType::VolumeName => panic!("TODO"),
-            NtfsAttributeType::VolumeInformation => panic!("TODO"),
+            NtfsAttributeType::VolumeName => {
+                let inner =
+                    NtfsVolumeName::new(self.position, attached_value, self.value_length())?;
+                Ok(NtfsStructuredValue::VolumeName(inner))
+            }
+            NtfsAttributeType::VolumeInformation => {
+                let inner =
+                    NtfsVolumeInformation::new(self.position, attached_value, self.value_length())?;
+                Ok(NtfsStructuredValue::VolumeInformation(inner))
+            }
             ty => Err(NtfsError::UnsupportedStructuredValue {
                 position: self.position,
                 ty,
