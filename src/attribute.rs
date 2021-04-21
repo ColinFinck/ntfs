@@ -5,7 +5,9 @@ use crate::attribute_value::{NtfsAttributeResidentValue, NtfsAttributeValue};
 use crate::error::{NtfsError, Result};
 use crate::ntfs_file::NtfsFile;
 use crate::string::NtfsString;
-use crate::structured_values::{NtfsFileName, NtfsStandardInformation, NtfsStructuredValue};
+use crate::structured_values::{
+    NtfsFileName, NtfsObjectId, NtfsStandardInformation, NtfsStructuredValue,
+};
 use binread::io::{Read, Seek, SeekFrom};
 use binread::{BinRead, BinReaderExt};
 use bitflags::bitflags;
@@ -246,7 +248,10 @@ impl NtfsAttribute {
                 let inner = NtfsFileName::new(self.position, attached_value, self.value_length())?;
                 Ok(NtfsStructuredValue::FileName(inner))
             }
-            NtfsAttributeType::ObjectId => panic!("TODO"),
+            NtfsAttributeType::ObjectId => {
+                let inner = NtfsObjectId::new(self.position, attached_value, self.value_length())?;
+                Ok(NtfsStructuredValue::ObjectId(inner))
+            }
             NtfsAttributeType::SecurityDescriptor => panic!("TODO"),
             NtfsAttributeType::VolumeName => panic!("TODO"),
             NtfsAttributeType::VolumeInformation => panic!("TODO"),
