@@ -140,3 +140,60 @@ impl NtfsFileName {
         Ok(NtfsString(&buf[..name_length]))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ntfs::Ntfs;
+    use crate::ntfs_file::KnownNtfsFile;
+    use crate::structured_values::NtfsStructuredValue;
+    use crate::time::tests::NT_TIMESTAMP_2021_01_01;
+
+    #[test]
+    fn test_file_name() {
+        let mut testfs1 = crate::helpers::tests::testfs1();
+        let ntfs = Ntfs::new(&mut testfs1).unwrap();
+        let mft = ntfs
+            .ntfs_file(&mut testfs1, KnownNtfsFile::MFT as u64)
+            .unwrap();
+        let mut mft_attributes = mft.attributes(&mut testfs1);
+
+        // Check the FileName attribute of the MFT.
+        let attribute = mft_attributes.nth(1).unwrap().unwrap();
+        assert_eq!(attribute.ty().unwrap(), NtfsAttributeType::FileName);
+        assert_eq!(attribute.attribute_length(), 104);
+        assert!(attribute.is_resident());
+        assert_eq!(attribute.name_length(), 0);
+        assert_eq!(attribute.value_length(), 74);
+
+        // Check the actual "file name" of the MFT.
+        let value = attribute.read_structured_value(&mut testfs1).unwrap();
+        let file_name = match value {
+            NtfsStructuredValue::FileName(file_name) => file_name,
+            v => panic!("Unexpected NtfsStructuredValue: {:?}", v),
+        };
+
+        let creation_time = file_name.creation_time();
+        assert!(*creation_time > NT_TIMESTAMP_2021_01_01);
+        assert_eq!(creation_time, file_name.modification_time());
+        assert_eq!(creation_time, file_name.mft_record_modification_time());
+        assert_eq!(creation_time, file_name.access_time());
+
+        let allocated_size = file_name.allocated_size();
+        assert!(allocated_size > 0);
+        assert_eq!(allocated_size, file_name.data_size());
+
+        assert_eq!(file_name.name_length(), 8);
+
+        let mut buf = [0u8; 8];
+        let file_name_string = file_name.read_name(&mut testfs1, &mut buf).unwrap();
+
+        // Test various ways to compare the same string.
+        assert_eq!(file_name_string, "$MFT");
+        assert_eq!(file_name_string.to_string_lossy(), String::from("$MFT"));
+        assert_eq!(
+            file_name_string,
+            NtfsString(&[b'$', 0, b'M', 0, b'F', 0, b'T', 0])
+        );
+    }
+}

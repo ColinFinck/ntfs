@@ -60,11 +60,11 @@ impl NtfsStandardInformation {
         }
 
         let data = value_attached.read_le::<StandardInformationData>()?;
-        let ntfs3_data = if value_length >= STANDARD_INFORMATION_SIZE_NTFS3 as u64 {
-            Some(value_attached.read_le::<StandardInformationDataNtfs3>()?)
-        } else {
-            None
-        };
+
+        let mut ntfs3_data = None;
+        if value_length >= STANDARD_INFORMATION_SIZE_NTFS3 {
+            ntfs3_data = Some(value_attached.read_le::<StandardInformationDataNtfs3>()?);
+        }
 
         Ok(Self { data, ntfs3_data })
     }
@@ -115,5 +115,43 @@ impl NtfsStandardInformation {
 
     pub fn version(&self) -> Option<u32> {
         self.ntfs3_data.as_ref().map(|x| x.version)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ntfs::Ntfs;
+    use crate::ntfs_file::KnownNtfsFile;
+    use crate::structured_values::NtfsStructuredValue;
+
+    #[test]
+    fn test_standard_information() {
+        let mut testfs1 = crate::helpers::tests::testfs1();
+        let ntfs = Ntfs::new(&mut testfs1).unwrap();
+        let mft = ntfs
+            .ntfs_file(&mut testfs1, KnownNtfsFile::MFT as u64)
+            .unwrap();
+        let mut mft_attributes = mft.attributes(&mut testfs1);
+
+        // Check the StandardInformation attribute of the MFT.
+        let attribute = mft_attributes.nth(0).unwrap().unwrap();
+        assert_eq!(
+            attribute.ty().unwrap(),
+            NtfsAttributeType::StandardInformation,
+        );
+        assert_eq!(attribute.attribute_length(), 96);
+        assert!(attribute.is_resident());
+        assert_eq!(attribute.name_length(), 0);
+        assert_eq!(attribute.value_length(), 72);
+
+        // Try to read the actual information.
+        let value = attribute.read_structured_value(&mut testfs1).unwrap();
+        let _standard_info = match value {
+            NtfsStructuredValue::StandardInformation(standard_info) => standard_info,
+            v => panic!("Unexpected NtfsStructuredValue: {:?}", v),
+        };
+
+        // There are no reliable values to check here, so that's it.
     }
 }
