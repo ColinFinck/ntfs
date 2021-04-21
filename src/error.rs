@@ -10,9 +10,14 @@ pub type Result<T, E = NtfsError> = core::result::Result<T, E>;
 /// Central error type of ntfs.
 #[derive(Debug, Display)]
 pub enum NtfsError {
+    /// The NTFS file at byte position {position:#010x} has no attribute of type {ty:?}, but it was expected
+    AttributeNotFound {
+        position: u64,
+        ty: NtfsAttributeType,
+    },
     /// The given buffer should have at least {expected} bytes, but it only has {actual} bytes
     BufferTooSmall { expected: usize, actual: usize },
-    /// The NTFS attribute at byte position {position:#010x} of type {ty:?} should have at least {expected} bytes, but it only has {actual} bytes
+    /// The NTFS attribute at byte position {position:#010x} of type {ty:?} has {actual} bytes where {expected} bytes were expected
     InvalidAttributeSize {
         position: u64,
         ty: NtfsAttributeType,

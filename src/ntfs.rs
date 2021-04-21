@@ -1,10 +1,12 @@
 // Copyright 2021 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+use crate::attribute::NtfsAttributeType;
 use crate::boot_sector::{BiosParameterBlock, BootSector};
 //use crate::dir::Dir;
 use crate::error::{NtfsError, Result};
-use crate::ntfs_file::NtfsFile;
+use crate::ntfs_file::{KnownNtfsFile, NtfsFile};
+use crate::structured_values::{NtfsStructuredValue, NtfsVolumeInformation, NtfsVolumeName};
 use binread::io::{Read, Seek, SeekFrom};
 use binread::BinReaderExt;
 
@@ -112,6 +114,80 @@ impl Ntfs {
     pub fn size(&self) -> u64 {
         self.size
     }
+
+    /// Returns an [`NtfsVolumeInformation`] containing general information about
+    /// the volume, like the NTFS version.
+    pub fn volume_info<T>(&self, fs: &mut T) -> Result<NtfsVolumeInformation>
+    where
+        T: Read + Seek,
+    {
+        let volume_file = self.ntfs_file(fs, KnownNtfsFile::Volume as u64)?;
+
+        // TODO: Replace by Iterator::try_find once stabilized.
+        let attribute = volume_file.attributes(fs).find(|attribute| {
+            let attribute = match attribute {
+                Ok(attribute) => attribute,
+                Err(_) => return true,
+            };
+            let ty = match attribute.ty() {
+                Ok(ty) => ty,
+                Err(_) => return true,
+            };
+
+            ty == NtfsAttributeType::VolumeInformation
+        });
+        let attribute = attribute.ok_or(NtfsError::AttributeNotFound {
+            position: volume_file.position(),
+            ty: NtfsAttributeType::VolumeName,
+        })??;
+
+        let value = attribute.read_structured_value(fs)?;
+        let volume_info = match value {
+            NtfsStructuredValue::VolumeInformation(volume_info) => volume_info,
+            _ => unreachable!(
+                "Got {:?} despite checking the type for NtfsAttributeType::VolumeInformation",
+                value
+            ),
+        };
+
+        Ok(volume_info)
+    }
+
+    /// Returns an [`NtfsVolumeName`] to read the volume name (also called volume label)
+    /// of this NTFS volume.
+    /// Note that a volume may also have no label, which is why the return value is further
+    /// encapsulated in an `Option`.
+    pub fn volume_name<T>(&self, fs: &mut T) -> Option<Result<NtfsVolumeName>>
+    where
+        T: Read + Seek,
+    {
+        let volume_file = iter_try!(self.ntfs_file(fs, KnownNtfsFile::Volume as u64));
+
+        // TODO: Replace by Iterator::try_find once stabilized.
+        let attribute = iter_try!(volume_file.attributes(fs).find(|attribute| {
+            let attribute = match attribute {
+                Ok(attribute) => attribute,
+                Err(_) => return true,
+            };
+            let ty = match attribute.ty() {
+                Ok(ty) => ty,
+                Err(_) => return true,
+            };
+
+            ty == NtfsAttributeType::VolumeName
+        })?);
+
+        let value = iter_try!(attribute.read_structured_value(fs));
+        let volume_name = match value {
+            NtfsStructuredValue::VolumeName(volume_name) => volume_name,
+            _ => unreachable!(
+                "Got {:?} despite checking the type for NtfsAttributeType::VolumeName",
+                value
+            ),
+        };
+
+        Some(Ok(volume_name))
+    }
 }
 
 #[cfg(test)]
@@ -119,11 +195,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_ntfs() {
+    fn test_basics() {
         let mut testfs1 = crate::helpers::tests::testfs1();
         let ntfs = Ntfs::new(&mut testfs1).unwrap();
         assert_eq!(ntfs.cluster_size(), 512);
         assert_eq!(ntfs.sector_size(), 512);
         assert_eq!(ntfs.size(), 1049088);
+    }
+
+    #[test]
+    fn test_volume_info() {
+        let mut testfs1 = crate::helpers::tests::testfs1();
+        let ntfs = Ntfs::new(&mut testfs1).unwrap();
+        let volume_info = ntfs.volume_info(&mut testfs1).unwrap();
+        assert_eq!(volume_info.major_version(), 3);
+        assert_eq!(volume_info.minor_version(), 1);
+    }
+
+    #[test]
+    fn test_volume_name() {
+        let mut testfs1 = crate::helpers::tests::testfs1();
+        let ntfs = Ntfs::new(&mut testfs1).unwrap();
+        let volume_name = ntfs.volume_name(&mut testfs1).unwrap().unwrap();
+        assert_eq!(volume_name.name_length(), 14);
+
+        let mut buf = [0u8; 14];
+        let volume_name_string = volume_name.read_name(&mut testfs1, &mut buf).unwrap();
+        assert_eq!(volume_name_string, "mylabel");
     }
 }
