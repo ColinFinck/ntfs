@@ -141,7 +141,7 @@ impl Ntfs {
             ty: NtfsAttributeType::VolumeName,
         })??;
 
-        let value = attribute.read_structured_value(fs)?;
+        let value = attribute.structured_value(fs)?;
         let volume_info = match value {
             NtfsStructuredValue::VolumeInformation(volume_info) => volume_info,
             _ => unreachable!(
@@ -177,7 +177,7 @@ impl Ntfs {
             ty == NtfsAttributeType::VolumeName
         })?);
 
-        let value = iter_try!(attribute.read_structured_value(fs));
+        let value = iter_try!(attribute.structured_value(fs));
         let volume_name = match value {
             NtfsStructuredValue::VolumeName(volume_name) => volume_name,
             _ => unreachable!(

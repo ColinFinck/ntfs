@@ -167,7 +167,7 @@ mod tests {
         assert_eq!(attribute.value_length(), 74);
 
         // Check the actual "file name" of the MFT.
-        let value = attribute.read_structured_value(&mut testfs1).unwrap();
+        let value = attribute.structured_value(&mut testfs1).unwrap();
         let file_name = match value {
             NtfsStructuredValue::FileName(file_name) => file_name,
             v => panic!("Unexpected NtfsStructuredValue: {:?}", v),

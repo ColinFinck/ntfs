@@ -146,7 +146,7 @@ mod tests {
         assert_eq!(attribute.value_length(), 72);
 
         // Try to read the actual information.
-        let value = attribute.read_structured_value(&mut testfs1).unwrap();
+        let value = attribute.structured_value(&mut testfs1).unwrap();
         let _standard_info = match value {
             NtfsStructuredValue::StandardInformation(standard_info) => standard_info,
             v => panic!("Unexpected NtfsStructuredValue: {:?}", v),

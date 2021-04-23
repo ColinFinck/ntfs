@@ -229,7 +229,7 @@ impl NtfsAttribute {
         Ok(NtfsString(&buf[..name_length]))
     }
 
-    pub fn read_structured_value<T>(&self, fs: &mut T) -> Result<NtfsStructuredValue>
+    pub fn structured_value<T>(&self, fs: &mut T) -> Result<NtfsStructuredValue>
     where
         T: Read + Seek,
     {
