@@ -339,15 +339,15 @@ where
 
         // This may be an entire attribute or just the 4-byte end marker.
         // Check if this marks the end of the attribute list.
-        let offset = self.items_range.start;
-        iter_try!(self.fs.seek(SeekFrom::Start(offset)));
+        let position = self.items_range.start;
+        iter_try!(self.fs.seek(SeekFrom::Start(position)));
         let ty = iter_try!(self.fs.read_le::<u32>());
         if ty == NtfsAttributeType::End as u32 {
             return None;
         }
 
         // It's a real attribute.
-        let attribute = iter_try!(NtfsAttribute::new(&mut self.fs, offset));
+        let attribute = iter_try!(NtfsAttribute::new(&mut self.fs, position));
         self.items_range.start += attribute.attribute_length() as u64;
 
         Some(Ok(attribute))
