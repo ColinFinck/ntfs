@@ -214,19 +214,8 @@ impl NtfsAttribute {
     where
         T: Read + Seek,
     {
-        let name_length = self.name_length();
-        if buf.len() < name_length {
-            return Err(NtfsError::BufferTooSmall {
-                expected: name_length,
-                actual: buf.len(),
-            });
-        }
-
         let name_position = self.position + self.header.name_offset as u64;
-        fs.seek(SeekFrom::Start(name_position))?;
-        fs.read_exact(&mut buf[..name_length])?;
-
-        Ok(NtfsString(&buf[..name_length]))
+        NtfsString::read_from_fs(fs, name_position, self.name_length(), buf)
     }
 
     pub fn structured_value<T>(&self, fs: &mut T) -> Result<NtfsStructuredValue>

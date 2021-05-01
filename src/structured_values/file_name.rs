@@ -7,7 +7,7 @@ use crate::error::{NtfsError, Result};
 use crate::string::NtfsString;
 use crate::structured_values::NtfsFileAttributeFlags;
 use crate::time::NtfsTime;
-use binread::io::{Read, Seek, SeekFrom};
+use binread::io::{Read, Seek};
 use binread::{BinRead, BinReaderExt};
 use core::mem;
 use enumn::N;
@@ -126,18 +126,7 @@ impl NtfsFileName {
     where
         T: Read + Seek,
     {
-        let name_length = self.name_length();
-        if buf.len() < name_length {
-            return Err(NtfsError::BufferTooSmall {
-                expected: name_length,
-                actual: buf.len(),
-            });
-        }
-
-        fs.seek(SeekFrom::Start(self.name_position))?;
-        fs.read_exact(&mut buf[..name_length])?;
-
-        Ok(NtfsString(&buf[..name_length]))
+        NtfsString::read_from_fs(fs, self.name_position, self.name_length(), buf)
     }
 }
 

@@ -5,7 +5,7 @@ use crate::attribute::NtfsAttributeType;
 use crate::attribute_value::NtfsAttributeValueAttached;
 use crate::error::{NtfsError, Result};
 use crate::string::NtfsString;
-use binread::io::{Read, Seek, SeekFrom};
+use binread::io::{Read, Seek};
 use core::mem;
 
 /// The smallest VolumeName attribute has a name containing just a single character.
@@ -67,17 +67,6 @@ impl NtfsVolumeName {
     where
         T: Read + Seek,
     {
-        let name_length = self.name_length();
-        if buf.len() < name_length {
-            return Err(NtfsError::BufferTooSmall {
-                expected: name_length,
-                actual: buf.len(),
-            });
-        }
-
-        fs.seek(SeekFrom::Start(self.name_position))?;
-        fs.read_exact(&mut buf[..name_length])?;
-
-        Ok(NtfsString(&buf[..name_length]))
+        NtfsString::read_from_fs(fs, self.name_position, self.name_length(), buf)
     }
 }

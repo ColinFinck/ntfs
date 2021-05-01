@@ -1,7 +1,9 @@
 // Copyright 2021 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+use crate::error::{NtfsError, Result};
 use alloc::string::String;
+use binread::io::{Read, Seek, SeekFrom};
 use core::char;
 use core::cmp::Ordering;
 use core::convert::TryInto;
@@ -63,6 +65,28 @@ impl<'a> NtfsString<'a> {
     /// it may not be what a human considers the length of the string.
     pub const fn len(&self) -> usize {
         self.0.len()
+    }
+
+    pub(crate) fn read_from_fs<T>(
+        fs: &mut T,
+        position: u64,
+        length: usize,
+        buf: &'a mut [u8],
+    ) -> Result<Self>
+    where
+        T: Read + Seek,
+    {
+        if buf.len() < length {
+            return Err(NtfsError::BufferTooSmall {
+                expected: length,
+                actual: buf.len(),
+            });
+        }
+
+        fs.seek(SeekFrom::Start(position))?;
+        fs.read_exact(&mut buf[..length])?;
+
+        Ok(Self(&buf[..length]))
     }
 
     /// Attempts to convert `self` to an owned `String`.
