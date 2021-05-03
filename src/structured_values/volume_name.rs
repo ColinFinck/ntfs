@@ -23,7 +23,7 @@ pub struct NtfsVolumeName {
 impl NtfsVolumeName {
     pub(crate) fn new<T>(
         attribute_position: u64,
-        value_attached: NtfsAttributeValueAttached<'_, T>,
+        value_attached: NtfsAttributeValueAttached<'_, '_, T>,
         value_length: u64,
     ) -> Result<Self>
     where

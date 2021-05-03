@@ -3,6 +3,7 @@
 
 use crate::attribute::NtfsAttributes;
 use crate::error::{NtfsError, Result};
+use crate::ntfs::Ntfs;
 use binread::io::{Read, Seek, SeekFrom};
 use binread::{BinRead, BinReaderExt};
 use bitflags::bitflags;
@@ -55,20 +56,25 @@ bitflags! {
     }
 }
 
-pub struct NtfsFile {
+pub struct NtfsFile<'n> {
+    ntfs: &'n Ntfs,
     header: NtfsFileRecordHeader,
     position: u64,
 }
 
-impl NtfsFile {
-    pub(crate) fn new<T>(fs: &mut T, position: u64) -> Result<Self>
+impl<'n> NtfsFile<'n> {
+    pub(crate) fn new<T>(ntfs: &'n Ntfs, fs: &mut T, position: u64) -> Result<Self>
     where
         T: Read + Seek,
     {
         fs.seek(SeekFrom::Start(position))?;
         let header = fs.read_le::<NtfsFileRecordHeader>()?;
 
-        let file = Self { header, position };
+        let file = Self {
+            ntfs,
+            header,
+            position,
+        };
         file.validate_signature()?;
 
         Ok(file)
@@ -78,11 +84,8 @@ impl NtfsFile {
         self.header.allocated_size
     }
 
-    pub fn attributes<'a, T>(&self, fs: &'a mut T) -> NtfsAttributes<'a, T>
-    where
-        T: Read + Seek,
-    {
-        NtfsAttributes::new(fs, &self)
+    pub fn attributes(&self) -> NtfsAttributes<'n> {
+        NtfsAttributes::new(self.ntfs, &self)
     }
 
     pub(crate) fn first_attribute_offset(&self) -> u16 {

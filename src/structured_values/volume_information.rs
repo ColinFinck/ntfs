@@ -41,7 +41,7 @@ pub struct NtfsVolumeInformation {
 impl NtfsVolumeInformation {
     pub(crate) fn new<T>(
         attribute_position: u64,
-        mut value_attached: NtfsAttributeValueAttached<'_, T>,
+        mut value_attached: NtfsAttributeValueAttached<'_, '_, T>,
         value_length: u64,
     ) -> Result<Self>
     where

@@ -1,12 +1,13 @@
 // Copyright 2021 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use crate::attribute_value::{NtfsAttributeResidentValue, NtfsAttributeValue};
+use crate::attribute_value::{NtfsAttributeNonResidentValue, NtfsAttributeValue, NtfsDataRun};
 use crate::error::{NtfsError, Result};
+use crate::ntfs::Ntfs;
 use crate::ntfs_file::NtfsFile;
 use crate::string::NtfsString;
 use crate::structured_values::{
-    NtfsFileName, NtfsObjectId, NtfsStandardInformation, NtfsStructuredValue,
+    NtfsFileName, NtfsIndexRoot, NtfsObjectId, NtfsStandardInformation, NtfsStructuredValue,
     NtfsVolumeInformation, NtfsVolumeName,
 };
 use binread::io::{Read, Seek, SeekFrom};
@@ -19,7 +20,7 @@ use enumn::N;
 
 /// On-disk structure of the generic header of an NTFS attribute.
 #[allow(unused)]
-#[derive(BinRead)]
+#[derive(BinRead, Debug)]
 struct NtfsAttributeHeader {
     /// Type of the attribute, known types are in [`NtfsAttributeType`].
     ty: u32,
@@ -56,7 +57,7 @@ bitflags! {
 
 /// On-disk structure of the extra header of an NTFS attribute that has a resident value.
 #[allow(unused)]
-#[derive(BinRead)]
+#[derive(BinRead, Debug)]
 struct NtfsAttributeResidentHeader {
     /// Length of the value, in bytes.
     value_length: u32,
@@ -68,7 +69,7 @@ struct NtfsAttributeResidentHeader {
 
 /// On-disk structure of the extra header of an NTFS attribute that has a non-resident value.
 #[allow(unused)]
-#[derive(BinRead)]
+#[derive(BinRead, Debug)]
 struct NtfsAttributeNonResidentHeader {
     /// Lower boundary of Virtual Cluster Numbers (VCNs) referenced by this attribute.
     /// This becomes relevant when file data is split over multiple attributes.
@@ -88,13 +89,13 @@ struct NtfsAttributeNonResidentHeader {
     reserved: [u8; 5],
     /// Allocated space for the attribute value, in bytes. This is always a multiple of the cluster size.
     /// For compressed files, this is always a multiple of the compression unit size.
-    allocated_size: i64,
+    allocated_size: u64,
     /// Size of the attribute value, in bytes.
     /// This can be larger than `allocated_size` if the value is compressed or stored sparsely.
-    data_size: i64,
+    data_size: u64,
     /// Size of the initialized part of the attribute value, in bytes.
     /// This is usually the same as `data_size`.
-    initialized_size: i64,
+    initialized_size: u64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, N, PartialEq)]
@@ -119,6 +120,7 @@ pub enum NtfsAttributeType {
     End = 0xFFFF_FFFF,
 }
 
+#[derive(Debug)]
 enum NtfsAttributeExtraHeader {
     Resident(NtfsAttributeResidentHeader),
     NonResident(NtfsAttributeNonResidentHeader),
@@ -141,14 +143,16 @@ impl NtfsAttributeExtraHeader {
     }
 }
 
-pub struct NtfsAttribute {
+#[derive(Debug)]
+pub struct NtfsAttribute<'n> {
+    ntfs: &'n Ntfs,
     position: u64,
     header: NtfsAttributeHeader,
     extra_header: NtfsAttributeExtraHeader,
 }
 
-impl NtfsAttribute {
-    fn new<T>(fs: &mut T, position: u64) -> Result<Self>
+impl<'n> NtfsAttribute<'n> {
+    fn new<T>(ntfs: &'n Ntfs, fs: &mut T, position: u64) -> Result<Self>
     where
         T: Read + Seek,
     {
@@ -164,6 +168,7 @@ impl NtfsAttribute {
         let extra_header = NtfsAttributeExtraHeader::new(fs, &header)?;
 
         let attribute = Self {
+            ntfs,
             position,
             header,
             extra_header,
@@ -253,6 +258,10 @@ impl NtfsAttribute {
                     NtfsVolumeInformation::new(self.position, attached_value, self.value_length())?;
                 Ok(NtfsStructuredValue::VolumeInformation(inner))
             }
+            NtfsAttributeType::IndexRoot => {
+                let inner = NtfsIndexRoot::new(self.position, attached_value, self.value_length())?;
+                Ok(NtfsStructuredValue::IndexRoot(inner))
+            }
             ty => Err(NtfsError::UnsupportedStructuredValue {
                 position: self.position,
                 ty,
@@ -274,12 +283,19 @@ impl NtfsAttribute {
         match &self.extra_header {
             NtfsAttributeExtraHeader::Resident(resident_header) => {
                 let value_position = self.position + resident_header.value_offset as u64;
-                let value_length = resident_header.value_length;
-                let value = NtfsAttributeResidentValue::new(value_position, value_length);
+                let value_length = resident_header.value_length as u64;
+                let value = NtfsDataRun::from_byte_info(value_position, value_length);
                 NtfsAttributeValue::Resident(value)
             }
-            NtfsAttributeExtraHeader::NonResident(_non_resident_header) => {
-                panic!("TODO")
+            NtfsAttributeExtraHeader::NonResident(non_resident_header) => {
+                let start = self.position + non_resident_header.data_runs_offset as u64;
+                let end = self.position + self.header.length as u64;
+                let value = NtfsAttributeNonResidentValue::new(
+                    &self.ntfs,
+                    start..end,
+                    non_resident_header.data_size,
+                );
+                NtfsAttributeValue::NonResident(value)
             }
         }
     }
@@ -291,37 +307,56 @@ impl NtfsAttribute {
                 resident_header.value_length as u64
             }
             NtfsAttributeExtraHeader::NonResident(non_resident_header) => {
-                non_resident_header.data_size as u64
+                non_resident_header.data_size
             }
         }
     }
 }
 
-pub struct NtfsAttributes<'a, T: Read + Seek> {
-    fs: &'a mut T,
+pub struct NtfsAttributes<'n> {
+    ntfs: &'n Ntfs,
     items_range: Range<u64>,
 }
 
-impl<'a, T> NtfsAttributes<'a, T>
-where
-    T: Read + Seek,
-{
-    pub(crate) fn new(fs: &'a mut T, file: &NtfsFile) -> Self {
+impl<'n> NtfsAttributes<'n> {
+    pub(crate) fn new(ntfs: &'n Ntfs, file: &NtfsFile) -> Self {
         let start = file.position() + file.first_attribute_offset() as u64;
         let end = file.position() + file.used_size() as u64;
         let items_range = start..end;
 
-        Self { fs, items_range }
+        Self { ntfs, items_range }
     }
-}
 
-impl<'a, T> Iterator for NtfsAttributes<'a, T>
-where
-    T: Read + Seek,
-{
-    type Item = Result<NtfsAttribute>;
+    pub fn attach<'a, T>(self, fs: &'a mut T) -> NtfsAttributesAttached<'n, 'a, T>
+    where
+        T: Read + Seek,
+    {
+        NtfsAttributesAttached::new(fs, self)
+    }
 
-    fn next(&mut self) -> Option<Self::Item> {
+    pub(crate) fn find_first_by_ty<T>(
+        &mut self,
+        fs: &mut T,
+        ty: NtfsAttributeType,
+    ) -> Option<Result<NtfsAttribute<'n>>>
+    where
+        T: Read + Seek,
+    {
+        while let Some(attribute) = self.next(fs) {
+            let attribute = iter_try!(attribute);
+            let attribute_ty = iter_try!(attribute.ty());
+            if attribute_ty == ty {
+                return Some(Ok(attribute));
+            }
+        }
+
+        None
+    }
+
+    pub fn next<T>(&mut self, fs: &mut T) -> Option<Result<NtfsAttribute<'n>>>
+    where
+        T: Read + Seek,
+    {
         if self.items_range.is_empty() {
             return None;
         }
@@ -329,18 +364,47 @@ where
         // This may be an entire attribute or just the 4-byte end marker.
         // Check if this marks the end of the attribute list.
         let position = self.items_range.start;
-        iter_try!(self.fs.seek(SeekFrom::Start(position)));
-        let ty = iter_try!(self.fs.read_le::<u32>());
+        iter_try!(fs.seek(SeekFrom::Start(position)));
+        let ty = iter_try!(fs.read_le::<u32>());
         if ty == NtfsAttributeType::End as u32 {
             return None;
         }
 
         // It's a real attribute.
-        let attribute = iter_try!(NtfsAttribute::new(&mut self.fs, position));
+        let attribute = iter_try!(NtfsAttribute::new(self.ntfs, fs, position));
         self.items_range.start += attribute.attribute_length() as u64;
 
         Some(Ok(attribute))
     }
 }
 
-impl<'a, T> FusedIterator for NtfsAttributes<'a, T> where T: Read + Seek {}
+pub struct NtfsAttributesAttached<'n, 'a, T: Read + Seek> {
+    fs: &'a mut T,
+    attributes: NtfsAttributes<'n>,
+}
+
+impl<'n, 'a, T> NtfsAttributesAttached<'n, 'a, T>
+where
+    T: Read + Seek,
+{
+    fn new(fs: &'a mut T, attributes: NtfsAttributes<'n>) -> Self {
+        Self { fs, attributes }
+    }
+
+    pub fn detach(self) -> NtfsAttributes<'n> {
+        self.attributes
+    }
+}
+
+impl<'n, 'a, T> Iterator for NtfsAttributesAttached<'n, 'a, T>
+where
+    T: Read + Seek,
+{
+    type Item = Result<NtfsAttribute<'n>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.attributes.next(self.fs)
+    }
+}
+
+impl<'n, 'a, T> FusedIterator for NtfsAttributesAttached<'n, 'a, T> where T: Read + Seek {}

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::attribute::NtfsAttributeType;
-use crate::boot_sector::{BiosParameterBlock, BootSector};
+use crate::boot_sector::BootSector;
 //use crate::dir::Dir;
 use crate::error::{NtfsError, Result};
 use crate::ntfs_file::{KnownNtfsFile, NtfsFile};
@@ -10,21 +10,18 @@ use crate::structured_values::{NtfsStructuredValue, NtfsVolumeInformation, NtfsV
 use binread::io::{Read, Seek, SeekFrom};
 use binread::BinReaderExt;
 
-/// The maximum cluster size supported by Windows.
-/// Source: https://support.microsoft.com/en-us/topic/default-cluster-size-for-ntfs-fat-and-exfat-9772e6f1-e31a-00d7-e18f-73169155af95
-const MAXIMUM_CLUSTER_SIZE: u32 = 65536;
-
+#[derive(Debug)]
 pub struct Ntfs {
-    /// How many bytes a sector occupies. This is usually 512.
-    bytes_per_sector: u16,
-    /// How many sectors a cluster occupies. This is usually 8.
-    sectors_per_cluster: u8,
+    /// The size of a single cluster, in bytes. This is usually 4096.
+    cluster_size: u32,
+    /// The size of a single sector, in bytes. This is usually 512.
+    sector_size: u16,
     /// Size of the filesystem, in bytes.
     size: u64,
     /// Absolute position of the Master File Table (MFT), in bytes.
     mft_position: u64,
     /// Size of a single file record, in bytes.
-    pub(crate) file_record_size: u32,
+    file_record_size: u32,
     /// Serial number of the NTFS volume.
     serial_number: u64,
 }
@@ -39,27 +36,17 @@ impl Ntfs {
         let boot_sector = fs.read_le::<BootSector>()?;
         boot_sector.validate()?;
 
-        let bytes_per_sector = boot_sector.bpb.bytes_per_sector;
-        let sectors_per_cluster = boot_sector.bpb.sectors_per_cluster;
-        let bytes_per_cluster = sectors_per_cluster as u32 * bytes_per_sector as u32;
-        if bytes_per_cluster > MAXIMUM_CLUSTER_SIZE {
-            return Err(NtfsError::UnsupportedClusterSize {
-                expected: MAXIMUM_CLUSTER_SIZE,
-                actual: bytes_per_cluster,
-            });
-        }
-
-        let size = boot_sector.bpb.total_sectors * bytes_per_sector as u64;
-        let mft_position = boot_sector.bpb.mft_lcn * bytes_per_cluster as u64;
-        let file_record_size = BiosParameterBlock::record_size(
-            boot_sector.bpb.file_record_size_info,
-            bytes_per_cluster,
-        )?;
-        let serial_number = boot_sector.bpb.serial_number;
+        let bpb = boot_sector.bpb();
+        let cluster_size = bpb.cluster_size()?;
+        let sector_size = bpb.sector_size();
+        let size = bpb.total_sectors() * sector_size as u64;
+        let mft_position = bpb.mft_lcn() * cluster_size as u64;
+        let file_record_size = bpb.file_record_size()?;
+        let serial_number = bpb.serial_number();
 
         Ok(Self {
-            bytes_per_sector,
-            sectors_per_cluster,
+            cluster_size,
+            sector_size,
             size,
             mft_position,
             file_record_size,
@@ -68,8 +55,8 @@ impl Ntfs {
     }
 
     /// Returns the size of a single cluster, in bytes.
-    pub fn cluster_size(&self) -> u16 {
-        self.bytes_per_sector * self.sectors_per_cluster as u16
+    pub fn cluster_size(&self) -> u32 {
+        self.cluster_size
     }
 
     /// Returns the [`NtfsFile`] for the `n`-th NTFS file record.
@@ -92,7 +79,7 @@ impl Ntfs {
             .mft_position
             .checked_add(offset)
             .ok_or(NtfsError::InvalidNtfsFile { n })?;
-        NtfsFile::new(fs, position)
+        NtfsFile::new(&self, fs, position)
     }
 
     /// Returns the root [`Dir`] of this NTFS volume.
@@ -102,7 +89,7 @@ impl Ntfs {
 
     /// Returns the size of a single sector in bytes.
     pub fn sector_size(&self) -> u16 {
-        self.bytes_per_sector
+        self.sector_size
     }
 
     /// Returns the 64-bit serial number of this NTFS volume.
@@ -122,25 +109,13 @@ impl Ntfs {
         T: Read + Seek,
     {
         let volume_file = self.ntfs_file(fs, KnownNtfsFile::Volume as u64)?;
-
-        // TODO: Replace by Iterator::try_find once stabilized.
-        let attribute = volume_file.attributes(fs).find(|attribute| {
-            let attribute = match attribute {
-                Ok(attribute) => attribute,
-                Err(_) => return true,
-            };
-            let ty = match attribute.ty() {
-                Ok(ty) => ty,
-                Err(_) => return true,
-            };
-
-            ty == NtfsAttributeType::VolumeInformation
-        });
-        let attribute = attribute.ok_or(NtfsError::AttributeNotFound {
-            position: volume_file.position(),
-            ty: NtfsAttributeType::VolumeName,
-        })??;
-
+        let attribute = volume_file
+            .attributes()
+            .find_first_by_ty(fs, NtfsAttributeType::VolumeInformation)
+            .ok_or(NtfsError::AttributeNotFound {
+                position: volume_file.position(),
+                ty: NtfsAttributeType::VolumeName,
+            })??;
         let value = attribute.structured_value(fs)?;
         let volume_info = match value {
             NtfsStructuredValue::VolumeInformation(volume_info) => volume_info,
@@ -162,21 +137,9 @@ impl Ntfs {
         T: Read + Seek,
     {
         let volume_file = iter_try!(self.ntfs_file(fs, KnownNtfsFile::Volume as u64));
-
-        // TODO: Replace by Iterator::try_find once stabilized.
-        let attribute = iter_try!(volume_file.attributes(fs).find(|attribute| {
-            let attribute = match attribute {
-                Ok(attribute) => attribute,
-                Err(_) => return true,
-            };
-            let ty = match attribute.ty() {
-                Ok(ty) => ty,
-                Err(_) => return true,
-            };
-
-            ty == NtfsAttributeType::VolumeName
-        })?);
-
+        let attribute = iter_try!(volume_file
+            .attributes()
+            .find_first_by_ty(fs, NtfsAttributeType::VolumeName)?);
         let value = iter_try!(attribute.structured_value(fs));
         let volume_name = match value {
             NtfsStructuredValue::VolumeName(volume_name) => volume_name,

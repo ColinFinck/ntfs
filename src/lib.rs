@@ -19,6 +19,7 @@ mod ntfs_file;
 mod string;
 pub mod structured_values;
 mod time;
+mod traits;
 
 pub use crate::attribute::*;
 pub use crate::attribute_value::*;
@@ -28,3 +29,4 @@ pub use crate::ntfs::*;
 pub use crate::ntfs_file::*;
 pub use crate::string::*;
 pub use crate::time::*;
+pub use crate::traits::*;

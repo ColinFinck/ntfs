@@ -3,6 +3,7 @@
 
 mod attribute_list;
 mod file_name;
+mod index_root;
 mod object_id;
 mod security_descriptor;
 mod standard_information;
@@ -11,6 +12,7 @@ mod volume_name;
 
 pub use attribute_list::*;
 pub use file_name::*;
+pub use index_root::*;
 pub use object_id::*;
 pub use security_descriptor::*;
 pub use standard_information::*;
@@ -44,4 +46,5 @@ pub enum NtfsStructuredValue {
     ObjectId(NtfsObjectId),
     VolumeInformation(NtfsVolumeInformation),
     VolumeName(NtfsVolumeName),
+    IndexRoot(NtfsIndexRoot),
 }

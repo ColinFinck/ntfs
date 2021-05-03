@@ -24,6 +24,13 @@ pub enum NtfsError {
         expected: u64,
         actual: u64,
     },
+    /// The header of an NTFS data run should indicate a maximum byte count of {expected},
+    /// but the header at byte position {position:#010x} indicates a byte count of {actual}
+    InvalidByteCountInDataRunHeader {
+        position: u64,
+        expected: u8,
+        actual: u8,
+    },
     /// The requested NTFS file {n} is invalid
     InvalidNtfsFile { n: u64 },
     /// The NTFS file at byte position {position:#010x} should have signature {expected:?}, but it has signature {actual:?}
@@ -34,8 +41,8 @@ pub enum NtfsError {
     },
     /// The given time can't be represented as an NtfsTime
     InvalidNtfsTime,
-    /// A record size field in the BIOS Parameter Block denotes the exponent {actual}, but the maximum valid one is {expected}
-    InvalidRecordSizeExponent { expected: u32, actual: u32 },
+    /// A record size field in the BIOS Parameter Block denotes {size_info}, which is invalid considering the cluster size of {cluster_size} bytes
+    InvalidRecordSizeInfo { size_info: i8, cluster_size: u32 },
     /// The 2-byte signature field at byte position {position:#010x} should contain {expected:?}, but it contains {actual:?}
     InvalidTwoByteSignature {
         position: u64,
@@ -71,6 +78,18 @@ impl From<binread::error::Error> for NtfsError {
 impl From<binread::io::Error> for NtfsError {
     fn from(error: binread::io::Error) -> Self {
         Self::Io(error)
+    }
+}
+
+// To stay compatible with standardized interfaces (e.g. io::Read, io::Seek),
+// we sometimes need to convert from NtfsError to io::Error.
+impl From<NtfsError> for binread::io::Error {
+    fn from(error: NtfsError) -> Self {
+        if let NtfsError::Io(io_error) = error {
+            io_error
+        } else {
+            binread::io::Error::new(binread::io::ErrorKind::Other, error)
+        }
     }
 }
 

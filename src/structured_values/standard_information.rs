@@ -44,7 +44,7 @@ pub struct NtfsStandardInformation {
 impl NtfsStandardInformation {
     pub(crate) fn new<T>(
         attribute_position: u64,
-        mut value_attached: NtfsAttributeValueAttached<'_, T>,
+        mut value_attached: NtfsAttributeValueAttached<'_, '_, T>,
         value_length: u64,
     ) -> Result<Self>
     where
@@ -132,7 +132,7 @@ mod tests {
         let mft = ntfs
             .ntfs_file(&mut testfs1, KnownNtfsFile::MFT as u64)
             .unwrap();
-        let mut mft_attributes = mft.attributes(&mut testfs1);
+        let mut mft_attributes = mft.attributes().attach(&mut testfs1);
 
         // Check the StandardInformation attribute of the MFT.
         let attribute = mft_attributes.nth(0).unwrap().unwrap();
