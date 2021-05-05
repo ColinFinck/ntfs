@@ -42,17 +42,16 @@ impl NtfsVolumeInformation {
     pub(crate) fn new<T>(
         attribute_position: u64,
         mut value_attached: NtfsAttributeValueAttached<'_, '_, T>,
-        value_length: u64,
     ) -> Result<Self>
     where
         T: Read + Seek,
     {
-        if value_length < VOLUME_INFORMATION_SIZE {
+        if value_attached.len() < VOLUME_INFORMATION_SIZE {
             return Err(NtfsError::InvalidAttributeSize {
                 position: attribute_position,
                 ty: NtfsAttributeType::StandardInformation,
                 expected: VOLUME_INFORMATION_SIZE,
-                actual: value_length,
+                actual: value_attached.len(),
             });
         }
 

@@ -45,24 +45,23 @@ impl NtfsStandardInformation {
     pub(crate) fn new<T>(
         attribute_position: u64,
         mut value_attached: NtfsAttributeValueAttached<'_, '_, T>,
-        value_length: u64,
     ) -> Result<Self>
     where
         T: Read + Seek,
     {
-        if value_length < STANDARD_INFORMATION_SIZE_NTFS1 {
+        if value_attached.len() < STANDARD_INFORMATION_SIZE_NTFS1 {
             return Err(NtfsError::InvalidAttributeSize {
                 position: attribute_position,
                 ty: NtfsAttributeType::StandardInformation,
                 expected: STANDARD_INFORMATION_SIZE_NTFS1,
-                actual: value_length,
+                actual: value_attached.len(),
             });
         }
 
         let data = value_attached.read_le::<StandardInformationData>()?;
 
         let mut ntfs3_data = None;
-        if value_length >= STANDARD_INFORMATION_SIZE_NTFS3 {
+        if value_attached.len() >= STANDARD_INFORMATION_SIZE_NTFS3 {
             ntfs3_data = Some(value_attached.read_le::<StandardInformationDataNtfs3>()?);
         }
 

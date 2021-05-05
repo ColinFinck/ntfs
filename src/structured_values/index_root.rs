@@ -37,17 +37,16 @@ impl NtfsIndexRoot {
     pub(crate) fn new<T>(
         attribute_position: u64,
         mut value_attached: NtfsAttributeValueAttached<'_, '_, T>,
-        value_length: u64,
     ) -> Result<Self>
     where
         T: Read + Seek,
     {
-        if value_length < INDEX_ROOT_HEADER_SIZE {
+        if value_attached.len() < INDEX_ROOT_HEADER_SIZE {
             return Err(NtfsError::InvalidAttributeSize {
                 position: attribute_position,
                 ty: NtfsAttributeType::IndexRoot,
                 expected: INDEX_ROOT_HEADER_SIZE,
-                actual: value_length,
+                actual: value_attached.len(),
             });
         }
 

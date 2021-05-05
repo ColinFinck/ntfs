@@ -20,34 +20,33 @@ impl NtfsObjectId {
     pub(crate) fn new<T>(
         attribute_position: u64,
         mut value_attached: NtfsAttributeValueAttached<'_, '_, T>,
-        value_length: u64,
     ) -> Result<Self>
     where
         T: Read + Seek,
     {
-        if value_length < GUID_SIZE {
+        if value_attached.len() < GUID_SIZE {
             return Err(NtfsError::InvalidAttributeSize {
                 position: attribute_position,
                 ty: NtfsAttributeType::ObjectId,
                 expected: GUID_SIZE,
-                actual: value_length,
+                actual: value_attached.len(),
             });
         }
 
         let object_id = value_attached.read_le::<NtfsGuid>()?;
 
         let mut birth_volume_id = None;
-        if value_length >= 2 * GUID_SIZE {
+        if value_attached.len() >= 2 * GUID_SIZE {
             birth_volume_id = Some(value_attached.read_le::<NtfsGuid>()?);
         }
 
         let mut birth_object_id = None;
-        if value_length >= 3 * GUID_SIZE {
+        if value_attached.len() >= 3 * GUID_SIZE {
             birth_object_id = Some(value_attached.read_le::<NtfsGuid>()?);
         }
 
         let mut domain_id = None;
-        if value_length >= 4 * GUID_SIZE {
+        if value_attached.len() >= 4 * GUID_SIZE {
             domain_id = Some(value_attached.read_le::<NtfsGuid>()?);
         }
 

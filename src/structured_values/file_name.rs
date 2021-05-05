@@ -53,17 +53,16 @@ impl NtfsFileName {
     pub(crate) fn new<T>(
         attribute_position: u64,
         mut value_attached: NtfsAttributeValueAttached<'_, '_, T>,
-        value_length: u64,
     ) -> Result<Self>
     where
         T: Read + Seek,
     {
-        if value_length < FILE_NAME_MIN_SIZE {
+        if value_attached.len() < FILE_NAME_MIN_SIZE {
             return Err(NtfsError::InvalidAttributeSize {
                 position: attribute_position,
                 ty: NtfsAttributeType::FileName,
                 expected: FILE_NAME_MIN_SIZE,
-                actual: value_length,
+                actual: value_attached.len(),
             });
         }
 

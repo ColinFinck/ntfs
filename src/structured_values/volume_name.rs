@@ -24,29 +24,28 @@ impl NtfsVolumeName {
     pub(crate) fn new<T>(
         attribute_position: u64,
         value_attached: NtfsAttributeValueAttached<'_, '_, T>,
-        value_length: u64,
     ) -> Result<Self>
     where
         T: Read + Seek,
     {
-        if value_length < VOLUME_NAME_MIN_SIZE {
+        if value_attached.len() < VOLUME_NAME_MIN_SIZE {
             return Err(NtfsError::InvalidAttributeSize {
                 position: attribute_position,
                 ty: NtfsAttributeType::VolumeName,
                 expected: VOLUME_NAME_MIN_SIZE,
-                actual: value_length,
+                actual: value_attached.len(),
             });
-        } else if value_length > VOLUME_NAME_MAX_SIZE {
+        } else if value_attached.len() > VOLUME_NAME_MAX_SIZE {
             return Err(NtfsError::InvalidAttributeSize {
                 position: attribute_position,
                 ty: NtfsAttributeType::VolumeName,
                 expected: VOLUME_NAME_MAX_SIZE,
-                actual: value_length,
+                actual: value_attached.len(),
             });
         }
 
         let name_position = value_attached.position();
-        let name_length = value_length as u16;
+        let name_length = value_attached.len() as u16;
 
         Ok(Self {
             name_position,

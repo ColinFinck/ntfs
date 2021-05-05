@@ -25,7 +25,14 @@ impl<'n> NtfsAttributeValue<'n> {
         NtfsAttributeValueAttached::new(fs, self)
     }
 
-    pub(crate) fn position(&self) -> u64 {
+    pub fn len(&self) -> u64 {
+        match self {
+            Self::Resident(inner) => inner.len(),
+            Self::NonResident(inner) => inner.len(),
+        }
+    }
+
+    pub fn position(&self) -> u64 {
         match self {
             Self::Resident(inner) => inner.position(),
             Self::NonResident(inner) => inner.position(),
@@ -77,6 +84,10 @@ where
 
     pub fn detach(self) -> NtfsAttributeValue<'n> {
         self.value
+    }
+
+    pub fn len(&self) -> u64 {
+        self.value.len()
     }
 
     pub fn position(&self) -> u64 {
@@ -344,6 +355,10 @@ impl<'n> NtfsAttributeNonResidentValue<'n> {
 
     pub fn data_runs(&self) -> NtfsDataRuns<'n> {
         NtfsDataRuns::new(self.ntfs, self.data_runs_range.clone())
+    }
+
+    pub fn len(&self) -> u64 {
+        self.data_size
     }
 
     pub fn position(&self) -> u64 {

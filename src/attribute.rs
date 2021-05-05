@@ -231,35 +231,29 @@ impl<'n> NtfsAttribute<'n> {
 
         match self.ty()? {
             NtfsAttributeType::StandardInformation => {
-                let inner = NtfsStandardInformation::new(
-                    self.position,
-                    attached_value,
-                    self.value_length(),
-                )?;
+                let inner = NtfsStandardInformation::new(self.position, attached_value)?;
                 Ok(NtfsStructuredValue::StandardInformation(inner))
             }
             NtfsAttributeType::AttributeList => panic!("TODO"),
             NtfsAttributeType::FileName => {
-                let inner = NtfsFileName::new(self.position, attached_value, self.value_length())?;
+                let inner = NtfsFileName::new(self.position, attached_value)?;
                 Ok(NtfsStructuredValue::FileName(inner))
             }
             NtfsAttributeType::ObjectId => {
-                let inner = NtfsObjectId::new(self.position, attached_value, self.value_length())?;
+                let inner = NtfsObjectId::new(self.position, attached_value)?;
                 Ok(NtfsStructuredValue::ObjectId(inner))
             }
             NtfsAttributeType::SecurityDescriptor => panic!("TODO"),
             NtfsAttributeType::VolumeName => {
-                let inner =
-                    NtfsVolumeName::new(self.position, attached_value, self.value_length())?;
+                let inner = NtfsVolumeName::new(self.position, attached_value)?;
                 Ok(NtfsStructuredValue::VolumeName(inner))
             }
             NtfsAttributeType::VolumeInformation => {
-                let inner =
-                    NtfsVolumeInformation::new(self.position, attached_value, self.value_length())?;
+                let inner = NtfsVolumeInformation::new(self.position, attached_value)?;
                 Ok(NtfsStructuredValue::VolumeInformation(inner))
             }
             NtfsAttributeType::IndexRoot => {
-                let inner = NtfsIndexRoot::new(self.position, attached_value, self.value_length())?;
+                let inner = NtfsIndexRoot::new(self.position, attached_value)?;
                 Ok(NtfsStructuredValue::IndexRoot(inner))
             }
             ty => Err(NtfsError::UnsupportedStructuredValue {
