@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::attribute::NtfsAttributeType;
-use crate::attribute_value::NtfsAttributeValueAttached;
+use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
 use crate::string::NtfsString;
+use crate::structured_values::NewNtfsStructuredValue;
 use binread::io::{Read, Seek};
 use core::mem;
 
@@ -15,44 +16,12 @@ const VOLUME_NAME_MIN_SIZE: u64 = mem::size_of::<u16>() as u64;
 const VOLUME_NAME_MAX_SIZE: u64 = 128 * mem::size_of::<u16>() as u64;
 
 #[derive(Clone, Debug)]
-pub struct NtfsVolumeName {
-    name_position: u64,
+pub struct NtfsVolumeName<'n> {
+    value: NtfsAttributeValue<'n>,
     name_length: u16,
 }
 
-impl NtfsVolumeName {
-    pub(crate) fn new<T>(
-        attribute_position: u64,
-        value_attached: NtfsAttributeValueAttached<'_, '_, T>,
-    ) -> Result<Self>
-    where
-        T: Read + Seek,
-    {
-        if value_attached.len() < VOLUME_NAME_MIN_SIZE {
-            return Err(NtfsError::InvalidAttributeSize {
-                position: attribute_position,
-                ty: NtfsAttributeType::VolumeName,
-                expected: VOLUME_NAME_MIN_SIZE,
-                actual: value_attached.len(),
-            });
-        } else if value_attached.len() > VOLUME_NAME_MAX_SIZE {
-            return Err(NtfsError::InvalidAttributeSize {
-                position: attribute_position,
-                ty: NtfsAttributeType::VolumeName,
-                expected: VOLUME_NAME_MAX_SIZE,
-                actual: value_attached.len(),
-            });
-        }
-
-        let name_position = value_attached.position();
-        let name_length = value_attached.len() as u16;
-
-        Ok(Self {
-            name_position,
-            name_length,
-        })
-    }
-
+impl<'n> NtfsVolumeName<'n> {
     /// Returns the volume name length, in bytes.
     ///
     /// A volume name has a maximum length of 128 UTF-16 code points (256 bytes).
@@ -66,6 +35,34 @@ impl NtfsVolumeName {
     where
         T: Read + Seek,
     {
-        NtfsString::read_from_fs(fs, self.name_position, self.name_length(), buf)
+        let value_attached = self.value.clone().attach(fs);
+        NtfsString::from_reader(value_attached, self.name_length(), buf)
+    }
+}
+
+impl<'n> NewNtfsStructuredValue<'n> for NtfsVolumeName<'n> {
+    fn new<T>(_fs: &mut T, value: NtfsAttributeValue<'n>, length: u64) -> Result<Self>
+    where
+        T: Read + Seek,
+    {
+        if length < VOLUME_NAME_MIN_SIZE {
+            return Err(NtfsError::InvalidStructuredValueSize {
+                position: value.data_position().unwrap(),
+                ty: NtfsAttributeType::VolumeName,
+                expected: VOLUME_NAME_MIN_SIZE,
+                actual: length,
+            });
+        } else if length > VOLUME_NAME_MAX_SIZE {
+            return Err(NtfsError::InvalidStructuredValueSize {
+                position: value.data_position().unwrap(),
+                ty: NtfsAttributeType::VolumeName,
+                expected: VOLUME_NAME_MAX_SIZE,
+                actual: length,
+            });
+        }
+
+        let name_length = length as u16;
+
+        Ok(Self { value, name_length })
     }
 }

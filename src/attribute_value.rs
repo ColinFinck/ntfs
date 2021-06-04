@@ -25,17 +25,17 @@ impl<'n> NtfsAttributeValue<'n> {
         NtfsAttributeValueAttached::new(fs, self)
     }
 
+    pub fn data_position(&self) -> Option<u64> {
+        match self {
+            Self::Resident(inner) => Some(inner.data_position()),
+            Self::NonResident(inner) => inner.data_position(),
+        }
+    }
+
     pub fn len(&self) -> u64 {
         match self {
             Self::Resident(inner) => inner.len(),
             Self::NonResident(inner) => inner.len(),
-        }
-    }
-
-    pub fn position(&self) -> u64 {
-        match self {
-            Self::Resident(inner) => inner.position(),
-            Self::NonResident(inner) => inner.position(),
         }
     }
 }
@@ -82,16 +82,16 @@ where
         Self { fs, value }
     }
 
+    pub fn data_position(&self) -> Option<u64> {
+        self.value.data_position()
+    }
+
     pub fn detach(self) -> NtfsAttributeValue<'n> {
         self.value
     }
 
     pub fn len(&self) -> u64 {
         self.value.len()
-    }
-
-    pub fn position(&self) -> u64 {
-        self.value.position()
     }
 }
 
@@ -138,12 +138,12 @@ impl NtfsDataRun {
         Self::from_byte_info(position, length)
     }
 
-    pub fn len(&self) -> u64 {
-        self.length
+    pub fn data_position(&self) -> u64 {
+        self.position + self.stream_position
     }
 
-    pub fn position(&self) -> u64 {
-        self.position
+    pub fn len(&self) -> u64 {
+        self.length
     }
 }
 
@@ -340,17 +340,38 @@ pub struct NtfsAttributeNonResidentValue<'n> {
 }
 
 impl<'n> NtfsAttributeNonResidentValue<'n> {
-    pub(crate) fn new(ntfs: &'n Ntfs, data_runs_range: Range<u64>, data_size: u64) -> Self {
-        let stream_data_runs = NtfsDataRuns::new(ntfs, data_runs_range.clone());
+    pub(crate) fn new<T>(
+        ntfs: &'n Ntfs,
+        fs: &mut T,
+        data_runs_range: Range<u64>,
+        data_size: u64,
+    ) -> Result<Self>
+    where
+        T: Read + Seek,
+    {
+        let mut stream_data_runs = NtfsDataRuns::new(ntfs, data_runs_range.clone());
 
-        Self {
+        // Get the first data run already here to let `data_position` return something meaningful.
+        let stream_data_run = match stream_data_runs.next(fs) {
+            Some(Ok(data_run)) => Some(data_run),
+            Some(Err(e)) => return Err(e),
+            None => None,
+        };
+
+        Ok(Self {
             ntfs,
             data_runs_range,
             data_size,
             stream_data_runs,
-            stream_data_run: None,
+            stream_data_run,
             stream_position: 0,
-        }
+        })
+    }
+
+    pub fn data_position(&self) -> Option<u64> {
+        self.stream_data_run
+            .as_ref()
+            .map(|data_run| data_run.data_position())
     }
 
     pub fn data_runs(&self) -> NtfsDataRuns<'n> {
@@ -359,10 +380,6 @@ impl<'n> NtfsAttributeNonResidentValue<'n> {
 
     pub fn len(&self) -> u64 {
         self.data_size
-    }
-
-    pub fn position(&self) -> u64 {
-        self.data_runs_range.start
     }
 
     fn do_seek<T>(&mut self, fs: &mut T, bytes_to_seek: SeekFrom) -> Result<u64>

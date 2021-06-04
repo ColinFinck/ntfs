@@ -28,5 +28,6 @@ pub use crate::guid::*;
 pub use crate::ntfs::*;
 pub use crate::ntfs_file::*;
 pub use crate::string::*;
+pub use crate::structured_values::*;
 pub use crate::time::*;
 pub use crate::traits::*;

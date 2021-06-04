@@ -17,13 +17,6 @@ pub enum NtfsError {
     },
     /// The given buffer should have at least {expected} bytes, but it only has {actual} bytes
     BufferTooSmall { expected: usize, actual: usize },
-    /// The NTFS attribute at byte position {position:#010x} of type {ty:?} has {actual} bytes where {expected} bytes were expected
-    InvalidAttributeSize {
-        position: u64,
-        ty: NtfsAttributeType,
-        expected: u64,
-        actual: u64,
-    },
     /// The header of an NTFS data run should indicate a maximum byte count of {expected},
     /// but the header at byte position {position:#010x} indicates a byte count of {actual}
     InvalidByteCountInDataRunHeader {
@@ -43,6 +36,13 @@ pub enum NtfsError {
     InvalidNtfsTime,
     /// A record size field in the BIOS Parameter Block denotes {size_info}, which is invalid considering the cluster size of {cluster_size} bytes
     InvalidRecordSizeInfo { size_info: i8, cluster_size: u32 },
+    /// The NTFS structured value at byte position {position:#010x} of type {ty:?} has {actual} bytes where {expected} bytes were expected
+    InvalidStructuredValueSize {
+        position: u64,
+        ty: NtfsAttributeType,
+        expected: u64,
+        actual: u64,
+    },
     /// The 2-byte signature field at byte position {position:#010x} should contain {expected:?}, but it contains {actual:?}
     InvalidTwoByteSignature {
         position: u64,

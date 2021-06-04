@@ -7,8 +7,8 @@ use crate::ntfs::Ntfs;
 use crate::ntfs_file::NtfsFile;
 use crate::string::NtfsString;
 use crate::structured_values::{
-    NtfsFileName, NtfsIndexRoot, NtfsObjectId, NtfsStandardInformation, NtfsStructuredValue,
-    NtfsVolumeInformation, NtfsVolumeName,
+    NewNtfsStructuredValue, NtfsFileName, NtfsIndexRoot, NtfsObjectId, NtfsStandardInformation,
+    NtfsStructuredValue, NtfsVolumeInformation, NtfsVolumeName,
 };
 use binread::io::{Read, Seek, SeekFrom};
 use binread::{BinRead, BinReaderExt};
@@ -220,40 +220,42 @@ impl<'n> NtfsAttribute<'n> {
         T: Read + Seek,
     {
         let name_position = self.position + self.header.name_offset as u64;
-        NtfsString::read_from_fs(fs, name_position, self.name_length(), buf)
+        fs.seek(SeekFrom::Start(name_position))?;
+        NtfsString::from_reader(fs, self.name_length(), buf)
     }
 
-    pub fn structured_value<T>(&self, fs: &mut T) -> Result<NtfsStructuredValue>
+    pub fn structured_value<T>(&self, fs: &mut T) -> Result<NtfsStructuredValue<'n>>
     where
         T: Read + Seek,
     {
-        let attached_value = self.value().attach(fs);
+        let value = self.value(fs)?;
+        let length = value.len();
 
         match self.ty()? {
             NtfsAttributeType::StandardInformation => {
-                let inner = NtfsStandardInformation::new(self.position, attached_value)?;
+                let inner = NtfsStandardInformation::new(fs, value, length)?;
                 Ok(NtfsStructuredValue::StandardInformation(inner))
             }
             NtfsAttributeType::AttributeList => panic!("TODO"),
             NtfsAttributeType::FileName => {
-                let inner = NtfsFileName::new(self.position, attached_value)?;
+                let inner = NtfsFileName::new(fs, value, length)?;
                 Ok(NtfsStructuredValue::FileName(inner))
             }
             NtfsAttributeType::ObjectId => {
-                let inner = NtfsObjectId::new(self.position, attached_value)?;
+                let inner = NtfsObjectId::new(fs, value, length)?;
                 Ok(NtfsStructuredValue::ObjectId(inner))
             }
             NtfsAttributeType::SecurityDescriptor => panic!("TODO"),
             NtfsAttributeType::VolumeName => {
-                let inner = NtfsVolumeName::new(self.position, attached_value)?;
+                let inner = NtfsVolumeName::new(fs, value, length)?;
                 Ok(NtfsStructuredValue::VolumeName(inner))
             }
             NtfsAttributeType::VolumeInformation => {
-                let inner = NtfsVolumeInformation::new(self.position, attached_value)?;
+                let inner = NtfsVolumeInformation::new(fs, value, length)?;
                 Ok(NtfsStructuredValue::VolumeInformation(inner))
             }
             NtfsAttributeType::IndexRoot => {
-                let inner = NtfsIndexRoot::new(self.position, attached_value)?;
+                let inner = NtfsIndexRoot::new(fs, value, length)?;
                 Ok(NtfsStructuredValue::IndexRoot(inner))
             }
             ty => Err(NtfsError::UnsupportedStructuredValue {
@@ -273,23 +275,27 @@ impl<'n> NtfsAttribute<'n> {
     }
 
     /// Returns an [`NtfsAttributeValue`] structure to read the value of this NTFS attribute.
-    pub fn value(&self) -> NtfsAttributeValue {
+    pub fn value<T>(&self, fs: &mut T) -> Result<NtfsAttributeValue<'n>>
+    where
+        T: Read + Seek,
+    {
         match &self.extra_header {
             NtfsAttributeExtraHeader::Resident(resident_header) => {
                 let value_position = self.position + resident_header.value_offset as u64;
                 let value_length = resident_header.value_length as u64;
                 let value = NtfsDataRun::from_byte_info(value_position, value_length);
-                NtfsAttributeValue::Resident(value)
+                Ok(NtfsAttributeValue::Resident(value))
             }
             NtfsAttributeExtraHeader::NonResident(non_resident_header) => {
                 let start = self.position + non_resident_header.data_runs_offset as u64;
                 let end = self.position + self.header.length as u64;
                 let value = NtfsAttributeNonResidentValue::new(
                     &self.ntfs,
+                    fs,
                     start..end,
                     non_resident_header.data_size,
-                );
-                NtfsAttributeValue::NonResident(value)
+                )?;
+                Ok(NtfsAttributeValue::NonResident(value))
             }
         }
     }

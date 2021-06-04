@@ -68,7 +68,7 @@ impl Ntfs {
     /// - Check if `n` can be u32 instead of u64.
     /// - Check if `n` should be in a newtype, with easier conversion from
     ///   KnownNtfsFile.
-    pub fn ntfs_file<T>(&self, fs: &mut T, n: u64) -> Result<NtfsFile>
+    pub fn ntfs_file<'n, T>(&'n self, fs: &mut T, n: u64) -> Result<NtfsFile<'n>>
     where
         T: Read + Seek,
     {
@@ -132,7 +132,7 @@ impl Ntfs {
     /// of this NTFS volume.
     /// Note that a volume may also have no label, which is why the return value is further
     /// encapsulated in an `Option`.
-    pub fn volume_name<T>(&self, fs: &mut T) -> Option<Result<NtfsVolumeName>>
+    pub fn volume_name<'n, T>(&'n self, fs: &mut T) -> Option<Result<NtfsVolumeName<'n>>>
     where
         T: Read + Seek,
     {

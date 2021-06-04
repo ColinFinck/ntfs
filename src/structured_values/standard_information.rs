@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::attribute::NtfsAttributeType;
-use crate::attribute_value::NtfsAttributeValueAttached;
+use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
-use crate::structured_values::NtfsFileAttributeFlags;
+use crate::structured_values::{NewNtfsStructuredValue, NtfsFileAttributeFlags};
 use crate::time::NtfsTime;
 use binread::io::{Read, Seek};
 use binread::{BinRead, BinReaderExt};
@@ -42,32 +42,6 @@ pub struct NtfsStandardInformation {
 }
 
 impl NtfsStandardInformation {
-    pub(crate) fn new<T>(
-        attribute_position: u64,
-        mut value_attached: NtfsAttributeValueAttached<'_, '_, T>,
-    ) -> Result<Self>
-    where
-        T: Read + Seek,
-    {
-        if value_attached.len() < STANDARD_INFORMATION_SIZE_NTFS1 {
-            return Err(NtfsError::InvalidAttributeSize {
-                position: attribute_position,
-                ty: NtfsAttributeType::StandardInformation,
-                expected: STANDARD_INFORMATION_SIZE_NTFS1,
-                actual: value_attached.len(),
-            });
-        }
-
-        let data = value_attached.read_le::<StandardInformationData>()?;
-
-        let mut ntfs3_data = None;
-        if value_attached.len() >= STANDARD_INFORMATION_SIZE_NTFS3 {
-            ntfs3_data = Some(value_attached.read_le::<StandardInformationDataNtfs3>()?);
-        }
-
-        Ok(Self { data, ntfs3_data })
-    }
-
     pub fn access_time(&self) -> NtfsTime {
         self.data.access_time
     }
@@ -114,6 +88,32 @@ impl NtfsStandardInformation {
 
     pub fn version(&self) -> Option<u32> {
         self.ntfs3_data.as_ref().map(|x| x.version)
+    }
+}
+
+impl<'n> NewNtfsStructuredValue<'n> for NtfsStandardInformation {
+    fn new<T>(fs: &mut T, value: NtfsAttributeValue<'n>, length: u64) -> Result<Self>
+    where
+        T: Read + Seek,
+    {
+        if length < STANDARD_INFORMATION_SIZE_NTFS1 {
+            return Err(NtfsError::InvalidStructuredValueSize {
+                position: value.data_position().unwrap(),
+                ty: NtfsAttributeType::StandardInformation,
+                expected: STANDARD_INFORMATION_SIZE_NTFS1,
+                actual: length,
+            });
+        }
+
+        let mut value_attached = value.attach(fs);
+        let data = value_attached.read_le::<StandardInformationData>()?;
+
+        let mut ntfs3_data = None;
+        if length >= STANDARD_INFORMATION_SIZE_NTFS3 {
+            ntfs3_data = Some(value_attached.read_le::<StandardInformationDataNtfs3>()?);
+        }
+
+        Ok(Self { data, ntfs3_data })
     }
 }
 

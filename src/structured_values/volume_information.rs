@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::attribute::NtfsAttributeType;
-use crate::attribute_value::NtfsAttributeValueAttached;
+use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
+use crate::structured_values::NewNtfsStructuredValue;
 use binread::io::{Read, Seek};
 use binread::{BinRead, BinReaderExt};
 use bitflags::bitflags;
@@ -39,27 +40,6 @@ pub struct NtfsVolumeInformation {
 }
 
 impl NtfsVolumeInformation {
-    pub(crate) fn new<T>(
-        attribute_position: u64,
-        mut value_attached: NtfsAttributeValueAttached<'_, '_, T>,
-    ) -> Result<Self>
-    where
-        T: Read + Seek,
-    {
-        if value_attached.len() < VOLUME_INFORMATION_SIZE {
-            return Err(NtfsError::InvalidAttributeSize {
-                position: attribute_position,
-                ty: NtfsAttributeType::StandardInformation,
-                expected: VOLUME_INFORMATION_SIZE,
-                actual: value_attached.len(),
-            });
-        }
-
-        let data = value_attached.read_le::<VolumeInformationData>()?;
-
-        Ok(Self { data })
-    }
-
     pub fn flags(&self) -> NtfsVolumeFlags {
         NtfsVolumeFlags::from_bits_truncate(self.data.flags)
     }
@@ -70,5 +50,26 @@ impl NtfsVolumeInformation {
 
     pub fn minor_version(&self) -> u8 {
         self.data.minor_version
+    }
+}
+
+impl<'n> NewNtfsStructuredValue<'n> for NtfsVolumeInformation {
+    fn new<T>(fs: &mut T, value: NtfsAttributeValue<'n>, length: u64) -> Result<Self>
+    where
+        T: Read + Seek,
+    {
+        if length < VOLUME_INFORMATION_SIZE {
+            return Err(NtfsError::InvalidStructuredValueSize {
+                position: value.data_position().unwrap(),
+                ty: NtfsAttributeType::StandardInformation,
+                expected: VOLUME_INFORMATION_SIZE,
+                actual: length,
+            });
+        }
+
+        let mut value_attached = value.attach(fs);
+        let data = value_attached.read_le::<VolumeInformationData>()?;
+
+        Ok(Self { data })
     }
 }

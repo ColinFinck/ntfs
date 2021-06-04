@@ -2,21 +2,21 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::attribute::NtfsAttributeType;
-use crate::attribute_value::NtfsAttributeValueAttached;
+use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
 use crate::string::NtfsString;
-use crate::structured_values::NtfsFileAttributeFlags;
+use crate::structured_values::{NewNtfsStructuredValue, NtfsFileAttributeFlags};
 use crate::time::NtfsTime;
-use binread::io::{Read, Seek};
+use binread::io::{Read, Seek, SeekFrom};
 use binread::{BinRead, BinReaderExt};
 use core::mem;
 use enumn::N;
 
 /// Size of all [`FileNameHeader`] fields.
-const FILE_NAME_HEADER_SIZE: u64 = 66;
+const FILE_NAME_HEADER_SIZE: i64 = 66;
 
 /// The smallest FileName attribute has a name containing just a single character.
-const FILE_NAME_MIN_SIZE: u64 = FILE_NAME_HEADER_SIZE + mem::size_of::<u16>() as u64;
+const FILE_NAME_MIN_SIZE: u64 = FILE_NAME_HEADER_SIZE as u64 + mem::size_of::<u16>() as u64;
 
 #[allow(unused)]
 #[derive(BinRead, Clone, Debug)]
@@ -44,37 +44,12 @@ pub enum NtfsFileNamespace {
 }
 
 #[derive(Clone, Debug)]
-pub struct NtfsFileName {
+pub struct NtfsFileName<'n> {
     header: FileNameHeader,
-    name_position: u64,
+    value: NtfsAttributeValue<'n>,
 }
 
-impl NtfsFileName {
-    pub(crate) fn new<T>(
-        attribute_position: u64,
-        mut value_attached: NtfsAttributeValueAttached<'_, '_, T>,
-    ) -> Result<Self>
-    where
-        T: Read + Seek,
-    {
-        if value_attached.len() < FILE_NAME_MIN_SIZE {
-            return Err(NtfsError::InvalidAttributeSize {
-                position: attribute_position,
-                ty: NtfsAttributeType::FileName,
-                expected: FILE_NAME_MIN_SIZE,
-                actual: value_attached.len(),
-            });
-        }
-
-        let header = value_attached.read_le::<FileNameHeader>()?;
-        let name_position = value_attached.position() + FILE_NAME_HEADER_SIZE;
-
-        Ok(Self {
-            header,
-            name_position,
-        })
-    }
-
+impl<'n> NtfsFileName<'n> {
     pub fn access_time(&self) -> NtfsTime {
         self.header.access_time
     }
@@ -114,7 +89,7 @@ impl NtfsFileName {
     /// if it's an unknown namespace.
     pub fn namespace(&self) -> Result<NtfsFileNamespace> {
         NtfsFileNamespace::n(self.header.namespace).ok_or(NtfsError::UnsupportedNtfsFileNamespace {
-            position: self.name_position,
+            position: self.value.data_position().unwrap(),
             actual: self.header.namespace,
         })
     }
@@ -125,7 +100,47 @@ impl NtfsFileName {
     where
         T: Read + Seek,
     {
-        NtfsString::read_from_fs(fs, self.name_position, self.name_length(), buf)
+        let mut value_attached = self.value.clone().attach(fs);
+        value_attached.seek(SeekFrom::Current(FILE_NAME_HEADER_SIZE))?;
+        NtfsString::from_reader(value_attached, self.name_length(), buf)
+    }
+
+    fn validate_name_length(&self, length: u64) -> Result<()> {
+        let total_size = FILE_NAME_HEADER_SIZE as u64 + self.name_length() as u64;
+
+        if total_size > length {
+            return Err(NtfsError::InvalidStructuredValueSize {
+                position: self.value.data_position().unwrap(),
+                ty: NtfsAttributeType::FileName,
+                expected: length,
+                actual: total_size,
+            });
+        }
+
+        Ok(())
+    }
+}
+
+impl<'n> NewNtfsStructuredValue<'n> for NtfsFileName<'n> {
+    fn new<T>(fs: &mut T, value: NtfsAttributeValue<'n>, length: u64) -> Result<Self>
+    where
+        T: Read + Seek,
+    {
+        if length < FILE_NAME_MIN_SIZE {
+            return Err(NtfsError::InvalidStructuredValueSize {
+                position: value.data_position().unwrap(),
+                ty: NtfsAttributeType::FileName,
+                expected: FILE_NAME_MIN_SIZE,
+                actual: length,
+            });
+        }
+
+        let mut value_attached = value.clone().attach(fs);
+        let header = value_attached.read_le::<FileNameHeader>()?;
+        let file_name = Self { header, value };
+        file_name.validate_name_length(length)?;
+
+        Ok(file_name)
     }
 }
 

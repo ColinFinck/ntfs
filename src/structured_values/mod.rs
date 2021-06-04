@@ -19,6 +19,9 @@ pub use standard_information::*;
 pub use volume_information::*;
 pub use volume_name::*;
 
+use crate::attribute_value::NtfsAttributeValue;
+use crate::error::Result;
+use binread::io::{Read, Seek};
 use bitflags::bitflags;
 
 bitflags! {
@@ -40,11 +43,17 @@ bitflags! {
 }
 
 #[derive(Clone, Debug)]
-pub enum NtfsStructuredValue {
+pub enum NtfsStructuredValue<'n> {
     StandardInformation(NtfsStandardInformation),
-    FileName(NtfsFileName),
+    FileName(NtfsFileName<'n>),
     ObjectId(NtfsObjectId),
     VolumeInformation(NtfsVolumeInformation),
-    VolumeName(NtfsVolumeName),
+    VolumeName(NtfsVolumeName<'n>),
     IndexRoot(NtfsIndexRoot),
+}
+
+pub trait NewNtfsStructuredValue<'n>: Sized {
+    fn new<T>(fs: &mut T, value: NtfsAttributeValue<'n>, length: u64) -> Result<Self>
+    where
+        T: Read + Seek;
 }

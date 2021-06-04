@@ -3,7 +3,7 @@
 
 use crate::error::{NtfsError, Result};
 use alloc::string::String;
-use binread::io::{Read, Seek, SeekFrom};
+use binread::io::Read;
 use core::char;
 use core::cmp::Ordering;
 use core::convert::TryInto;
@@ -14,6 +14,21 @@ use core::fmt;
 pub struct NtfsString<'a>(pub &'a [u8]);
 
 impl<'a> NtfsString<'a> {
+    pub(crate) fn from_reader<T>(mut rdr: T, length: usize, buf: &'a mut [u8]) -> Result<Self>
+    where
+        T: Read,
+    {
+        if buf.len() < length {
+            return Err(NtfsError::BufferTooSmall {
+                expected: length,
+                actual: buf.len(),
+            });
+        }
+
+        rdr.read_exact(&mut buf[..length])?;
+        Ok(Self(&buf[..length]))
+    }
+
     fn cmp_iter<TI, OI>(mut this_iter: TI, mut other_iter: OI) -> Ordering
     where
         TI: Iterator<Item = u16>,
@@ -65,28 +80,6 @@ impl<'a> NtfsString<'a> {
     /// it may not be what a human considers the length of the string.
     pub const fn len(&self) -> usize {
         self.0.len()
-    }
-
-    pub(crate) fn read_from_fs<T>(
-        fs: &mut T,
-        position: u64,
-        length: usize,
-        buf: &'a mut [u8],
-    ) -> Result<Self>
-    where
-        T: Read + Seek,
-    {
-        if buf.len() < length {
-            return Err(NtfsError::BufferTooSmall {
-                expected: length,
-                actual: buf.len(),
-            });
-        }
-
-        fs.seek(SeekFrom::Start(position))?;
-        fs.read_exact(&mut buf[..length])?;
-
-        Ok(Self(&buf[..length]))
     }
 
     /// Attempts to convert `self` to an owned `String`.
