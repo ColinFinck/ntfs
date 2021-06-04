@@ -39,5 +39,5 @@ pub trait NtfsReadSeek {
         T: Read + Seek;
 
     /// See [`std::io::Seek::stream_position`].
-    fn stream_position(&mut self) -> Result<u64>;
+    fn stream_position(&self) -> u64;
 }

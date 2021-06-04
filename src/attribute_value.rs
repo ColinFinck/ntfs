@@ -61,7 +61,7 @@ impl<'n> NtfsReadSeek for NtfsAttributeValue<'n> {
         }
     }
 
-    fn stream_position(&mut self) -> Result<u64> {
+    fn stream_position(&self) -> u64 {
         match self {
             Self::Resident(inner) => inner.stream_position(),
             Self::NonResident(inner) => inner.stream_position(),
@@ -206,8 +206,8 @@ impl NtfsReadSeek for NtfsDataRun {
         }
     }
 
-    fn stream_position(&mut self) -> Result<u64> {
-        Ok(self.stream_position)
+    fn stream_position(&self) -> u64 {
+        self.stream_position
     }
 }
 
@@ -431,7 +431,7 @@ impl<'n> NtfsReadSeek for NtfsAttributeNonResidentValue<'n> {
 
         while bytes_read < buf.len() {
             if let Some(data_run) = &mut self.stream_data_run {
-                if data_run.stream_position()? < data_run.len() {
+                if data_run.stream_position() < data_run.len() {
                     let bytes_read_in_data_run = data_run.read(fs, &mut buf[bytes_read..])?;
                     bytes_read += bytes_read_in_data_run;
                     self.stream_position += bytes_read_in_data_run as u64;
@@ -499,7 +499,7 @@ impl<'n> NtfsReadSeek for NtfsAttributeNonResidentValue<'n> {
         )))
     }
 
-    fn stream_position(&mut self) -> Result<u64> {
-        Ok(self.stream_position)
+    fn stream_position(&self) -> u64 {
+        self.stream_position
     }
 }
