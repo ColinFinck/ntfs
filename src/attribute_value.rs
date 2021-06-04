@@ -385,10 +385,21 @@ impl<'n> NtfsAttributeNonResidentValue<'n> {
         self.data_size
     }
 
-    fn do_seek<T>(&mut self, fs: &mut T, bytes_to_seek: SeekFrom) -> Result<u64>
+    fn do_seek<T>(&mut self, fs: &mut T, mut bytes_to_seek: SeekFrom) -> Result<u64>
     where
         T: Read + Seek,
     {
+        // Translate `SeekFrom::Start(n)` into a more efficient `SeekFrom::Current`
+        // if n >= self.stream_position.
+        // We don't need to traverse data runs from the very beginning then.
+        if let SeekFrom::Start(n) = bytes_to_seek {
+            if let Some(n_from_current) = n.checked_sub(self.stream_position) {
+                if n_from_current <= i64::MAX as u64 {
+                    bytes_to_seek = SeekFrom::Current(n_from_current as i64);
+                }
+            }
+        }
+
         let mut bytes_left_to_seek = match bytes_to_seek {
             SeekFrom::Start(n) => {
                 // Reset `stream_data_runs` and `stream_data_run` to read from the very beginning.
