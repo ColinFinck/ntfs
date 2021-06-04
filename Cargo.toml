@@ -7,7 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-binread = { path = "../binread/binread", features = ["const_generics"], default-features = false }
+binread = { version = "2.1.1", features = ["const_generics"], default-features = false }
 bitflags = "1.2.1"
 chrono = { version = "0.4.19", optional = true }
 displaydoc = { version = "0.1.7", default-features = false }
