@@ -132,9 +132,11 @@ impl NtfsDataRun {
         }
     }
 
-    pub(crate) fn from_lcn_info(ntfs: &Ntfs, first_lcn: u64, lcn_count: u64) -> Self {
-        let position = first_lcn * ntfs.cluster_size() as u64;
+    pub(crate) fn from_lcn_info(ntfs: &Ntfs, lcn_position: i64, lcn_count: u64) -> Self {
+        debug_assert!(lcn_position >= 0);
+        let position = lcn_position as u64 * ntfs.cluster_size() as u64;
         let length = lcn_count * ntfs.cluster_size() as u64;
+
         Self::from_byte_info(position, length)
     }
 
@@ -218,6 +220,7 @@ impl NtfsReadSeek for NtfsDataRun {
 pub struct NtfsDataRuns<'n> {
     ntfs: &'n Ntfs,
     data_runs_range: Range<u64>,
+    previous_lcn_position: i64,
 }
 
 impl<'n> NtfsDataRuns<'n> {
@@ -225,6 +228,7 @@ impl<'n> NtfsDataRuns<'n> {
         Self {
             ntfs,
             data_runs_range,
+            previous_lcn_position: 0,
         }
     }
 
@@ -255,25 +259,39 @@ impl<'n> NtfsDataRuns<'n> {
             return None;
         }
 
-        // The lower nibble indicates how many bytes the following variable length integer about the LCN count takes.
+        // The lower nibble indicates the length of the following LCN count variable length integer.
         let lcn_count_byte_count = header & 0x0f;
-        let lcn_count = iter_try!(self.read_variable_length_integer(fs, lcn_count_byte_count));
+        let lcn_count =
+            iter_try!(self.read_variable_length_unsigned_integer(fs, lcn_count_byte_count));
         size += lcn_count_byte_count as u64;
 
-        // The upper nibble indicates how many bytes the following variable length integer about the first LCN takes.
-        let first_lcn_byte_count = (header & 0xf0) >> 4;
-        let first_lcn = iter_try!(self.read_variable_length_integer(fs, first_lcn_byte_count));
-        size += first_lcn_byte_count as u64;
+        // The upper nibble indicates the length of the following LCN offset variable length integer.
+        let lcn_offset_byte_count = (header & 0xf0) >> 4;
+        let lcn_offset =
+            iter_try!(self.read_variable_length_signed_integer(fs, lcn_offset_byte_count));
+        size += lcn_offset_byte_count as u64;
+
+        // The read LCN offset is relative to the previous one.
+        // Turn it into an absolute one.
+        let lcn_position = self.previous_lcn_position + lcn_offset;
+        if lcn_position < 0 {
+            return Some(Err(NtfsError::InvalidLcnPositionInDataRunHeader {
+                position: self.data_runs_range.start,
+                lcn_position,
+            }));
+        }
+
+        self.previous_lcn_position = lcn_position;
 
         // Only increment `self.data_runs_range.start` after having checked for success.
         // In case of an error, a subsequent call shall output the same error again.
         self.data_runs_range.start += size;
 
-        let data_run = NtfsDataRun::from_lcn_info(self.ntfs, first_lcn, lcn_count);
+        let data_run = NtfsDataRun::from_lcn_info(self.ntfs, lcn_position, lcn_count);
         Some(Ok(data_run))
     }
 
-    fn read_variable_length_integer<T>(&self, fs: &mut T, byte_count: u8) -> Result<u64>
+    fn read_variable_length_bytes<T>(&self, fs: &mut T, byte_count: u8) -> Result<[u8; 8]>
     where
         T: Read + Seek,
     {
@@ -290,7 +308,31 @@ impl<'n> NtfsDataRuns<'n> {
         let mut buf = [0u8; MAX_BYTE_COUNT as usize];
         fs.read_exact(&mut buf[..byte_count as usize])?;
 
-        Ok(u64::from_le_bytes(buf))
+        Ok(buf)
+    }
+
+    fn read_variable_length_signed_integer<T>(&self, fs: &mut T, byte_count: u8) -> Result<i64>
+    where
+        T: Read + Seek,
+    {
+        let buf = self.read_variable_length_bytes(fs, byte_count)?;
+        let mut integer = i64::from_le_bytes(buf);
+
+        // We have read `byte_count` bytes into a zeroed buffer and just interpreted that as an `i64`.
+        // Sign-extend `integer` to make it replicate the proper value.
+        let unused_bits = (mem::size_of::<i64>() as u32 - byte_count as u32) * 8;
+        integer = integer.wrapping_shl(unused_bits).wrapping_shr(unused_bits);
+
+        Ok(integer)
+    }
+
+    fn read_variable_length_unsigned_integer<T>(&self, fs: &mut T, byte_count: u8) -> Result<u64>
+    where
+        T: Read + Seek,
+    {
+        let buf = self.read_variable_length_bytes(fs, byte_count)?;
+        let integer = u64::from_le_bytes(buf);
+        Ok(integer)
     }
 }
 

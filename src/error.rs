@@ -24,6 +24,9 @@ pub enum NtfsError {
         expected: u8,
         actual: u8,
     },
+    /// An invalid LCN position {lcn_position} was calculated from the NTFS data run header at
+    /// byte position {position:#010x} (and previous data runs)
+    InvalidLcnPositionInDataRunHeader { position: u64, lcn_position: i64 },
     /// The requested NTFS file {n} is invalid
     InvalidNtfsFile { n: u64 },
     /// The NTFS file at byte position {position:#010x} should have signature {expected:?}, but it has signature {actual:?}
