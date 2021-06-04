@@ -29,11 +29,23 @@ pub enum NtfsError {
     InvalidLcnPositionInDataRunHeader { position: u64, lcn_position: i64 },
     /// The requested NTFS file {n} is invalid
     InvalidNtfsFile { n: u64 },
-    /// The NTFS file at byte position {position:#010x} should have signature {expected:?}, but it has signature {actual:?}
+    /// The NTFS file record at byte position {position:#010x} should have signature {expected:?}, but it has signature {actual:?}
     InvalidNtfsFileSignature {
         position: u64,
         expected: &'static [u8],
         actual: [u8; 4],
+    },
+    /// The NTFS index record at byte position {position:#010x} should have signature {expected:?}, but it has signature {actual:?}
+    InvalidNtfsIndexSignature {
+        position: u64,
+        expected: &'static [u8],
+        actual: [u8; 4],
+    },
+    /// The NTFS index record at byte position {position:#010x} should have a maximum of {expected} bytes, but it indicates {actual} bytes.
+    InvalidNtfsIndexSize {
+        position: u64,
+        expected: u32,
+        actual: u32,
     },
     /// The given time can't be represented as an NtfsTime
     InvalidNtfsTime,

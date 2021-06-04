@@ -7,8 +7,8 @@ use crate::ntfs::Ntfs;
 use crate::ntfs_file::NtfsFile;
 use crate::string::NtfsString;
 use crate::structured_values::{
-    NewNtfsStructuredValue, NtfsFileName, NtfsIndexRoot, NtfsObjectId, NtfsStandardInformation,
-    NtfsStructuredValue, NtfsVolumeInformation, NtfsVolumeName,
+    NewNtfsStructuredValue, NtfsFileName, NtfsIndexAllocation, NtfsIndexRoot, NtfsObjectId,
+    NtfsStandardInformation, NtfsStructuredValue, NtfsVolumeInformation, NtfsVolumeName,
 };
 use binread::io::{Read, Seek, SeekFrom};
 use binread::{BinRead, BinReaderExt};
@@ -257,6 +257,10 @@ impl<'n> NtfsAttribute<'n> {
             NtfsAttributeType::IndexRoot => {
                 let inner = NtfsIndexRoot::new(fs, value, length)?;
                 Ok(NtfsStructuredValue::IndexRoot(inner))
+            }
+            NtfsAttributeType::IndexAllocation => {
+                let inner = NtfsIndexAllocation::new(fs, value, length)?;
+                Ok(NtfsStructuredValue::IndexAllocation(inner))
             }
             ty => Err(NtfsError::UnsupportedStructuredValue {
                 position: self.position,

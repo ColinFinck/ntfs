@@ -4,6 +4,7 @@
 use crate::attribute::NtfsAttributes;
 use crate::error::{NtfsError, Result};
 use crate::ntfs::Ntfs;
+use crate::record::RecordHeader;
 use binread::io::{Read, Seek, SeekFrom};
 use binread::{BinRead, BinReaderExt};
 use bitflags::bitflags;
@@ -25,18 +26,9 @@ pub enum KnownNtfsFile {
 }
 
 #[allow(unused)]
-#[derive(BinRead)]
-struct NtfsRecordHeader {
-    signature: [u8; 4],
-    update_sequence_array_offset: u16,
-    update_sequence_array_size: u16,
-    logfile_sequence_number: u64,
-}
-
-#[allow(unused)]
-#[derive(BinRead)]
-pub(crate) struct NtfsFileRecordHeader {
-    record_header: NtfsRecordHeader,
+#[derive(BinRead, Debug)]
+struct FileRecordHeader {
+    record_header: RecordHeader,
     sequence_number: u16,
     hard_link_count: u16,
     first_attribute_offset: u16,
@@ -58,7 +50,7 @@ bitflags! {
 
 pub struct NtfsFile<'n> {
     ntfs: &'n Ntfs,
-    header: NtfsFileRecordHeader,
+    header: FileRecordHeader,
     position: u64,
 }
 
@@ -68,7 +60,7 @@ impl<'n> NtfsFile<'n> {
         T: Read + Seek,
     {
         fs.seek(SeekFrom::Start(position))?;
-        let header = fs.read_le::<NtfsFileRecordHeader>()?;
+        let header = fs.read_le::<FileRecordHeader>()?;
 
         let file = Self {
             ntfs,
