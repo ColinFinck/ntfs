@@ -145,6 +145,10 @@ impl NtfsDataRun {
     pub fn len(&self) -> u64 {
         self.length
     }
+
+    fn remaining_len(&self) -> u64 {
+        self.length.saturating_sub(self.stream_position)
+    }
 }
 
 impl NtfsReadSeek for NtfsDataRun {
@@ -152,12 +156,11 @@ impl NtfsReadSeek for NtfsDataRun {
     where
         T: Read + Seek,
     {
-        let bytes_left = self.length.saturating_sub(self.stream_position);
-        if bytes_left == 0 {
+        if self.remaining_len() == 0 {
             return Ok(0);
         }
 
-        let bytes_to_read = cmp::min(buf.len(), bytes_left as usize);
+        let bytes_to_read = cmp::min(buf.len(), self.remaining_len() as usize);
         let work_slice = &mut buf[..bytes_to_read];
 
         if self.position == 0 {
@@ -387,17 +390,19 @@ impl<'n> NtfsAttributeNonResidentValue<'n> {
         T: Read + Seek,
     {
         let mut bytes_left_to_seek = match bytes_to_seek {
-            SeekFrom::Start(n) => n,
+            SeekFrom::Start(n) => {
+                // Reset `stream_data_runs` and `stream_data_run` to read from the very beginning.
+                self.stream_data_runs = NtfsDataRuns::new(self.ntfs, self.data_runs_range.clone());
+                self.stream_data_run = None;
+                n
+            }
             SeekFrom::Current(n) if n >= 0 => n as u64,
             _ => panic!("do_seek only accepts positive seeks from Start or Current!"),
         };
 
         while bytes_left_to_seek > 0 {
             if let Some(data_run) = &mut self.stream_data_run {
-                let bytes_left_in_data_run =
-                    data_run.len().saturating_sub(data_run.stream_position()?);
-
-                if bytes_left_to_seek < bytes_left_in_data_run {
+                if bytes_left_to_seek < data_run.remaining_len() {
                     // We have found the right data run, now we have to seek inside the data run.
                     //
                     // If we were called to seek from the very beginning, we can be sure that this
@@ -418,7 +423,7 @@ impl<'n> NtfsAttributeNonResidentValue<'n> {
                     break;
                 } else {
                     // We can skip the entire data run.
-                    bytes_left_to_seek -= data_run.len();
+                    bytes_left_to_seek -= data_run.remaining_len();
                 }
             }
 
