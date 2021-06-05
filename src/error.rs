@@ -86,6 +86,8 @@ pub enum NtfsError {
         position: u64,
         ty: NtfsAttributeType,
     },
+    /// The requested Virtual Cluster Number (VCN) {requested_vcn} leads to a record with VCN {record_vcn}
+    VcnMismatch { requested_vcn: Vcn, record_vcn: Vcn },
     /// The Virtual Cluster Number (VCN) {vcn} is too big to be processed
     VcnTooBig { vcn: Vcn },
 }
