@@ -8,6 +8,7 @@ use crate::types::Lcn;
 use binread::io;
 use binread::io::{Read, Seek, SeekFrom};
 use binread::BinReaderExt;
+use core::convert::TryFrom;
 use core::iter::FusedIterator;
 use core::ops::Range;
 use core::{cmp, mem};
@@ -435,8 +436,8 @@ impl<'n> NtfsAttributeNonResidentValue<'n> {
         // We don't need to traverse data runs from the very beginning then.
         if let SeekFrom::Start(n) = bytes_to_seek {
             if let Some(n_from_current) = n.checked_sub(self.stream_position) {
-                if n_from_current <= i64::MAX as u64 {
-                    bytes_to_seek = SeekFrom::Current(n_from_current as i64);
+                if let Ok(signed_n_from_current) = i64::try_from(n_from_current) {
+                    bytes_to_seek = SeekFrom::Current(signed_n_from_current);
                 }
             }
         }
