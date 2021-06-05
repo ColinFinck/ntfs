@@ -6,6 +6,7 @@ use crate::error::Result;
 use crate::ntfs::Ntfs;
 use crate::structured_values::NewNtfsStructuredValue;
 use crate::traits::NtfsReadSeek;
+use crate::types::Vcn;
 use binread::io::{Read, Seek, SeekFrom};
 use binread::{BinRead, BinReaderExt};
 use bitflags::bitflags;
@@ -99,7 +100,7 @@ where
 
     /// Returns the Virtual Cluster Number (VCN) of the subnode of this Index Entry,
     /// or `None` if this Index Entry has no subnode.
-    pub fn subnode_vcn<T>(&self, fs: &mut T) -> Option<Result<u64>>
+    pub fn subnode_vcn<T>(&self, fs: &mut T) -> Option<Result<Vcn>>
     where
         T: Read + Seek,
     {
@@ -110,9 +111,9 @@ where
         // Read the subnode VCN from the very end of the Index Entry.
         let mut value_attached = self.value.clone().attach(fs);
         iter_try!(value_attached.seek(SeekFrom::Current(
-            self.index_entry_length() as i64 - mem::size_of::<u64>() as i64
+            self.index_entry_length() as i64 - mem::size_of::<Vcn>() as i64
         )));
-        let vcn = iter_try!(value_attached.read_le::<u64>());
+        let vcn = iter_try!(value_attached.read_le::<Vcn>());
 
         Some(Ok(vcn))
     }

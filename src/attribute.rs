@@ -10,6 +10,7 @@ use crate::structured_values::{
     NewNtfsStructuredValue, NtfsFileName, NtfsIndexAllocation, NtfsIndexRoot, NtfsObjectId,
     NtfsStandardInformation, NtfsStructuredValue, NtfsVolumeInformation, NtfsVolumeName,
 };
+use crate::types::Vcn;
 use binread::io::{Read, Seek, SeekFrom};
 use binread::{BinRead, BinReaderExt};
 use bitflags::bitflags;
@@ -74,11 +75,11 @@ struct NtfsAttributeNonResidentHeader {
     /// Lower boundary of Virtual Cluster Numbers (VCNs) referenced by this attribute.
     /// This becomes relevant when file data is split over multiple attributes.
     /// Otherwise, it's zero.
-    lowest_vcn: i64,
+    lowest_vcn: Vcn,
     /// Upper boundary of Virtual Cluster Numbers (VCNs) referenced by this attribute.
     /// This becomes relevant when file data is split over multiple attributes.
     /// Otherwise, it's zero (or even -1 for zero-length files according to NTFS-3G).
-    highest_vcn: i64,
+    highest_vcn: Vcn,
     /// Offset to the beginning of the value data runs.
     data_runs_offset: u16,
     /// Binary exponent denoting the number of clusters in a compression unit.

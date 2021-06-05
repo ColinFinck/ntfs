@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::attribute::NtfsAttributeType;
+use crate::types::{Lcn, Vcn};
 use displaydoc::Display;
 
 /// Central result type of ntfs.
@@ -24,9 +25,8 @@ pub enum NtfsError {
         expected: u8,
         actual: u8,
     },
-    /// An invalid LCN position {lcn_position} was calculated from the NTFS data run header at
-    /// byte position {position:#010x} (and previous data runs)
-    InvalidLcnPositionInDataRunHeader { position: u64, lcn_position: i64 },
+    /// The cluster count {cluster_count} is too big
+    InvalidClusterCount { cluster_count: u64 },
     /// The requested NTFS file {n} is invalid
     InvalidNtfsFile { n: u64 },
     /// The NTFS file record at byte position {position:#010x} should have signature {expected:?}, but it has signature {actual:?}
@@ -64,8 +64,17 @@ pub enum NtfsError {
         expected: &'static [u8],
         actual: [u8; 2],
     },
+    /// The VCN {vcn} read from the NTFS data run header at byte position {position:#010x}
+    /// cannot be added to the LCN {previous_lcn} calculated from previous data runs
+    InvalidVcnInDataRunHeader {
+        position: u64,
+        vcn: Vcn,
+        previous_lcn: Lcn,
+    },
     /// I/O error: {0:?}
     Io(binread::io::Error),
+    /// The Logical Cluster Number (LCN) {lcn} is too big to be processed
+    LcnTooBig { lcn: Lcn },
     /// The cluster size is {actual} bytes, but the maximum supported one is {expected}
     UnsupportedClusterSize { expected: u32, actual: u32 },
     /// The type of the NTFS attribute at byte position {position:#010x} is {actual:#010x}, which is not supported
@@ -77,6 +86,8 @@ pub enum NtfsError {
         position: u64,
         ty: NtfsAttributeType,
     },
+    /// The Virtual Cluster Number (VCN) {vcn} is too big to be processed
+    VcnTooBig { vcn: Vcn },
 }
 
 impl From<binread::error::Error> for NtfsError {

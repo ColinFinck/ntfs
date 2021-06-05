@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::error::{NtfsError, Result};
+use crate::types::Lcn;
 use binread::BinRead;
 use memoffset::offset_of;
 
@@ -27,8 +28,8 @@ pub(crate) struct BiosParameterBlock {
     extended_boot_signature: u8,
     reserved: u8,
     total_sectors: u64,
-    mft_lcn: u64,
-    mft_mirror_lcn: u64,
+    mft_lcn: Lcn,
+    mft_mirror_lcn: Lcn,
     file_record_size_info: i8,
     zeros_4: [u8; 3],
     index_record_size_info: i8,
@@ -60,7 +61,7 @@ impl BiosParameterBlock {
     }
 
     /// Returns the Logical Cluster Number (LCN) to the beginning of the Master File Table (MFT).
-    pub(crate) fn mft_lcn(&self) -> u64 {
+    pub(crate) fn mft_lcn(&self) -> Lcn {
         self.mft_lcn
     }
 

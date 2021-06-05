@@ -23,6 +23,7 @@ mod string;
 pub mod structured_values;
 mod time;
 mod traits;
+mod types;
 
 pub use crate::attribute::*;
 pub use crate::attribute_value::*;
@@ -34,3 +35,4 @@ pub use crate::string::*;
 pub use crate::structured_values::*;
 pub use crate::time::*;
 pub use crate::traits::*;
+pub use crate::types::*;

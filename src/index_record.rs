@@ -8,6 +8,7 @@ use crate::ntfs::Ntfs;
 use crate::record::RecordHeader;
 use crate::structured_values::NewNtfsStructuredValue;
 use crate::traits::NtfsReadSeek;
+use crate::types::Vcn;
 use binread::io::{Read, Seek, SeekFrom};
 use binread::{BinRead, BinReaderExt};
 
@@ -18,7 +19,7 @@ const INDEX_RECORD_HEADER_SIZE: u32 = 24;
 #[derive(BinRead, Clone, Debug)]
 struct IndexRecordHeader {
     record_header: RecordHeader,
-    vcn: u64,
+    vcn: Vcn,
 }
 
 /// Size of all [`IndexNodeHeader`] fields plus some reserved bytes.
@@ -141,5 +142,9 @@ impl<'n> NtfsIndexRecord<'n> {
         }
 
         Ok(())
+    }
+
+    pub fn vcn(&self) -> Vcn {
+        self.index_record_header.vcn
     }
 }

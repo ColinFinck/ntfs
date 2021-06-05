@@ -4,6 +4,7 @@
 use crate::error::{NtfsError, Result};
 use crate::ntfs::Ntfs;
 use crate::traits::NtfsReadSeek;
+use crate::types::Lcn;
 use binread::io;
 use binread::io::{Read, Seek, SeekFrom};
 use binread::BinReaderExt;
@@ -132,12 +133,13 @@ impl NtfsDataRun {
         }
     }
 
-    pub(crate) fn from_lcn_info(ntfs: &Ntfs, lcn_position: i64, lcn_count: u64) -> Self {
-        debug_assert!(lcn_position >= 0);
-        let position = lcn_position as u64 * ntfs.cluster_size() as u64;
-        let length = lcn_count * ntfs.cluster_size() as u64;
+    pub(crate) fn from_lcn_info(ntfs: &Ntfs, lcn: Lcn, cluster_count: u64) -> Result<Self> {
+        let position = lcn.position(ntfs)?;
+        let length = cluster_count
+            .checked_mul(ntfs.cluster_size() as u64)
+            .ok_or(NtfsError::InvalidClusterCount { cluster_count })?;
 
-        Self::from_byte_info(position, length)
+        Ok(Self::from_byte_info(position, length))
     }
 
     pub fn data_position(&self) -> u64 {
@@ -220,7 +222,7 @@ impl NtfsReadSeek for NtfsDataRun {
 pub struct NtfsDataRuns<'n> {
     ntfs: &'n Ntfs,
     data_runs_range: Range<u64>,
-    previous_lcn_position: i64,
+    previous_lcn: Lcn,
 }
 
 impl<'n> NtfsDataRuns<'n> {
@@ -228,7 +230,7 @@ impl<'n> NtfsDataRuns<'n> {
         Self {
             ntfs,
             data_runs_range,
-            previous_lcn_position: 0,
+            previous_lcn: Lcn::from(0),
         }
     }
 
@@ -259,35 +261,32 @@ impl<'n> NtfsDataRuns<'n> {
             return None;
         }
 
-        // The lower nibble indicates the length of the following LCN count variable length integer.
-        let lcn_count_byte_count = header & 0x0f;
-        let lcn_count =
-            iter_try!(self.read_variable_length_unsigned_integer(fs, lcn_count_byte_count));
-        size += lcn_count_byte_count as u64;
+        // The lower nibble indicates the length of the following cluster count variable length integer.
+        let cluster_count_byte_count = header & 0x0f;
+        let cluster_count =
+            iter_try!(self.read_variable_length_unsigned_integer(fs, cluster_count_byte_count));
+        size += cluster_count_byte_count as u64;
 
-        // The upper nibble indicates the length of the following LCN offset variable length integer.
-        let lcn_offset_byte_count = (header & 0xf0) >> 4;
-        let lcn_offset =
-            iter_try!(self.read_variable_length_signed_integer(fs, lcn_offset_byte_count));
-        size += lcn_offset_byte_count as u64;
+        // The upper nibble indicates the length of the following VCN variable length integer.
+        let vcn_byte_count = (header & 0xf0) >> 4;
+        let vcn = iter_try!(self.read_variable_length_signed_integer(fs, vcn_byte_count)).into();
+        size += vcn_byte_count as u64;
 
-        // The read LCN offset is relative to the previous one.
-        // Turn it into an absolute one.
-        let lcn_position = self.previous_lcn_position + lcn_offset;
-        if lcn_position < 0 {
-            return Some(Err(NtfsError::InvalidLcnPositionInDataRunHeader {
+        // Turn the read VCN into an absolute LCN.
+        let lcn = iter_try!(self.previous_lcn.checked_add(vcn).ok_or({
+            NtfsError::InvalidVcnInDataRunHeader {
                 position: self.data_runs_range.start,
-                lcn_position,
-            }));
-        }
-
-        self.previous_lcn_position = lcn_position;
+                vcn,
+                previous_lcn: self.previous_lcn,
+            }
+        }));
+        self.previous_lcn = lcn;
 
         // Only increment `self.data_runs_range.start` after having checked for success.
         // In case of an error, a subsequent call shall output the same error again.
         self.data_runs_range.start += size;
 
-        let data_run = NtfsDataRun::from_lcn_info(self.ntfs, lcn_position, lcn_count);
+        let data_run = iter_try!(NtfsDataRun::from_lcn_info(self.ntfs, lcn, cluster_count));
         Some(Ok(data_run))
     }
 

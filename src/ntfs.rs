@@ -40,18 +40,21 @@ impl Ntfs {
         let cluster_size = bpb.cluster_size()?;
         let sector_size = bpb.sector_size();
         let size = bpb.total_sectors() * sector_size as u64;
-        let mft_position = bpb.mft_lcn() * cluster_size as u64;
+        let mft_position = 0;
         let file_record_size = bpb.file_record_size()?;
         let serial_number = bpb.serial_number();
 
-        Ok(Self {
+        let mut ntfs = Self {
             cluster_size,
             sector_size,
             size,
             mft_position,
             file_record_size,
             serial_number,
-        })
+        };
+        ntfs.mft_position = bpb.mft_lcn().position(&ntfs)?;
+
+        Ok(ntfs)
     }
 
     /// Returns the size of a single cluster, in bytes.
