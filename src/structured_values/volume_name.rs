@@ -4,6 +4,7 @@
 use crate::attribute::NtfsAttributeType;
 use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
+use crate::ntfs::Ntfs;
 use crate::string::NtfsString;
 use crate::structured_values::NewNtfsStructuredValue;
 use binread::io::{Read, Seek};
@@ -41,7 +42,12 @@ impl<'n> NtfsVolumeName<'n> {
 }
 
 impl<'n> NewNtfsStructuredValue<'n> for NtfsVolumeName<'n> {
-    fn new<T>(_fs: &mut T, value: NtfsAttributeValue<'n>, length: u64) -> Result<Self>
+    fn new<T>(
+        _ntfs: &'n Ntfs,
+        _fs: &mut T,
+        value: NtfsAttributeValue<'n>,
+        length: u64,
+    ) -> Result<Self>
     where
         T: Read + Seek,
     {

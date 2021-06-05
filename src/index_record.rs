@@ -4,6 +4,7 @@
 use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
 use crate::index_entry::NtfsIndexEntries;
+use crate::ntfs::Ntfs;
 use crate::record::RecordHeader;
 use crate::structured_values::NewNtfsStructuredValue;
 use crate::traits::NtfsReadSeek;
@@ -33,6 +34,7 @@ pub(crate) struct IndexNodeHeader {
 
 #[derive(Clone, Debug)]
 pub struct NtfsIndexRecord<'n> {
+    ntfs: &'n Ntfs,
     value: NtfsAttributeValue<'n>,
     index_record_header: IndexRecordHeader,
     index_node_header: IndexNodeHeader,
@@ -42,6 +44,7 @@ const HAS_SUBNODES_FLAG: u8 = 0x01;
 
 impl<'n> NtfsIndexRecord<'n> {
     pub(crate) fn new<T>(
+        ntfs: &'n Ntfs,
         fs: &mut T,
         value: NtfsAttributeValue<'n>,
         index_record_size: u32,
@@ -54,6 +57,7 @@ impl<'n> NtfsIndexRecord<'n> {
         let index_node_header = value_attached.read_le::<IndexNodeHeader>()?;
 
         let index_record = Self {
+            ntfs,
             value,
             index_record_header,
             index_node_header,
@@ -76,7 +80,7 @@ impl<'n> NtfsIndexRecord<'n> {
         let mut value = self.value.clone();
         value.seek(fs, SeekFrom::Start(start))?;
 
-        Ok(NtfsIndexEntries::new(value, end))
+        Ok(NtfsIndexEntries::new(self.ntfs, value, end))
     }
 
     /// Returns whether this index node has sub-nodes.

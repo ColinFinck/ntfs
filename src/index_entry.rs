@@ -3,6 +3,7 @@
 
 use crate::attribute_value::NtfsAttributeValue;
 use crate::error::Result;
+use crate::ntfs::Ntfs;
 use crate::structured_values::NewNtfsStructuredValue;
 use crate::traits::NtfsReadSeek;
 use binread::io::{Read, Seek, SeekFrom};
@@ -28,6 +29,7 @@ pub struct NtfsIndexEntry<'n, K>
 where
     K: NewNtfsStructuredValue<'n>,
 {
+    ntfs: &'n Ntfs,
     header: IndexEntryHeader,
     value: NtfsAttributeValue<'n>,
     key_type: PhantomData<K>,
@@ -46,7 +48,7 @@ impl<'n, K> NtfsIndexEntry<'n, K>
 where
     K: NewNtfsStructuredValue<'n>,
 {
-    pub(crate) fn new<T>(fs: &mut T, value: NtfsAttributeValue<'n>) -> Result<Self>
+    pub(crate) fn new<T>(ntfs: &'n Ntfs, fs: &mut T, value: NtfsAttributeValue<'n>) -> Result<Self>
     where
         T: Read + Seek,
     {
@@ -55,6 +57,7 @@ where
         let key_type = PhantomData;
 
         let entry = Self {
+            ntfs,
             header,
             value,
             key_type,
@@ -90,7 +93,7 @@ where
         iter_try!(value.seek(fs, SeekFrom::Current(INDEX_ENTRY_HEADER_SIZE)));
         let length = self.header.key_length as u64;
 
-        let structured_value = iter_try!(K::new(fs, value, length));
+        let structured_value = iter_try!(K::new(self.ntfs, fs, value, length));
         Some(Ok(structured_value))
     }
 
@@ -120,6 +123,7 @@ pub struct NtfsIndexEntries<'n, K>
 where
     K: NewNtfsStructuredValue<'n>,
 {
+    ntfs: &'n Ntfs,
     value: NtfsAttributeValue<'n>,
     end: u64,
     key_type: PhantomData<K>,
@@ -129,11 +133,12 @@ impl<'n, K> NtfsIndexEntries<'n, K>
 where
     K: NewNtfsStructuredValue<'n>,
 {
-    pub(crate) fn new(value: NtfsAttributeValue<'n>, end: u64) -> Self {
+    pub(crate) fn new(ntfs: &'n Ntfs, value: NtfsAttributeValue<'n>, end: u64) -> Self {
         debug_assert!(end <= value.len());
         let key_type = PhantomData;
 
         Self {
+            ntfs,
             value,
             end,
             key_type,
@@ -156,7 +161,7 @@ where
         }
 
         // Get the current entry.
-        let entry = iter_try!(NtfsIndexEntry::new(fs, self.value.clone()));
+        let entry = iter_try!(NtfsIndexEntry::new(self.ntfs, fs, self.value.clone()));
 
         if entry.flags().contains(NtfsIndexEntryFlags::LAST_ENTRY) {
             // This is the last entry.

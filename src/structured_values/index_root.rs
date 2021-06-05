@@ -6,6 +6,7 @@ use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
 use crate::index_entry::NtfsIndexEntries;
 use crate::index_record::{IndexNodeHeader, INDEX_NODE_HEADER_SIZE};
+use crate::ntfs::Ntfs;
 use crate::structured_values::NewNtfsStructuredValue;
 use crate::traits::NtfsReadSeek;
 use binread::io::{Read, Seek, SeekFrom};
@@ -24,6 +25,7 @@ struct IndexRootHeader {
 
 #[derive(Clone, Debug)]
 pub struct NtfsIndexRoot<'n> {
+    ntfs: &'n Ntfs,
     value: NtfsAttributeValue<'n>,
     index_root_header: IndexRootHeader,
     index_node_header: IndexNodeHeader,
@@ -48,7 +50,7 @@ impl<'n> NtfsIndexRoot<'n> {
         let mut value = self.value.clone();
         value.seek(fs, SeekFrom::Start(start))?;
 
-        Ok(NtfsIndexEntries::new(value, end))
+        Ok(NtfsIndexEntries::new(self.ntfs, value, end))
     }
 
     pub fn index_record_size(&self) -> u32 {
@@ -68,7 +70,12 @@ impl<'n> NtfsIndexRoot<'n> {
 }
 
 impl<'n> NewNtfsStructuredValue<'n> for NtfsIndexRoot<'n> {
-    fn new<T>(fs: &mut T, value: NtfsAttributeValue<'n>, _length: u64) -> Result<Self>
+    fn new<T>(
+        ntfs: &'n Ntfs,
+        fs: &mut T,
+        value: NtfsAttributeValue<'n>,
+        _length: u64,
+    ) -> Result<Self>
     where
         T: Read + Seek,
     {
@@ -87,6 +94,7 @@ impl<'n> NewNtfsStructuredValue<'n> for NtfsIndexRoot<'n> {
         let index_node_header = value_attached.read_le::<IndexNodeHeader>()?;
 
         Ok(Self {
+            ntfs,
             value,
             index_root_header,
             index_node_header,

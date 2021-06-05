@@ -23,6 +23,7 @@ pub use volume_name::*;
 
 use crate::attribute_value::NtfsAttributeValue;
 use crate::error::Result;
+use crate::ntfs::Ntfs;
 use binread::io::{Read, Seek};
 use bitflags::bitflags;
 
@@ -56,7 +57,12 @@ pub enum NtfsStructuredValue<'n> {
 }
 
 pub trait NewNtfsStructuredValue<'n>: Sized {
-    fn new<T>(fs: &mut T, value: NtfsAttributeValue<'n>, length: u64) -> Result<Self>
+    fn new<T>(
+        ntfs: &'n Ntfs,
+        fs: &mut T,
+        value: NtfsAttributeValue<'n>,
+        length: u64,
+    ) -> Result<Self>
     where
         T: Read + Seek;
 }

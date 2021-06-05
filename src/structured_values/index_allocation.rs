@@ -4,6 +4,7 @@
 use crate::attribute_value::NtfsAttributeValue;
 use crate::error::Result;
 use crate::index_record::NtfsIndexRecord;
+use crate::ntfs::Ntfs;
 use crate::structured_values::index_root::NtfsIndexRoot;
 use crate::structured_values::NewNtfsStructuredValue;
 use crate::traits::NtfsReadSeek;
@@ -12,34 +13,42 @@ use core::iter::FusedIterator;
 
 #[derive(Clone, Debug)]
 pub struct NtfsIndexAllocation<'n> {
+    ntfs: &'n Ntfs,
     value: NtfsAttributeValue<'n>,
 }
 
 impl<'n> NtfsIndexAllocation<'n> {
-    pub fn iter(&self, index_root: &NtfsIndexRoot) -> NtfsIndexRecords<'n> {
+    pub fn iter(&self, index_root: &NtfsIndexRoot<'n>) -> NtfsIndexRecords<'n> {
         let index_record_size = index_root.index_record_size();
-        NtfsIndexRecords::new(self.value.clone(), index_record_size)
+        NtfsIndexRecords::new(self.ntfs, self.value.clone(), index_record_size)
     }
 }
 
 impl<'n> NewNtfsStructuredValue<'n> for NtfsIndexAllocation<'n> {
-    fn new<T>(_fs: &mut T, value: NtfsAttributeValue<'n>, _length: u64) -> Result<Self>
+    fn new<T>(
+        ntfs: &'n Ntfs,
+        _fs: &mut T,
+        value: NtfsAttributeValue<'n>,
+        _length: u64,
+    ) -> Result<Self>
     where
         T: Read + Seek,
     {
-        Ok(Self { value })
+        Ok(Self { ntfs, value })
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct NtfsIndexRecords<'n> {
+    ntfs: &'n Ntfs,
     value: NtfsAttributeValue<'n>,
     index_record_size: u32,
 }
 
 impl<'n> NtfsIndexRecords<'n> {
-    fn new(value: NtfsAttributeValue<'n>, index_record_size: u32) -> Self {
+    fn new(ntfs: &'n Ntfs, value: NtfsAttributeValue<'n>, index_record_size: u32) -> Self {
         Self {
+            ntfs,
             value,
             index_record_size,
         }
@@ -62,6 +71,7 @@ impl<'n> NtfsIndexRecords<'n> {
 
         // Get the current record.
         let record = iter_try!(NtfsIndexRecord::new(
+            self.ntfs,
             fs,
             self.value.clone(),
             self.index_record_size
