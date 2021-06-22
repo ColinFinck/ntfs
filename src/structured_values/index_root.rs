@@ -4,7 +4,7 @@
 use crate::attribute::NtfsAttributeType;
 use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
-use crate::index_entry::NtfsIndexEntries;
+use crate::index_entry::NtfsIndexNodeEntries;
 use crate::index_record::{IndexNodeHeader, INDEX_NODE_HEADER_SIZE};
 use crate::ntfs::Ntfs;
 use crate::structured_values::NewNtfsStructuredValue;
@@ -38,7 +38,7 @@ impl<'n> NtfsIndexRoot<'n> {
         self.index_node_header.allocated_size
     }
 
-    pub fn entries<K, T>(&self, fs: &mut T) -> Result<NtfsIndexEntries<'n, K>>
+    pub fn entries<K, T>(&self, fs: &mut T) -> Result<NtfsIndexNodeEntries<'n, K>>
     where
         K: NewNtfsStructuredValue<'n>,
         T: Read + Seek,
@@ -50,7 +50,7 @@ impl<'n> NtfsIndexRoot<'n> {
         let mut value = self.value.clone();
         value.seek(fs, SeekFrom::Start(start))?;
 
-        Ok(NtfsIndexEntries::new(self.ntfs, value, end))
+        Ok(NtfsIndexNodeEntries::new(self.ntfs, value, end))
     }
 
     pub fn index_record_size(&self) -> u32 {

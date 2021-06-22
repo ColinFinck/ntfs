@@ -120,7 +120,7 @@ where
 }
 
 #[derive(Clone, Debug)]
-pub struct NtfsIndexEntries<'n, K>
+pub struct NtfsIndexNodeEntries<'n, K>
 where
     K: NewNtfsStructuredValue<'n>,
 {
@@ -130,7 +130,7 @@ where
     key_type: PhantomData<K>,
 }
 
-impl<'n, K> NtfsIndexEntries<'n, K>
+impl<'n, K> NtfsIndexNodeEntries<'n, K>
 where
     K: NewNtfsStructuredValue<'n>,
 {
@@ -146,11 +146,11 @@ where
         }
     }
 
-    pub fn attach<'a, T>(self, fs: &'a mut T) -> NtfsIndexEntriesAttached<'n, 'a, K, T>
+    pub fn attach<'a, T>(self, fs: &'a mut T) -> NtfsIndexNodeEntriesAttached<'n, 'a, K, T>
     where
         T: Read + Seek,
     {
-        NtfsIndexEntriesAttached::new(fs, self)
+        NtfsIndexNodeEntriesAttached::new(fs, self)
     }
 
     pub fn next<T>(&mut self, fs: &mut T) -> Option<Result<NtfsIndexEntry<'n, K>>>
@@ -180,30 +180,30 @@ where
     }
 }
 
-pub struct NtfsIndexEntriesAttached<'n, 'a, K, T>
+pub struct NtfsIndexNodeEntriesAttached<'n, 'a, K, T>
 where
     K: NewNtfsStructuredValue<'n>,
     T: Read + Seek,
 {
     fs: &'a mut T,
-    index_entries: NtfsIndexEntries<'n, K>,
+    index_entries: NtfsIndexNodeEntries<'n, K>,
 }
 
-impl<'n, 'a, K, T> NtfsIndexEntriesAttached<'n, 'a, K, T>
+impl<'n, 'a, K, T> NtfsIndexNodeEntriesAttached<'n, 'a, K, T>
 where
     K: NewNtfsStructuredValue<'n>,
     T: Read + Seek,
 {
-    fn new(fs: &'a mut T, index_entries: NtfsIndexEntries<'n, K>) -> Self {
+    fn new(fs: &'a mut T, index_entries: NtfsIndexNodeEntries<'n, K>) -> Self {
         Self { fs, index_entries }
     }
 
-    pub fn detach(self) -> NtfsIndexEntries<'n, K> {
+    pub fn detach(self) -> NtfsIndexNodeEntries<'n, K> {
         self.index_entries
     }
 }
 
-impl<'n, 'a, K, T> Iterator for NtfsIndexEntriesAttached<'n, 'a, K, T>
+impl<'n, 'a, K, T> Iterator for NtfsIndexNodeEntriesAttached<'n, 'a, K, T>
 where
     K: NewNtfsStructuredValue<'n>,
     T: Read + Seek,
@@ -215,7 +215,7 @@ where
     }
 }
 
-impl<'n, 'a, K, T> FusedIterator for NtfsIndexEntriesAttached<'n, 'a, K, T>
+impl<'n, 'a, K, T> FusedIterator for NtfsIndexNodeEntriesAttached<'n, 'a, K, T>
 where
     K: NewNtfsStructuredValue<'n>,
     T: Read + Seek,

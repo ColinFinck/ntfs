@@ -3,7 +3,7 @@
 
 use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
-use crate::index_entry::NtfsIndexEntries;
+use crate::index_entry::NtfsIndexNodeEntries;
 use crate::ntfs::Ntfs;
 use crate::record::RecordHeader;
 use crate::structured_values::NewNtfsStructuredValue;
@@ -69,7 +69,7 @@ impl<'n> NtfsIndexRecord<'n> {
         Ok(index_record)
     }
 
-    pub fn entries<K, T>(&self, fs: &mut T) -> Result<NtfsIndexEntries<'n, K>>
+    pub fn entries<K, T>(&self, fs: &mut T) -> Result<NtfsIndexNodeEntries<'n, K>>
     where
         K: NewNtfsStructuredValue<'n>,
         T: Read + Seek,
@@ -81,7 +81,7 @@ impl<'n> NtfsIndexRecord<'n> {
         let mut value = self.value.clone();
         value.seek(fs, SeekFrom::Start(start))?;
 
-        Ok(NtfsIndexEntries::new(self.ntfs, value, end))
+        Ok(NtfsIndexNodeEntries::new(self.ntfs, value, end))
     }
 
     /// Returns whether this index node has sub-nodes.
