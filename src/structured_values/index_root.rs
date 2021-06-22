@@ -67,6 +67,12 @@ impl<'n> NtfsIndexRoot<'n> {
     pub fn is_large_index(&self) -> bool {
         (self.index_node_header.flags & LARGE_INDEX_FLAG) != 0
     }
+
+    pub fn position(&self) -> u64 {
+        // A structured value is always created from a valid seek position,
+        // and therefore we can safely unwrap here.
+        self.value.data_position().unwrap()
+    }
 }
 
 impl<'n> NewNtfsStructuredValue<'n> for NtfsIndexRoot<'n> {

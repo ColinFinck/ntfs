@@ -75,6 +75,8 @@ pub enum NtfsError {
     Io(binread::io::Error),
     /// The Logical Cluster Number (LCN) {lcn} is too big to be processed
     LcnTooBig { lcn: Lcn },
+    /// The index root at byte position {position:#010x} is a large index, but no matching index allocation attribute was provided.
+    MissingIndexAllocation { position: u64 },
     /// The cluster size is {actual} bytes, but the maximum supported one is {expected}
     UnsupportedClusterSize { expected: u32, actual: u32 },
     /// The type of the NTFS attribute at byte position {position:#010x} is {actual:#010x}, which is not supported
