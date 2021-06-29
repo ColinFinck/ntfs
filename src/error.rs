@@ -18,8 +18,7 @@ pub enum NtfsError {
     },
     /// The given buffer should have at least {expected} bytes, but it only has {actual} bytes
     BufferTooSmall { expected: usize, actual: usize },
-    /// The header of an NTFS data run should indicate a maximum byte count of {expected},
-    /// but the header at byte position {position:#010x} indicates a byte count of {actual}
+    /// The header of an NTFS data run should indicate a maximum byte count of {expected}, but the header at byte position {position:#010x} indicates a byte count of {actual}
     InvalidByteCountInDataRunHeader {
         position: u64,
         expected: u8,
@@ -41,7 +40,7 @@ pub enum NtfsError {
         expected: &'static [u8],
         actual: [u8; 4],
     },
-    /// The NTFS index record at byte position {position:#010x} should have a maximum of {expected} bytes, but it indicates {actual} bytes.
+    /// The NTFS index record at byte position {position:#010x} should have a maximum of {expected} bytes, but it indicates {actual} bytes
     InvalidNtfsIndexSize {
         position: u64,
         expected: u32,
@@ -64,8 +63,7 @@ pub enum NtfsError {
         expected: &'static [u8],
         actual: [u8; 2],
     },
-    /// The VCN {vcn} read from the NTFS data run header at byte position {position:#010x}
-    /// cannot be added to the LCN {previous_lcn} calculated from previous data runs
+    /// The VCN {vcn} read from the NTFS data run header at byte position {position:#010x} cannot be added to the LCN {previous_lcn} calculated from previous data runs
     InvalidVcnInDataRunHeader {
         position: u64,
         vcn: Vcn,
@@ -75,7 +73,7 @@ pub enum NtfsError {
     Io(binread::io::Error),
     /// The Logical Cluster Number (LCN) {lcn} is too big to be processed
     LcnTooBig { lcn: Lcn },
-    /// The index root at byte position {position:#010x} is a large index, but no matching index allocation attribute was provided.
+    /// The index root at byte position {position:#010x} is a large index, but no matching index allocation attribute was provided
     MissingIndexAllocation { position: u64 },
     /// The cluster size is {actual} bytes, but the maximum supported one is {expected}
     UnsupportedClusterSize { expected: u32, actual: u32 },
