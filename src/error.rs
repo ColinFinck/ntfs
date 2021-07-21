@@ -76,8 +76,14 @@ pub enum NtfsError {
         expected: &'static [u8],
         actual: [u8; 4],
     },
-    /// The NTFS index record at byte position {position:#010x} should have a maximum of {expected} bytes, but it indicates {actual} bytes
-    InvalidNtfsIndexSize {
+    /// The NTFS index record at byte position {position:#010x} indicates an allocated size of {expected} bytes, but the record only has a size of {actual} bytes
+    InvalidNtfsIndexAllocatedSize {
+        position: u64,
+        expected: u32,
+        actual: u32,
+    },
+    /// The NTFS index record at byte position {position:#010x} indicates a used size of {expected} bytes, but only {actual} bytes are allocated
+    InvalidNtfsIndexUsedSize {
         position: u64,
         expected: u32,
         actual: u32,
