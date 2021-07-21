@@ -2,20 +2,18 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::attribute::NtfsAttributeType;
-use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
-use crate::index_entry::NtfsIndexNodeEntries;
+use crate::index_entry::{IndexNodeEntryRanges, NtfsIndexNodeEntries};
 use crate::index_record::{IndexNodeHeader, INDEX_NODE_HEADER_SIZE};
-use crate::ntfs::Ntfs;
-use crate::structured_values::NewNtfsStructuredValue;
-use crate::traits::NtfsReadSeek;
-use binread::io::{Read, Seek, SeekFrom};
-use binread::{BinRead, BinReaderExt};
+use crate::structured_values::{NtfsStructuredValue, NtfsStructuredValueFromData};
+use byteorder::{ByteOrder, LittleEndian};
+use core::ops::Range;
+use memoffset::offset_of;
 
 /// Size of all [`IndexRootHeader`] fields plus some reserved bytes.
-const INDEX_ROOT_HEADER_SIZE: u64 = 16;
+const INDEX_ROOT_HEADER_SIZE: usize = 16;
 
-#[derive(BinRead, Clone, Debug)]
+#[repr(C, packed)]
 struct IndexRootHeader {
     ty: u32,
     collation_rule: u32,
@@ -24,86 +22,110 @@ struct IndexRootHeader {
 }
 
 #[derive(Clone, Debug)]
-pub struct NtfsIndexRoot<'n> {
-    ntfs: &'n Ntfs,
-    value: NtfsAttributeValue<'n>,
-    index_root_header: IndexRootHeader,
-    index_node_header: IndexNodeHeader,
+pub struct NtfsIndexRoot<'f> {
+    data: &'f [u8],
+    position: u64,
 }
 
 const LARGE_INDEX_FLAG: u8 = 0x01;
 
-impl<'n> NtfsIndexRoot<'n> {
-    pub fn index_allocated_size(&self) -> u32 {
-        self.index_node_header.allocated_size
+impl<'f> NtfsIndexRoot<'f> {
+    pub fn entries(&self) -> Result<NtfsIndexNodeEntries<'f>> {
+        let (entries_range, position) = self.entries_range_and_position();
+        let data = &self.data[entries_range];
+
+        Ok(NtfsIndexNodeEntries::new(data, position))
     }
 
-    pub fn entries<K, T>(&self, fs: &mut T) -> Result<NtfsIndexNodeEntries<'n, K>>
-    where
-        K: NewNtfsStructuredValue<'n>,
-        T: Read + Seek,
-    {
-        let offset = self.value.stream_position() + INDEX_ROOT_HEADER_SIZE as u64;
-        let start = offset + self.index_node_header.entries_offset as u64;
-        let end = offset + self.index_used_size() as u64;
+    fn entries_range_and_position(&self) -> (Range<usize>, u64) {
+        let start = INDEX_ROOT_HEADER_SIZE as usize + self.index_entries_offset() as usize;
+        let end = INDEX_ROOT_HEADER_SIZE as usize + self.index_used_size() as usize;
+        let position = self.position + start as u64;
 
-        let mut value = self.value.clone();
-        value.seek(fs, SeekFrom::Start(start))?;
+        (start..end, position)
+    }
 
-        Ok(NtfsIndexNodeEntries::new(self.ntfs, value, end))
+    pub(crate) fn entry_ranges(&self) -> IndexNodeEntryRanges {
+        let (entries_range, position) = self.entries_range_and_position();
+        let entries_data = self.data[entries_range].to_vec();
+        let range = 0..entries_data.len();
+
+        IndexNodeEntryRanges::new(entries_data, range, position)
+    }
+
+    pub fn index_allocated_size(&self) -> u32 {
+        let start = INDEX_ROOT_HEADER_SIZE + offset_of!(IndexNodeHeader, allocated_size);
+        LittleEndian::read_u32(&self.data[start..])
+    }
+
+    fn index_entries_offset(&self) -> u32 {
+        let start = INDEX_ROOT_HEADER_SIZE + offset_of!(IndexNodeHeader, entries_offset);
+        LittleEndian::read_u32(&self.data[start..])
     }
 
     pub fn index_record_size(&self) -> u32 {
-        self.index_root_header.index_record_size
+        let start = offset_of!(IndexRootHeader, index_record_size);
+        LittleEndian::read_u32(&self.data[start..])
     }
 
     pub fn index_used_size(&self) -> u32 {
-        self.index_node_header.index_size
+        let start = INDEX_ROOT_HEADER_SIZE + offset_of!(IndexNodeHeader, index_size);
+        LittleEndian::read_u32(&self.data[start..])
     }
 
     /// Returns whether the index belonging to this Index Root is large enough
     /// to need an extra Index Allocation attribute.
     /// Otherwise, the entire index information is stored in this Index Root.
     pub fn is_large_index(&self) -> bool {
-        (self.index_node_header.flags & LARGE_INDEX_FLAG) != 0
+        let start = INDEX_ROOT_HEADER_SIZE + offset_of!(IndexNodeHeader, flags);
+        (self.data[start] & LARGE_INDEX_FLAG) != 0
     }
 
     pub fn position(&self) -> u64 {
-        // A structured value is always created from a valid seek position,
-        // and therefore we can safely unwrap here.
-        self.value.data_position().unwrap()
+        self.position
     }
-}
 
-impl<'n> NewNtfsStructuredValue<'n> for NtfsIndexRoot<'n> {
-    fn new<T>(
-        ntfs: &'n Ntfs,
-        fs: &mut T,
-        value: NtfsAttributeValue<'n>,
-        _length: u64,
-    ) -> Result<Self>
-    where
-        T: Read + Seek,
-    {
-        if value.len() < INDEX_ROOT_HEADER_SIZE + INDEX_NODE_HEADER_SIZE {
-            return Err(NtfsError::InvalidStructuredValueSize {
-                position: value.data_position().unwrap(),
-                ty: NtfsAttributeType::IndexRoot,
-                expected: INDEX_ROOT_HEADER_SIZE,
-                actual: value.len(),
+    fn validate_sizes(&self) -> Result<()> {
+        let (entries_range, _position) = self.entries_range_and_position();
+
+        if entries_range.start >= self.data.len() {
+            return Err(NtfsError::InvalidNtfsIndexRootEntriesOffset {
+                position: self.position,
+                expected: entries_range.start,
+                actual: self.data.len(),
             });
         }
 
-        let mut value_attached = value.clone().attach(fs);
-        let index_root_header = value_attached.read_le::<IndexRootHeader>()?;
-        value_attached.seek(SeekFrom::Start(INDEX_ROOT_HEADER_SIZE))?;
-        let index_node_header = value_attached.read_le::<IndexNodeHeader>()?;
+        if entries_range.end > self.data.len() {
+            return Err(NtfsError::InvalidNtfsIndexRootUsedSize {
+                position: self.position,
+                expected: entries_range.end,
+                actual: self.data.len(),
+            });
+        }
 
-        Ok(Self {
-            ntfs,
-            value,
-            index_root_header,
-            index_node_header,
-        })
+        Ok(())
+    }
+}
+
+impl<'f> NtfsStructuredValue for NtfsIndexRoot<'f> {
+    const TY: NtfsAttributeType = NtfsAttributeType::IndexRoot;
+}
+
+impl<'f> NtfsStructuredValueFromData<'f> for NtfsIndexRoot<'f> {
+    fn from_data(data: &'f [u8], position: u64) -> Result<Self> {
+        if data.len() < INDEX_ROOT_HEADER_SIZE + INDEX_NODE_HEADER_SIZE {
+            return Err(NtfsError::InvalidStructuredValueSize {
+                position,
+                ty: NtfsAttributeType::IndexRoot,
+                expected: INDEX_ROOT_HEADER_SIZE,
+                actual: data.len(),
+            });
+        }
+
+        let index_root = Self { data, position };
+        index_root.validate_sizes()?;
+
+        Ok(index_root)
     }
 }

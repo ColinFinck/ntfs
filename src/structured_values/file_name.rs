@@ -2,22 +2,23 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::attribute::NtfsAttributeType;
-use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
-use crate::ntfs::Ntfs;
 use crate::string::NtfsString;
-use crate::structured_values::{NewNtfsStructuredValue, NtfsFileAttributeFlags};
+use crate::structured_values::{
+    NtfsFileAttributeFlags, NtfsStructuredValue, NtfsStructuredValueFromData,
+};
 use crate::time::NtfsTime;
-use binread::io::{Read, Seek, SeekFrom};
+use alloc::vec::Vec;
+use binread::io::Cursor;
 use binread::{BinRead, BinReaderExt};
 use core::mem;
 use enumn::N;
 
 /// Size of all [`FileNameHeader`] fields.
-const FILE_NAME_HEADER_SIZE: i64 = 66;
+const FILE_NAME_HEADER_SIZE: usize = 66;
 
 /// The smallest FileName attribute has a name containing just a single character.
-const FILE_NAME_MIN_SIZE: u64 = FILE_NAME_HEADER_SIZE as u64 + mem::size_of::<u16>() as u64;
+const FILE_NAME_MIN_SIZE: usize = FILE_NAME_HEADER_SIZE + mem::size_of::<u16>();
 
 #[allow(unused)]
 #[derive(BinRead, Clone, Debug)]
@@ -45,12 +46,12 @@ pub enum NtfsFileNamespace {
 }
 
 #[derive(Clone, Debug)]
-pub struct NtfsFileName<'n> {
+pub struct NtfsFileName {
     header: FileNameHeader,
-    value: NtfsAttributeValue<'n>,
+    name: Vec<u8>,
 }
 
-impl<'n> NtfsFileName<'n> {
+impl NtfsFileName {
     pub fn access_time(&self) -> NtfsTime {
         self.header.access_time
     }
@@ -79,6 +80,11 @@ impl<'n> NtfsFileName<'n> {
         self.header.modification_time
     }
 
+    /// Gets the file name and returns it wrapped in an [`NtfsString`].
+    pub fn name<'s>(&'s self) -> NtfsString<'s> {
+        NtfsString(&self.name)
+    }
+
     /// Returns the file name length, in bytes.
     ///
     /// A file name has a maximum length of 255 UTF-16 code points (510 bytes).
@@ -88,33 +94,37 @@ impl<'n> NtfsFileName<'n> {
 
     /// Returns the namespace this name belongs to, or [`NtfsError::UnsupportedNtfsFileNamespace`]
     /// if it's an unknown namespace.
-    pub fn namespace(&self) -> Result<NtfsFileNamespace> {
-        NtfsFileNamespace::n(self.header.namespace).ok_or(NtfsError::UnsupportedNtfsFileNamespace {
-            position: self.value.data_position().unwrap(),
-            actual: self.header.namespace,
-        })
+    pub fn namespace(&self) -> NtfsFileNamespace {
+        NtfsFileNamespace::n(self.header.namespace).unwrap()
     }
 
-    /// Reads the file name into the given buffer, and returns an
-    /// [`NtfsString`] wrapping that buffer.
-    pub fn read_name<'a, T>(&self, fs: &mut T, buf: &'a mut [u8]) -> Result<NtfsString<'a>>
-    where
-        T: Read + Seek,
-    {
-        let mut value_attached = self.value.clone().attach(fs);
-        value_attached.seek(SeekFrom::Current(FILE_NAME_HEADER_SIZE))?;
-        NtfsString::from_reader(value_attached, self.name_length(), buf)
+    fn read_name(&mut self, data: &[u8]) {
+        debug_assert!(self.name.is_empty());
+        let start = FILE_NAME_HEADER_SIZE;
+        let end = start + self.name_length();
+        self.name.extend_from_slice(&data[start..end]);
     }
 
-    fn validate_name_length(&self, length: u64) -> Result<()> {
-        let total_size = FILE_NAME_HEADER_SIZE as u64 + self.name_length() as u64;
+    fn validate_name_length(&self, data_size: usize, position: u64) -> Result<()> {
+        let total_size = FILE_NAME_HEADER_SIZE + self.name_length();
 
-        if total_size > length {
+        if total_size > data_size {
             return Err(NtfsError::InvalidStructuredValueSize {
-                position: self.value.data_position().unwrap(),
+                position: position,
                 ty: NtfsAttributeType::FileName,
-                expected: length,
+                expected: data_size,
                 actual: total_size,
+            });
+        }
+
+        Ok(())
+    }
+
+    fn validate_namespace(&self, position: u64) -> Result<()> {
+        if NtfsFileNamespace::n(self.header.namespace).is_none() {
+            return Err(NtfsError::UnsupportedNtfsFileNamespace {
+                position,
+                actual: self.header.namespace,
             });
         }
 
@@ -122,29 +132,31 @@ impl<'n> NtfsFileName<'n> {
     }
 }
 
-impl<'n> NewNtfsStructuredValue<'n> for NtfsFileName<'n> {
-    fn new<T>(
-        _ntfs: &'n Ntfs,
-        fs: &mut T,
-        value: NtfsAttributeValue<'n>,
-        length: u64,
-    ) -> Result<Self>
-    where
-        T: Read + Seek,
-    {
-        if length < FILE_NAME_MIN_SIZE {
+impl NtfsStructuredValue for NtfsFileName {
+    const TY: NtfsAttributeType = NtfsAttributeType::FileName;
+}
+
+impl<'d> NtfsStructuredValueFromData<'d> for NtfsFileName {
+    fn from_data(data: &'d [u8], position: u64) -> Result<Self> {
+        if data.len() < FILE_NAME_MIN_SIZE {
             return Err(NtfsError::InvalidStructuredValueSize {
-                position: value.data_position().unwrap(),
+                position,
                 ty: NtfsAttributeType::FileName,
                 expected: FILE_NAME_MIN_SIZE,
-                actual: length,
+                actual: data.len(),
             });
         }
 
-        let mut value_attached = value.clone().attach(fs);
-        let header = value_attached.read_le::<FileNameHeader>()?;
-        let file_name = Self { header, value };
-        file_name.validate_name_length(length)?;
+        let mut cursor = Cursor::new(data);
+        let header = cursor.read_le::<FileNameHeader>()?;
+
+        let mut file_name = Self {
+            header,
+            name: Vec::new(),
+        };
+        file_name.validate_name_length(data.len(), position)?;
+        file_name.validate_namespace(position)?;
+        file_name.read_name(data);
 
         Ok(file_name)
     }
@@ -155,7 +167,6 @@ mod tests {
     use super::*;
     use crate::ntfs::Ntfs;
     use crate::ntfs_file::KnownNtfsFile;
-    use crate::structured_values::NtfsStructuredValue;
     use crate::time::tests::NT_TIMESTAMP_2021_01_01;
 
     #[test]
@@ -165,10 +176,10 @@ mod tests {
         let mft = ntfs
             .ntfs_file(&mut testfs1, KnownNtfsFile::MFT as u64)
             .unwrap();
-        let mut mft_attributes = mft.attributes().attach(&mut testfs1);
+        let mut mft_attributes = mft.attributes();
 
         // Check the FileName attribute of the MFT.
-        let attribute = mft_attributes.nth(1).unwrap().unwrap();
+        let attribute = mft_attributes.nth(1).unwrap();
         assert_eq!(attribute.ty().unwrap(), NtfsAttributeType::FileName);
         assert_eq!(attribute.attribute_length(), 104);
         assert!(attribute.is_resident());
@@ -176,11 +187,9 @@ mod tests {
         assert_eq!(attribute.value_length(), 74);
 
         // Check the actual "file name" of the MFT.
-        let value = attribute.structured_value(&mut testfs1).unwrap();
-        let file_name = match value {
-            NtfsStructuredValue::FileName(file_name) => file_name,
-            v => panic!("Unexpected NtfsStructuredValue: {:?}", v),
-        };
+        let file_name = attribute
+            .resident_structured_value::<NtfsFileName>()
+            .unwrap();
 
         let creation_time = file_name.creation_time();
         assert!(*creation_time > NT_TIMESTAMP_2021_01_01);
@@ -194,14 +203,11 @@ mod tests {
 
         assert_eq!(file_name.name_length(), 8);
 
-        let mut buf = [0u8; 8];
-        let file_name_string = file_name.read_name(&mut testfs1, &mut buf).unwrap();
-
         // Test various ways to compare the same string.
-        assert_eq!(file_name_string, "$MFT");
-        assert_eq!(file_name_string.to_string_lossy(), String::from("$MFT"));
+        assert_eq!(file_name.name(), "$MFT");
+        assert_eq!(file_name.name().to_string_lossy(), String::from("$MFT"));
         assert_eq!(
-            file_name_string,
+            file_name.name(),
             NtfsString(&[b'$', 0, b'M', 0, b'F', 0, b'T', 0])
         );
     }

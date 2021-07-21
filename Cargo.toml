@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 binread = { version = "2.1.1", features = ["const_generics"], default-features = false }
+byteorder = { version = "1.4.3", default-features = false }
 bitflags = "1.2.1"
 chrono = { version = "0.4.19", optional = true }
 displaydoc = { version = "0.2.1", default-features = false }
@@ -16,4 +17,4 @@ memoffset = "0.6.4"
 
 [features]
 default = ["std"]
-std = ["binread/std"]
+std = ["binread/std", "byteorder/std"]

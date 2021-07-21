@@ -43,6 +43,12 @@ impl Deref for NtfsTime {
     }
 }
 
+impl From<u64> for NtfsTime {
+    fn from(value: u64) -> Self {
+        Self(value)
+    }
+}
+
 #[cfg(feature = "chrono")]
 impl TryFrom<DateTime<Utc>> for NtfsTime {
     type Error = NtfsError;

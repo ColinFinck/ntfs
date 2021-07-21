@@ -2,22 +2,22 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::attribute::NtfsAttributeType;
-use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
-use crate::ntfs::Ntfs;
-use crate::structured_values::{NewNtfsStructuredValue, NtfsFileAttributeFlags};
+use crate::structured_values::{
+    NtfsFileAttributeFlags, NtfsStructuredValue, NtfsStructuredValueFromData,
+};
 use crate::time::NtfsTime;
-use binread::io::{Read, Seek};
+use binread::io::Cursor;
 use binread::{BinRead, BinReaderExt};
 
 /// Size of all [`StandardInformationData`] fields plus some reserved bytes.
-const STANDARD_INFORMATION_SIZE_NTFS1: u64 = 48;
+const STANDARD_INFORMATION_SIZE_NTFS1: usize = 48;
 
 /// Size of all [`StandardInformationData`] plus [`StandardInformationDataNtfs3`] fields.
-const STANDARD_INFORMATION_SIZE_NTFS3: u64 = 72;
+const STANDARD_INFORMATION_SIZE_NTFS3: usize = 72;
 
 #[derive(BinRead, Clone, Debug)]
-struct StandardInformationData {
+struct StandardInformationDataNtfs1 {
     creation_time: NtfsTime,
     modification_time: NtfsTime,
     mft_record_modification_time: NtfsTime,
@@ -38,13 +38,13 @@ struct StandardInformationDataNtfs3 {
 
 #[derive(Clone, Debug)]
 pub struct NtfsStandardInformation {
-    data: StandardInformationData,
+    ntfs1_data: StandardInformationDataNtfs1,
     ntfs3_data: Option<StandardInformationDataNtfs3>,
 }
 
 impl NtfsStandardInformation {
     pub fn access_time(&self) -> NtfsTime {
-        self.data.access_time
+        self.ntfs1_data.access_time
     }
 
     pub fn class_id(&self) -> Option<u32> {
@@ -52,11 +52,11 @@ impl NtfsStandardInformation {
     }
 
     pub fn creation_time(&self) -> NtfsTime {
-        self.data.creation_time
+        self.ntfs1_data.creation_time
     }
 
     pub fn file_attributes(&self) -> NtfsFileAttributeFlags {
-        NtfsFileAttributeFlags::from_bits_truncate(self.data.file_attributes)
+        NtfsFileAttributeFlags::from_bits_truncate(self.ntfs1_data.file_attributes)
     }
 
     pub fn maximum_versions(&self) -> Option<u32> {
@@ -64,11 +64,11 @@ impl NtfsStandardInformation {
     }
 
     pub fn mft_record_modification_time(&self) -> NtfsTime {
-        self.data.mft_record_modification_time
+        self.ntfs1_data.mft_record_modification_time
     }
 
     pub fn modification_time(&self) -> NtfsTime {
-        self.data.modification_time
+        self.ntfs1_data.modification_time
     }
 
     pub fn owner_id(&self) -> Option<u32> {
@@ -92,34 +92,33 @@ impl NtfsStandardInformation {
     }
 }
 
-impl<'n> NewNtfsStructuredValue<'n> for NtfsStandardInformation {
-    fn new<T>(
-        _ntfs: &'n Ntfs,
-        fs: &mut T,
-        value: NtfsAttributeValue<'n>,
-        length: u64,
-    ) -> Result<Self>
-    where
-        T: Read + Seek,
-    {
-        if length < STANDARD_INFORMATION_SIZE_NTFS1 {
+impl NtfsStructuredValue for NtfsStandardInformation {
+    const TY: NtfsAttributeType = NtfsAttributeType::StandardInformation;
+}
+
+impl<'d> NtfsStructuredValueFromData<'d> for NtfsStandardInformation {
+    fn from_data(data: &'d [u8], position: u64) -> Result<Self> {
+        if data.len() < STANDARD_INFORMATION_SIZE_NTFS1 {
             return Err(NtfsError::InvalidStructuredValueSize {
-                position: value.data_position().unwrap(),
+                position,
                 ty: NtfsAttributeType::StandardInformation,
                 expected: STANDARD_INFORMATION_SIZE_NTFS1,
-                actual: length,
+                actual: data.len(),
             });
         }
 
-        let mut value_attached = value.attach(fs);
-        let data = value_attached.read_le::<StandardInformationData>()?;
+        let mut cursor = Cursor::new(data);
+        let ntfs1_data = cursor.read_le::<StandardInformationDataNtfs1>()?;
 
         let mut ntfs3_data = None;
-        if length >= STANDARD_INFORMATION_SIZE_NTFS3 {
-            ntfs3_data = Some(value_attached.read_le::<StandardInformationDataNtfs3>()?);
+        if data.len() >= STANDARD_INFORMATION_SIZE_NTFS3 {
+            ntfs3_data = Some(cursor.read_le::<StandardInformationDataNtfs3>()?);
         }
 
-        Ok(Self { data, ntfs3_data })
+        Ok(Self {
+            ntfs1_data,
+            ntfs3_data,
+        })
     }
 }
 
@@ -128,7 +127,6 @@ mod tests {
     use super::*;
     use crate::ntfs::Ntfs;
     use crate::ntfs_file::KnownNtfsFile;
-    use crate::structured_values::NtfsStructuredValue;
 
     #[test]
     fn test_standard_information() {
@@ -137,10 +135,10 @@ mod tests {
         let mft = ntfs
             .ntfs_file(&mut testfs1, KnownNtfsFile::MFT as u64)
             .unwrap();
-        let mut mft_attributes = mft.attributes().attach(&mut testfs1);
+        let mut mft_attributes = mft.attributes();
 
         // Check the StandardInformation attribute of the MFT.
-        let attribute = mft_attributes.nth(0).unwrap().unwrap();
+        let attribute = mft_attributes.nth(0).unwrap();
         assert_eq!(
             attribute.ty().unwrap(),
             NtfsAttributeType::StandardInformation,
@@ -151,11 +149,9 @@ mod tests {
         assert_eq!(attribute.value_length(), 72);
 
         // Try to read the actual information.
-        let value = attribute.structured_value(&mut testfs1).unwrap();
-        let _standard_info = match value {
-            NtfsStructuredValue::StandardInformation(standard_info) => standard_info,
-            v => panic!("Unexpected NtfsStructuredValue: {:?}", v),
-        };
+        let _standard_info = attribute
+            .resident_structured_value::<NtfsStandardInformation>()
+            .unwrap();
 
         // There are no reliable values to check here, so that's it.
     }

@@ -4,10 +4,11 @@
 use crate::attribute::NtfsAttributes;
 use crate::error::{NtfsError, Result};
 use crate::ntfs::Ntfs;
-use crate::record::RecordHeader;
+use crate::record::{Record, RecordHeader};
 use binread::io::{Read, Seek, SeekFrom};
-use binread::{BinRead, BinReaderExt};
 use bitflags::bitflags;
+use byteorder::{ByteOrder, LittleEndian};
+use memoffset::offset_of;
 
 #[repr(u64)]
 pub enum KnownNtfsFile {
@@ -25,8 +26,7 @@ pub enum KnownNtfsFile {
     Extend = 11,
 }
 
-#[allow(unused)]
-#[derive(BinRead, Debug)]
+#[repr(C, packed)]
 struct FileRecordHeader {
     record_header: RecordHeader,
     sequence_number: u16,
@@ -48,10 +48,9 @@ bitflags! {
     }
 }
 
+#[derive(Debug)]
 pub struct NtfsFile<'n> {
-    ntfs: &'n Ntfs,
-    header: FileRecordHeader,
-    position: u64,
+    record: Record<'n>,
 }
 
 impl<'n> NtfsFile<'n> {
@@ -59,64 +58,99 @@ impl<'n> NtfsFile<'n> {
     where
         T: Read + Seek,
     {
+        let mut data = vec![0; ntfs.file_record_size() as usize];
         fs.seek(SeekFrom::Start(position))?;
-        let header = fs.read_le::<FileRecordHeader>()?;
+        fs.read_exact(&mut data)?;
 
-        let file = Self {
-            ntfs,
-            header,
-            position,
-        };
+        let mut record = Record::new(ntfs, data, position);
+        record.fixup()?;
+
+        let file = Self { record };
         file.validate_signature()?;
+        file.validate_sizes()?;
 
         Ok(file)
     }
 
     pub fn allocated_size(&self) -> u32 {
-        self.header.allocated_size
+        let start = offset_of!(FileRecordHeader, allocated_size);
+        LittleEndian::read_u32(&self.record.data()[start..])
     }
 
-    pub fn attributes(&self) -> NtfsAttributes<'n> {
-        NtfsAttributes::new(self.ntfs, &self)
+    pub fn attributes<'f>(&'f self) -> NtfsAttributes<'n, 'f> {
+        NtfsAttributes::new(self)
     }
 
     pub(crate) fn first_attribute_offset(&self) -> u16 {
-        self.header.first_attribute_offset
+        let start = offset_of!(FileRecordHeader, first_attribute_offset);
+        LittleEndian::read_u16(&self.record.data()[start..])
     }
 
     /// Returns flags set for this NTFS file as specified by [`NtfsFileFlags`].
     pub fn flags(&self) -> NtfsFileFlags {
-        NtfsFileFlags::from_bits_truncate(self.header.flags)
+        let start = offset_of!(FileRecordHeader, flags);
+        NtfsFileFlags::from_bits_truncate(LittleEndian::read_u16(&self.record.data()[start..]))
     }
 
     pub fn hard_link_count(&self) -> u16 {
-        self.header.hard_link_count
+        let start = offset_of!(FileRecordHeader, hard_link_count);
+        LittleEndian::read_u16(&self.record.data()[start..])
+    }
+
+    pub(crate) fn ntfs(&self) -> &'n Ntfs {
+        self.record.ntfs()
     }
 
     pub fn position(&self) -> u64 {
-        self.position
+        self.record.position()
+    }
+
+    pub(crate) fn record_data(&self) -> &[u8] {
+        self.record.data()
     }
 
     pub fn sequence_number(&self) -> u16 {
-        self.header.sequence_number
+        let start = offset_of!(FileRecordHeader, sequence_number);
+        LittleEndian::read_u16(&self.record.data()[start..])
     }
 
     pub fn used_size(&self) -> u32 {
-        self.header.used_size
+        let start = offset_of!(FileRecordHeader, used_size);
+        LittleEndian::read_u32(&self.record.data()[start..])
     }
 
     fn validate_signature(&self) -> Result<()> {
-        let signature = &self.header.record_header.signature;
+        let signature = &self.record.signature();
         let expected = b"FILE";
 
         if signature == expected {
             Ok(())
         } else {
             Err(NtfsError::InvalidNtfsFileSignature {
-                position: self.position,
+                position: self.record.position(),
                 expected,
                 actual: *signature,
             })
         }
+    }
+
+    fn validate_sizes(&self) -> Result<()> {
+        if self.allocated_size() > self.record.len() {
+            return Err(NtfsError::InvalidNtfsFileAllocatedSize {
+                position: self.record.position(),
+                expected: self.allocated_size(),
+                actual: self.record.len(),
+            });
+        }
+
+        if self.used_size() > self.allocated_size() {
+            return Err(NtfsError::InvalidNtfsFileUsedSize {
+                position: self.record.position(),
+                expected: self.used_size(),
+                actual: self.allocated_size(),
+            });
+        }
+
+        Ok(())
     }
 }

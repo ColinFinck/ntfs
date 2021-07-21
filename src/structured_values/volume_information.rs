@@ -2,16 +2,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::attribute::NtfsAttributeType;
-use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
-use crate::ntfs::Ntfs;
-use crate::structured_values::NewNtfsStructuredValue;
-use binread::io::{Read, Seek};
+use crate::structured_values::{NtfsStructuredValue, NtfsStructuredValueFromData};
+use binread::io::Cursor;
 use binread::{BinRead, BinReaderExt};
 use bitflags::bitflags;
 
 /// Size of all [`VolumeInformationData`] fields.
-const VOLUME_INFORMATION_SIZE: u64 = 12;
+const VOLUME_INFORMATION_SIZE: usize = 12;
 
 #[derive(BinRead, Clone, Debug)]
 struct VolumeInformationData {
@@ -37,45 +35,41 @@ bitflags! {
 
 #[derive(Clone, Debug)]
 pub struct NtfsVolumeInformation {
-    data: VolumeInformationData,
+    info: VolumeInformationData,
 }
 
 impl NtfsVolumeInformation {
     pub fn flags(&self) -> NtfsVolumeFlags {
-        NtfsVolumeFlags::from_bits_truncate(self.data.flags)
+        NtfsVolumeFlags::from_bits_truncate(self.info.flags)
     }
 
     pub fn major_version(&self) -> u8 {
-        self.data.major_version
+        self.info.major_version
     }
 
     pub fn minor_version(&self) -> u8 {
-        self.data.minor_version
+        self.info.minor_version
     }
 }
 
-impl<'n> NewNtfsStructuredValue<'n> for NtfsVolumeInformation {
-    fn new<T>(
-        _ntfs: &'n Ntfs,
-        fs: &mut T,
-        value: NtfsAttributeValue<'n>,
-        length: u64,
-    ) -> Result<Self>
-    where
-        T: Read + Seek,
-    {
-        if length < VOLUME_INFORMATION_SIZE {
+impl NtfsStructuredValue for NtfsVolumeInformation {
+    const TY: NtfsAttributeType = NtfsAttributeType::VolumeInformation;
+}
+
+impl<'d> NtfsStructuredValueFromData<'d> for NtfsVolumeInformation {
+    fn from_data(data: &'d [u8], position: u64) -> Result<Self> {
+        if data.len() < VOLUME_INFORMATION_SIZE {
             return Err(NtfsError::InvalidStructuredValueSize {
-                position: value.data_position().unwrap(),
+                position,
                 ty: NtfsAttributeType::StandardInformation,
                 expected: VOLUME_INFORMATION_SIZE,
-                actual: length,
+                actual: data.len(),
             });
         }
 
-        let mut value_attached = value.attach(fs);
-        let data = value_attached.read_le::<VolumeInformationData>()?;
+        let mut cursor = Cursor::new(data);
+        let info = cursor.read_le::<VolumeInformationData>()?;
 
-        Ok(Self { data })
+        Ok(Self { info })
     }
 }

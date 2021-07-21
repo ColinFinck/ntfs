@@ -2,73 +2,60 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::attribute::NtfsAttributeType;
-use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
-use crate::ntfs::Ntfs;
 use crate::string::NtfsString;
-use crate::structured_values::NewNtfsStructuredValue;
-use binread::io::{Read, Seek};
+use crate::structured_values::{NtfsStructuredValue, NtfsStructuredValueFromData};
+use alloc::vec::Vec;
 use core::mem;
 
 /// The smallest VolumeName attribute has a name containing just a single character.
-const VOLUME_NAME_MIN_SIZE: u64 = mem::size_of::<u16>() as u64;
+const VOLUME_NAME_MIN_SIZE: usize = mem::size_of::<u16>();
 
 /// The largest VolumeName attribute has a name containing 128 UTF-16 code points (256 bytes).
-const VOLUME_NAME_MAX_SIZE: u64 = 128 * mem::size_of::<u16>() as u64;
+const VOLUME_NAME_MAX_SIZE: usize = 128 * mem::size_of::<u16>();
 
 #[derive(Clone, Debug)]
-pub struct NtfsVolumeName<'n> {
-    value: NtfsAttributeValue<'n>,
-    name_length: u16,
+pub struct NtfsVolumeName {
+    name: Vec<u8>,
 }
 
-impl<'n> NtfsVolumeName<'n> {
+impl NtfsVolumeName {
+    /// Gets the file name and returns it wrapped in an [`NtfsString`].
+    pub fn name<'s>(&'s self) -> NtfsString<'s> {
+        NtfsString(&self.name)
+    }
+
     /// Returns the volume name length, in bytes.
     ///
     /// A volume name has a maximum length of 128 UTF-16 code points (256 bytes).
     pub fn name_length(&self) -> usize {
-        self.name_length as usize
-    }
-
-    /// Reads the volume name into the given buffer, and returns an
-    /// [`NtfsString`] wrapping that buffer.
-    pub fn read_name<'a, T>(&self, fs: &mut T, buf: &'a mut [u8]) -> Result<NtfsString<'a>>
-    where
-        T: Read + Seek,
-    {
-        let value_attached = self.value.clone().attach(fs);
-        NtfsString::from_reader(value_attached, self.name_length(), buf)
+        self.name.len()
     }
 }
 
-impl<'n> NewNtfsStructuredValue<'n> for NtfsVolumeName<'n> {
-    fn new<T>(
-        _ntfs: &'n Ntfs,
-        _fs: &mut T,
-        value: NtfsAttributeValue<'n>,
-        length: u64,
-    ) -> Result<Self>
-    where
-        T: Read + Seek,
-    {
-        if length < VOLUME_NAME_MIN_SIZE {
+impl NtfsStructuredValue for NtfsVolumeName {
+    const TY: NtfsAttributeType = NtfsAttributeType::VolumeName;
+}
+
+impl<'d> NtfsStructuredValueFromData<'d> for NtfsVolumeName {
+    fn from_data(data: &'d [u8], position: u64) -> Result<Self> {
+        if data.len() < VOLUME_NAME_MIN_SIZE {
             return Err(NtfsError::InvalidStructuredValueSize {
-                position: value.data_position().unwrap(),
+                position,
                 ty: NtfsAttributeType::VolumeName,
                 expected: VOLUME_NAME_MIN_SIZE,
-                actual: length,
+                actual: data.len(),
             });
-        } else if length > VOLUME_NAME_MAX_SIZE {
+        } else if data.len() > VOLUME_NAME_MAX_SIZE {
             return Err(NtfsError::InvalidStructuredValueSize {
-                position: value.data_position().unwrap(),
+                position,
                 ty: NtfsAttributeType::VolumeName,
                 expected: VOLUME_NAME_MAX_SIZE,
-                actual: length,
+                actual: data.len(),
             });
         }
 
-        let name_length = length as u16;
-
-        Ok(Self { value, name_length })
+        let name = data.to_vec();
+        Ok(Self { name })
     }
 }

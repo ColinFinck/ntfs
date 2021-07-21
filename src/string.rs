@@ -1,9 +1,7 @@
 // Copyright 2021 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use crate::error::{NtfsError, Result};
 use alloc::string::String;
-use binread::io::Read;
 use core::char;
 use core::cmp::Ordering;
 use core::convert::TryInto;
@@ -14,21 +12,6 @@ use core::fmt;
 pub struct NtfsString<'a>(pub &'a [u8]);
 
 impl<'a> NtfsString<'a> {
-    pub(crate) fn from_reader<T>(mut rdr: T, length: usize, buf: &'a mut [u8]) -> Result<Self>
-    where
-        T: Read,
-    {
-        if buf.len() < length {
-            return Err(NtfsError::BufferTooSmall {
-                expected: length,
-                actual: buf.len(),
-            });
-        }
-
-        rdr.read_exact(&mut buf[..length])?;
-        Ok(Self(&buf[..length]))
-    }
-
     fn cmp_iter<TI, OI>(mut this_iter: TI, mut other_iter: OI) -> Ordering
     where
         TI: Iterator<Item = u16>,

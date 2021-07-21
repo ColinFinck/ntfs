@@ -2,12 +2,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::attribute::NtfsAttributeType;
-use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
 use crate::guid::{NtfsGuid, GUID_SIZE};
-use crate::ntfs::Ntfs;
-use crate::structured_values::NewNtfsStructuredValue;
-use binread::io::{Read, Seek};
+use crate::structured_values::{NtfsStructuredValue, NtfsStructuredValueFromData};
+use binread::io::Cursor;
 use binread::BinReaderExt;
 
 #[derive(Clone, Debug)]
@@ -36,41 +34,37 @@ impl NtfsObjectId {
     }
 }
 
-impl<'n> NewNtfsStructuredValue<'n> for NtfsObjectId {
-    fn new<T>(
-        _ntfs: &'n Ntfs,
-        fs: &mut T,
-        value: NtfsAttributeValue<'n>,
-        length: u64,
-    ) -> Result<Self>
-    where
-        T: Read + Seek,
-    {
-        if length < GUID_SIZE {
+impl NtfsStructuredValue for NtfsObjectId {
+    const TY: NtfsAttributeType = NtfsAttributeType::ObjectId;
+}
+
+impl<'d> NtfsStructuredValueFromData<'d> for NtfsObjectId {
+    fn from_data(data: &'d [u8], position: u64) -> Result<Self> {
+        if data.len() < GUID_SIZE {
             return Err(NtfsError::InvalidStructuredValueSize {
-                position: value.data_position().unwrap(),
+                position,
                 ty: NtfsAttributeType::ObjectId,
                 expected: GUID_SIZE,
-                actual: length,
+                actual: data.len(),
             });
         }
 
-        let mut value_attached = value.attach(fs);
-        let object_id = value_attached.read_le::<NtfsGuid>()?;
+        let mut cursor = Cursor::new(data);
+        let object_id = cursor.read_le::<NtfsGuid>()?;
 
         let mut birth_volume_id = None;
-        if length >= 2 * GUID_SIZE {
-            birth_volume_id = Some(value_attached.read_le::<NtfsGuid>()?);
+        if data.len() >= 2 * GUID_SIZE {
+            birth_volume_id = Some(cursor.read_le::<NtfsGuid>()?);
         }
 
         let mut birth_object_id = None;
-        if length >= 3 * GUID_SIZE {
-            birth_object_id = Some(value_attached.read_le::<NtfsGuid>()?);
+        if data.len() >= 3 * GUID_SIZE {
+            birth_object_id = Some(cursor.read_le::<NtfsGuid>()?);
         }
 
         let mut domain_id = None;
-        if length >= 4 * GUID_SIZE {
-            domain_id = Some(value_attached.read_le::<NtfsGuid>()?);
+        if data.len() >= 4 * GUID_SIZE {
+            domain_id = Some(cursor.read_le::<NtfsGuid>()?);
         }
 
         Ok(Self {

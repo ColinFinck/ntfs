@@ -21,9 +21,9 @@ pub use standard_information::*;
 pub use volume_information::*;
 pub use volume_name::*;
 
-use crate::attribute_value::NtfsAttributeValue;
+use crate::attribute::NtfsAttributeType;
+use crate::attribute_value::NtfsNonResidentAttributeValue;
 use crate::error::Result;
-use crate::ntfs::Ntfs;
 use binread::io::{Read, Seek};
 use bitflags::bitflags;
 
@@ -45,23 +45,21 @@ bitflags! {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum NtfsStructuredValue<'n> {
-    StandardInformation(NtfsStandardInformation),
-    FileName(NtfsFileName<'n>),
-    ObjectId(NtfsObjectId),
-    VolumeInformation(NtfsVolumeInformation),
-    VolumeName(NtfsVolumeName<'n>),
-    IndexRoot(NtfsIndexRoot<'n>),
-    IndexAllocation(NtfsIndexAllocation<'n>),
+pub trait NtfsStructuredValue: Sized {
+    const TY: NtfsAttributeType;
 }
 
-pub trait NewNtfsStructuredValue<'n>: Sized {
-    fn new<T>(
-        ntfs: &'n Ntfs,
+/// Create a structured value from an arbitrary data slice.
+/// This handles Resident Attributes of File Records AND Keys of Index Records (when an attribute is indexed).
+pub trait NtfsStructuredValueFromData<'d>: NtfsStructuredValue {
+    fn from_data(data: &'d [u8], position: u64) -> Result<Self>;
+}
+
+/// Create a structured value from a Non-Resident Attribute Value.
+pub trait NtfsStructuredValueFromNonResidentAttributeValue<'n, 'f>: NtfsStructuredValue {
+    fn from_non_resident_attribute_value<T>(
         fs: &mut T,
-        value: NtfsAttributeValue<'n>,
-        length: u64,
+        value: NtfsNonResidentAttributeValue<'n, 'f>,
     ) -> Result<Self>
     where
         T: Read + Seek;

@@ -3,10 +3,9 @@
 
 use crate::attribute::NtfsAttributeType;
 use crate::boot_sector::BootSector;
-//use crate::dir::Dir;
 use crate::error::{NtfsError, Result};
 use crate::ntfs_file::{KnownNtfsFile, NtfsFile};
-use crate::structured_values::{NtfsStructuredValue, NtfsVolumeInformation, NtfsVolumeName};
+use crate::structured_values::{NtfsVolumeInformation, NtfsVolumeName};
 use binread::io::{Read, Seek, SeekFrom};
 use binread::BinReaderExt;
 
@@ -62,6 +61,10 @@ impl Ntfs {
         self.cluster_size
     }
 
+    pub fn file_record_size(&self) -> u32 {
+        self.file_record_size
+    }
+
     /// Returns the [`NtfsFile`] for the `n`-th NTFS file record.
     ///
     /// The first few NTFS files have fixed indexes and contain filesystem
@@ -114,43 +117,37 @@ impl Ntfs {
         let volume_file = self.ntfs_file(fs, KnownNtfsFile::Volume as u64)?;
         let attribute = volume_file
             .attributes()
-            .find_first_by_ty(fs, NtfsAttributeType::VolumeInformation)
+            .find(|attribute| {
+                // TODO: Replace by attribute.ty().contains() once https://github.com/rust-lang/rust/issues/62358 has landed.
+                attribute
+                    .ty()
+                    .map(|ty| ty == NtfsAttributeType::VolumeInformation)
+                    .unwrap_or(false)
+            })
             .ok_or(NtfsError::AttributeNotFound {
                 position: volume_file.position(),
                 ty: NtfsAttributeType::VolumeName,
-            })??;
-        let value = attribute.structured_value(fs)?;
-        let volume_info = match value {
-            NtfsStructuredValue::VolumeInformation(volume_info) => volume_info,
-            _ => unreachable!(
-                "Got {:?} despite checking the type for NtfsAttributeType::VolumeInformation",
-                value
-            ),
-        };
-
-        Ok(volume_info)
+            })?;
+        attribute.resident_structured_value::<NtfsVolumeInformation>()
     }
 
     /// Returns an [`NtfsVolumeName`] to read the volume name (also called volume label)
     /// of this NTFS volume.
     /// Note that a volume may also have no label, which is why the return value is further
     /// encapsulated in an `Option`.
-    pub fn volume_name<'n, T>(&'n self, fs: &mut T) -> Option<Result<NtfsVolumeName<'n>>>
+    pub fn volume_name<'d, T>(&self, fs: &mut T) -> Option<Result<NtfsVolumeName>>
     where
         T: Read + Seek,
     {
         let volume_file = iter_try!(self.ntfs_file(fs, KnownNtfsFile::Volume as u64));
-        let attribute = iter_try!(volume_file
-            .attributes()
-            .find_first_by_ty(fs, NtfsAttributeType::VolumeName)?);
-        let value = iter_try!(attribute.structured_value(fs));
-        let volume_name = match value {
-            NtfsStructuredValue::VolumeName(volume_name) => volume_name,
-            _ => unreachable!(
-                "Got {:?} despite checking the type for NtfsAttributeType::VolumeName",
-                value
-            ),
-        };
+        let attribute = volume_file.attributes().find(|attribute| {
+            // TODO: Replace by attribute.ty().contains() once https://github.com/rust-lang/rust/issues/62358 has landed.
+            attribute
+                .ty()
+                .map(|ty| ty == NtfsAttributeType::VolumeName)
+                .unwrap_or(false)
+        })?;
+        let volume_name = iter_try!(attribute.resident_structured_value::<NtfsVolumeName>());
 
         Some(Ok(volume_name))
     }
@@ -184,9 +181,6 @@ mod tests {
         let ntfs = Ntfs::new(&mut testfs1).unwrap();
         let volume_name = ntfs.volume_name(&mut testfs1).unwrap().unwrap();
         assert_eq!(volume_name.name_length(), 14);
-
-        let mut buf = [0u8; 14];
-        let volume_name_string = volume_name.read_name(&mut testfs1, &mut buf).unwrap();
-        assert_eq!(volume_name_string, "mylabel");
+        assert_eq!(volume_name.name(), "mylabel");
     }
 }

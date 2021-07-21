@@ -5,7 +5,7 @@ use binread::BinRead;
 use core::fmt;
 
 /// Size of a single GUID on disk (= size of all GUID fields).
-pub(crate) const GUID_SIZE: u64 = 16;
+pub(crate) const GUID_SIZE: usize = 16;
 
 #[derive(BinRead, Clone, Debug, Eq, PartialEq)]
 pub struct NtfsGuid {

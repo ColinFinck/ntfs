@@ -4,23 +4,23 @@
 use crate::error::{NtfsError, Result};
 use crate::ntfs::Ntfs;
 use crate::traits::NtfsReadSeek;
-use crate::types::Lcn;
+use crate::types::{Lcn, Vcn};
 use binread::io;
+use binread::io::Cursor;
 use binread::io::{Read, Seek, SeekFrom};
-use binread::BinReaderExt;
+use binread::BinRead;
 use core::convert::TryFrom;
 use core::iter::FusedIterator;
-use core::ops::Range;
 use core::{cmp, mem};
 
 #[derive(Clone, Debug)]
-pub enum NtfsAttributeValue<'n> {
-    Resident(NtfsDataRun),
-    NonResident(NtfsAttributeNonResidentValue<'n>),
+pub enum NtfsAttributeValue<'n, 'f> {
+    Resident(NtfsResidentAttributeValue<'f>),
+    NonResident(NtfsNonResidentAttributeValue<'n, 'f>),
 }
 
-impl<'n> NtfsAttributeValue<'n> {
-    pub fn attach<'a, T>(self, fs: &'a mut T) -> NtfsAttributeValueAttached<'n, 'a, T>
+impl<'n, 'f> NtfsAttributeValue<'n, 'f> {
+    pub fn attach<'a, T>(self, fs: &'a mut T) -> NtfsAttributeValueAttached<'n, 'f, 'a, T>
     where
         T: Read + Seek,
     {
@@ -29,7 +29,7 @@ impl<'n> NtfsAttributeValue<'n> {
 
     pub fn data_position(&self) -> Option<u64> {
         match self {
-            Self::Resident(inner) => Some(inner.data_position()),
+            Self::Resident(inner) => inner.data_position(),
             Self::NonResident(inner) => inner.data_position(),
         }
     }
@@ -42,7 +42,7 @@ impl<'n> NtfsAttributeValue<'n> {
     }
 }
 
-impl<'n> NtfsReadSeek for NtfsAttributeValue<'n> {
+impl<'n, 'f> NtfsReadSeek for NtfsAttributeValue<'n, 'f> {
     fn read<T>(&mut self, fs: &mut T, buf: &mut [u8]) -> Result<usize>
     where
         T: Read + Seek,
@@ -71,16 +71,16 @@ impl<'n> NtfsReadSeek for NtfsAttributeValue<'n> {
     }
 }
 
-pub struct NtfsAttributeValueAttached<'n, 'a, T: Read + Seek> {
+pub struct NtfsAttributeValueAttached<'n, 'f, 'a, T: Read + Seek> {
     fs: &'a mut T,
-    value: NtfsAttributeValue<'n>,
+    value: NtfsAttributeValue<'n, 'f>,
 }
 
-impl<'n, 'a, T> NtfsAttributeValueAttached<'n, 'a, T>
+impl<'n, 'f, 'a, T> NtfsAttributeValueAttached<'n, 'f, 'a, T>
 where
     T: Read + Seek,
 {
-    fn new(fs: &'a mut T, value: NtfsAttributeValue<'n>) -> Self {
+    fn new(fs: &'a mut T, value: NtfsAttributeValue<'n, 'f>) -> Self {
         Self { fs, value }
     }
 
@@ -88,7 +88,7 @@ where
         self.value.data_position()
     }
 
-    pub fn detach(self) -> NtfsAttributeValue<'n> {
+    pub fn detach(self) -> NtfsAttributeValue<'n, 'f> {
         self.value
     }
 
@@ -97,7 +97,7 @@ where
     }
 }
 
-impl<'n, 'a, T> Read for NtfsAttributeValueAttached<'n, 'a, T>
+impl<'n, 'f, 'a, T> Read for NtfsAttributeValueAttached<'n, 'f, 'a, T>
 where
     T: Read + Seek,
 {
@@ -106,7 +106,7 @@ where
     }
 }
 
-impl<'n, 'a, T> Seek for NtfsAttributeValueAttached<'n, 'a, T>
+impl<'n, 'f, 'a, T> Seek for NtfsAttributeValueAttached<'n, 'f, 'a, T>
 where
     T: Read + Seek,
 {
@@ -118,6 +118,7 @@ where
 #[derive(Clone, Debug)]
 pub struct NtfsDataRun {
     /// Absolute position of the attribute's value within the filesystem, in bytes.
+    /// This may be zero if this is a "sparse" data run.
     position: u64,
     /// Total length of the attribute's value, in bytes.
     length: u64,
@@ -126,25 +127,29 @@ pub struct NtfsDataRun {
 }
 
 impl NtfsDataRun {
-    pub(crate) fn from_byte_info(position: u64, length: u64) -> Self {
-        Self {
-            position,
-            length,
-            stream_position: 0,
-        }
-    }
-
-    pub(crate) fn from_lcn_info(ntfs: &Ntfs, lcn: Lcn, cluster_count: u64) -> Result<Self> {
+    pub(crate) fn new(ntfs: &Ntfs, lcn: Lcn, cluster_count: u64) -> Result<Self> {
         let position = lcn.position(ntfs)?;
         let length = cluster_count
             .checked_mul(ntfs.cluster_size() as u64)
             .ok_or(NtfsError::InvalidClusterCount { cluster_count })?;
 
-        Ok(Self::from_byte_info(position, length))
+        Ok(Self {
+            position,
+            length,
+            stream_position: 0,
+        })
     }
 
-    pub fn data_position(&self) -> u64 {
-        self.position + self.stream_position
+    /// Returns the absolute current data seek position within the filesystem, in bytes.
+    /// This may be `None` if:
+    ///   * The current seek position is outside the valid range, or
+    ///   * The data run is a "sparse" data run
+    pub fn data_position(&self) -> Option<u64> {
+        if self.position > 0 && self.stream_position < self.len() {
+            Some(self.position + self.stream_position)
+        } else {
+            None
+        }
     }
 
     pub fn len(&self) -> u64 {
@@ -152,7 +157,7 @@ impl NtfsDataRun {
     }
 
     fn remaining_len(&self) -> u64 {
-        self.length.saturating_sub(self.stream_position)
+        self.len().saturating_sub(self.stream_position)
     }
 }
 
@@ -173,7 +178,8 @@ impl NtfsReadSeek for NtfsDataRun {
             work_slice.fill(0);
         } else {
             // This data run contains "real" data.
-            fs.seek(SeekFrom::Start(self.position + self.stream_position))?;
+            // We have already performed all necessary sanity checks above, so we can just unwrap here.
+            fs.seek(SeekFrom::Start(self.data_position().unwrap()))?;
             fs.read(work_slice)?;
         }
 
@@ -185,33 +191,8 @@ impl NtfsReadSeek for NtfsDataRun {
     where
         T: Read + Seek,
     {
-        // This implementation is taken from https://github.com/rust-lang/rust/blob/18c524fbae3ab1bf6ed9196168d8c68fc6aec61a/library/std/src/io/cursor.rs
-        // It handles all signed/unsigned arithmetics properly and outputs the known `io` error message.
-        let (base_pos, offset) = match pos {
-            SeekFrom::Start(n) => {
-                self.stream_position = n;
-                return Ok(n);
-            }
-            SeekFrom::End(n) => (self.length, n),
-            SeekFrom::Current(n) => (self.stream_position, n),
-        };
-
-        let new_pos = if offset >= 0 {
-            base_pos.checked_add(offset as u64)
-        } else {
-            base_pos.checked_sub(offset.wrapping_neg() as u64)
-        };
-
-        match new_pos {
-            Some(n) => {
-                self.stream_position = n;
-                Ok(self.stream_position)
-            }
-            None => Err(NtfsError::Io(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "invalid seek to a negative or overflowing position",
-            ))),
-        }
+        let length = self.len();
+        seek_contiguous(&mut self.stream_position, length, pos)
     }
 
     fn stream_position(&self) -> u64 {
@@ -220,102 +201,50 @@ impl NtfsReadSeek for NtfsDataRun {
 }
 
 #[derive(Clone, Debug)]
-pub struct NtfsDataRuns<'n> {
+pub struct NtfsDataRuns<'n, 'f> {
     ntfs: &'n Ntfs,
-    data_runs_range: Range<u64>,
+    data: &'f [u8],
+    position: u64,
     previous_lcn: Lcn,
 }
 
-impl<'n> NtfsDataRuns<'n> {
-    fn new(ntfs: &'n Ntfs, data_runs_range: Range<u64>) -> Self {
+impl<'n, 'f> NtfsDataRuns<'n, 'f> {
+    fn new(ntfs: &'n Ntfs, data: &'f [u8], position: u64) -> Self {
         Self {
             ntfs,
-            data_runs_range,
+            data,
+            position,
             previous_lcn: Lcn::from(0),
         }
     }
 
-    pub fn attach<'a, T>(self, fs: &'a mut T) -> NtfsDataRunsAttached<'n, 'a, T>
-    where
-        T: Read + Seek,
-    {
-        NtfsDataRunsAttached::new(fs, self)
-    }
-
-    pub fn next<T>(&mut self, fs: &mut T) -> Option<Result<NtfsDataRun>>
-    where
-        T: Read + Seek,
-    {
-        if self.data_runs_range.is_empty() {
-            return None;
-        }
-
-        // Read the single header byte.
-        iter_try!(fs.seek(SeekFrom::Start(self.data_runs_range.start)));
-        let header = iter_try!(fs.read_le::<u8>());
-        let mut size = 1u64;
-
-        // A zero byte marks the end of the data runs.
-        if header == 0 {
-            // Ensure `self.data_runs_range.is_empty` returns true, so any further call uses the fast path above.
-            self.data_runs_range.start = self.data_runs_range.end;
-            return None;
-        }
-
-        // The lower nibble indicates the length of the following cluster count variable length integer.
-        let cluster_count_byte_count = header & 0x0f;
-        let cluster_count =
-            iter_try!(self.read_variable_length_unsigned_integer(fs, cluster_count_byte_count));
-        size += cluster_count_byte_count as u64;
-
-        // The upper nibble indicates the length of the following VCN variable length integer.
-        let vcn_byte_count = (header & 0xf0) >> 4;
-        let vcn = iter_try!(self.read_variable_length_signed_integer(fs, vcn_byte_count)).into();
-        size += vcn_byte_count as u64;
-
-        // Turn the read VCN into an absolute LCN.
-        let lcn = iter_try!(self.previous_lcn.checked_add(vcn).ok_or({
-            NtfsError::InvalidVcnInDataRunHeader {
-                position: self.data_runs_range.start,
-                vcn,
-                previous_lcn: self.previous_lcn,
-            }
-        }));
-        self.previous_lcn = lcn;
-
-        // Only increment `self.data_runs_range.start` after having checked for success.
-        // In case of an error, a subsequent call shall output the same error again.
-        self.data_runs_range.start += size;
-
-        let data_run = iter_try!(NtfsDataRun::from_lcn_info(self.ntfs, lcn, cluster_count));
-        Some(Ok(data_run))
-    }
-
-    fn read_variable_length_bytes<T>(&self, fs: &mut T, byte_count: u8) -> Result<[u8; 8]>
-    where
-        T: Read + Seek,
-    {
+    fn read_variable_length_bytes(
+        &self,
+        cursor: &mut Cursor<&[u8]>,
+        byte_count: u8,
+    ) -> Result<[u8; 8]> {
         const MAX_BYTE_COUNT: u8 = mem::size_of::<u64>() as u8;
 
         if byte_count > MAX_BYTE_COUNT {
             return Err(NtfsError::InvalidByteCountInDataRunHeader {
-                position: self.data_runs_range.start,
-                expected: MAX_BYTE_COUNT,
-                actual: byte_count,
+                position: self.position,
+                expected: byte_count,
+                actual: MAX_BYTE_COUNT,
             });
         }
 
         let mut buf = [0u8; MAX_BYTE_COUNT as usize];
-        fs.read_exact(&mut buf[..byte_count as usize])?;
+        cursor.read_exact(&mut buf[..byte_count as usize])?;
 
         Ok(buf)
     }
 
-    fn read_variable_length_signed_integer<T>(&self, fs: &mut T, byte_count: u8) -> Result<i64>
-    where
-        T: Read + Seek,
-    {
-        let buf = self.read_variable_length_bytes(fs, byte_count)?;
+    fn read_variable_length_signed_integer(
+        &self,
+        cursor: &mut Cursor<&[u8]>,
+        byte_count: u8,
+    ) -> Result<i64> {
+        let buf = self.read_variable_length_bytes(cursor, byte_count)?;
         let mut integer = i64::from_le_bytes(buf);
 
         // We have read `byte_count` bytes into a zeroed buffer and just interpreted that as an `i64`.
@@ -326,78 +255,100 @@ impl<'n> NtfsDataRuns<'n> {
         Ok(integer)
     }
 
-    fn read_variable_length_unsigned_integer<T>(&self, fs: &mut T, byte_count: u8) -> Result<u64>
-    where
-        T: Read + Seek,
-    {
-        let buf = self.read_variable_length_bytes(fs, byte_count)?;
+    fn read_variable_length_unsigned_integer(
+        &self,
+        cursor: &mut Cursor<&[u8]>,
+        byte_count: u8,
+    ) -> Result<u64> {
+        let buf = self.read_variable_length_bytes(cursor, byte_count)?;
         let integer = u64::from_le_bytes(buf);
         Ok(integer)
     }
 }
 
-#[derive(Debug)]
-pub struct NtfsDataRunsAttached<'n, 'a, T: Read + Seek> {
-    fs: &'a mut T,
-    data_runs: NtfsDataRuns<'n>,
-}
-
-impl<'n, 'a, T> NtfsDataRunsAttached<'n, 'a, T>
-where
-    T: Read + Seek,
-{
-    fn new(fs: &'a mut T, data_runs: NtfsDataRuns<'n>) -> Self {
-        Self { fs, data_runs }
-    }
-
-    pub fn detach(self) -> NtfsDataRuns<'n> {
-        self.data_runs
-    }
-}
-
-impl<'n, 'a, T> Iterator for NtfsDataRunsAttached<'n, 'a, T>
-where
-    T: Read + Seek,
-{
+impl<'n, 'f> Iterator for NtfsDataRuns<'n, 'f> {
     type Item = Result<NtfsDataRun>;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.data_runs.next(self.fs)
+    fn next(&mut self) -> Option<Result<NtfsDataRun>> {
+        if self.data.is_empty() {
+            return None;
+        }
+
+        // Read the single header byte.
+        let mut cursor = Cursor::new(self.data);
+        let header = iter_try!(u8::read(&mut cursor));
+
+        // A zero byte marks the end of the data runs.
+        if header == 0 {
+            // Ensure `self.data.is_empty` returns true, so any further call uses the fast path above.
+            self.data = &[];
+            return None;
+        }
+
+        // The lower nibble indicates the length of the following cluster count variable length integer.
+        let cluster_count_byte_count = header & 0x0f;
+        let cluster_count = iter_try!(
+            self.read_variable_length_unsigned_integer(&mut cursor, cluster_count_byte_count)
+        );
+
+        // The upper nibble indicates the length of the following VCN variable length integer.
+        let vcn_byte_count = (header & 0xf0) >> 4;
+        let vcn = Vcn::from(iter_try!(
+            self.read_variable_length_signed_integer(&mut cursor, vcn_byte_count)
+        ));
+
+        // Turn the read VCN into an absolute LCN.
+        let lcn = iter_try!(self.previous_lcn.checked_add(vcn).ok_or({
+            NtfsError::InvalidVcnInDataRunHeader {
+                position: self.position,
+                vcn,
+                previous_lcn: self.previous_lcn,
+            }
+        }));
+        self.previous_lcn = lcn;
+
+        // Only advance after having checked for success.
+        // In case of an error, a subsequent call shall output the same error again.
+        let bytes_to_advance = cursor.stream_position().unwrap();
+        self.data = &self.data[bytes_to_advance as usize..];
+        self.position += bytes_to_advance;
+
+        let data_run = iter_try!(NtfsDataRun::new(self.ntfs, lcn, cluster_count));
+        Some(Ok(data_run))
     }
 }
 
-impl<'n, 'a, T> FusedIterator for NtfsDataRunsAttached<'n, 'a, T> where T: Read + Seek {}
+impl<'n, 'f> FusedIterator for NtfsDataRuns<'n, 'f> {}
 
 #[derive(Clone, Debug)]
-pub struct NtfsAttributeNonResidentValue<'n> {
+pub struct NtfsNonResidentAttributeValue<'n, 'f> {
     /// Reference to the base `Ntfs` object of this filesystem.
     ntfs: &'n Ntfs,
-    /// Byte range where the data run information of this non-resident value is stored on the filesystem.
-    data_runs_range: Range<u64>,
+    /// Attribute bytes where the data run information of this non-resident value is stored on the filesystem.
+    data: &'f [u8],
+    /// Absolute position of the data run information within the filesystem, in bytes.
+    position: u64,
     /// Total size of the data spread among all data runs, in bytes.
     data_size: u64,
     /// Iterator of data runs used for reading/seeking.
-    stream_data_runs: NtfsDataRuns<'n>,
+    stream_data_runs: NtfsDataRuns<'n, 'f>,
     /// Current data run we are reading from.
     stream_data_run: Option<NtfsDataRun>,
     /// Total stream position, in bytes.
     stream_position: u64,
 }
 
-impl<'n> NtfsAttributeNonResidentValue<'n> {
-    pub(crate) fn new<T>(
+impl<'n, 'f> NtfsNonResidentAttributeValue<'n, 'f> {
+    pub(crate) fn new(
         ntfs: &'n Ntfs,
-        fs: &mut T,
-        data_runs_range: Range<u64>,
+        data: &'f [u8],
+        position: u64,
         data_size: u64,
-    ) -> Result<Self>
-    where
-        T: Read + Seek,
-    {
-        let mut stream_data_runs = NtfsDataRuns::new(ntfs, data_runs_range.clone());
+    ) -> Result<Self> {
+        let mut stream_data_runs = NtfsDataRuns::new(ntfs, data, position);
 
         // Get the first data run already here to let `data_position` return something meaningful.
-        let stream_data_run = match stream_data_runs.next(fs) {
+        let stream_data_run = match stream_data_runs.next() {
             Some(Ok(data_run)) => Some(data_run),
             Some(Err(e)) => return Err(e),
             None => None,
@@ -405,7 +356,8 @@ impl<'n> NtfsAttributeNonResidentValue<'n> {
 
         Ok(Self {
             ntfs,
-            data_runs_range,
+            data,
+            position,
             data_size,
             stream_data_runs,
             stream_data_run,
@@ -413,18 +365,30 @@ impl<'n> NtfsAttributeNonResidentValue<'n> {
         })
     }
 
+    /// Returns the absolute current data seek position within the filesystem, in bytes.
+    /// This may be `None` if:
+    ///   * The current seek position is outside the valid range, or
+    ///   * The current data run is a "sparse" data run
     pub fn data_position(&self) -> Option<u64> {
-        self.stream_data_run
-            .as_ref()
-            .map(|data_run| data_run.data_position())
+        let stream_data_run = self.stream_data_run.as_ref()?;
+        stream_data_run.data_position()
     }
 
-    pub fn data_runs(&self) -> NtfsDataRuns<'n> {
-        NtfsDataRuns::new(self.ntfs, self.data_runs_range.clone())
+    pub fn data_runs(&self) -> NtfsDataRuns<'n, 'f> {
+        NtfsDataRuns::new(self.ntfs, self.data, self.position)
     }
 
     pub fn len(&self) -> u64 {
         self.data_size
+    }
+
+    pub fn ntfs(&self) -> &'n Ntfs {
+        self.ntfs
+    }
+
+    /// Returns the absolute position of the data run information within the filesystem, in bytes.
+    pub fn position(&self) -> u64 {
+        self.position
     }
 
     fn do_seek<T>(&mut self, fs: &mut T, mut bytes_to_seek: SeekFrom) -> Result<u64>
@@ -445,7 +409,7 @@ impl<'n> NtfsAttributeNonResidentValue<'n> {
         let mut bytes_left_to_seek = match bytes_to_seek {
             SeekFrom::Start(n) => {
                 // Reset `stream_data_runs` and `stream_data_run` to read from the very beginning.
-                self.stream_data_runs = NtfsDataRuns::new(self.ntfs, self.data_runs_range.clone());
+                self.stream_data_runs = NtfsDataRuns::new(self.ntfs, self.data, self.position);
                 self.stream_data_run = None;
                 n
             }
@@ -480,7 +444,7 @@ impl<'n> NtfsAttributeNonResidentValue<'n> {
                 }
             }
 
-            match self.stream_data_runs.next(fs) {
+            match self.stream_data_runs.next() {
                 Some(Ok(data_run)) => self.stream_data_run = Some(data_run),
                 Some(Err(e)) => return Err(e),
                 None => break,
@@ -497,7 +461,7 @@ impl<'n> NtfsAttributeNonResidentValue<'n> {
     }
 }
 
-impl<'n> NtfsReadSeek for NtfsAttributeNonResidentValue<'n> {
+impl<'n, 'f> NtfsReadSeek for NtfsNonResidentAttributeValue<'n, 'f> {
     fn read<T>(&mut self, fs: &mut T, buf: &mut [u8]) -> Result<usize>
     where
         T: Read + Seek,
@@ -516,7 +480,7 @@ impl<'n> NtfsReadSeek for NtfsAttributeNonResidentValue<'n> {
 
             // We still have bytes to read, but no data run or the previous data run has been read to its end.
             // Get the next data run and try again.
-            match self.stream_data_runs.next(fs) {
+            match self.stream_data_runs.next() {
                 Some(Ok(data_run)) => self.stream_data_run = Some(data_run),
                 Some(Err(e)) => return Err(e),
                 None => break,
@@ -576,5 +540,107 @@ impl<'n> NtfsReadSeek for NtfsAttributeNonResidentValue<'n> {
 
     fn stream_position(&self) -> u64 {
         self.stream_position
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct NtfsResidentAttributeValue<'f> {
+    data: &'f [u8],
+    position: u64,
+    stream_position: u64,
+}
+
+impl<'f> NtfsResidentAttributeValue<'f> {
+    pub(crate) fn new(data: &'f [u8], position: u64) -> Self {
+        Self {
+            data,
+            position,
+            stream_position: 0,
+        }
+    }
+
+    pub fn data(&self) -> &'f [u8] {
+        self.data
+    }
+
+    /// Returns the absolute current data seek position within the filesystem, in bytes.
+    /// This may be `None` if the current seek position is outside the valid range.
+    pub fn data_position(&self) -> Option<u64> {
+        if self.stream_position < self.len() {
+            Some(self.position + self.stream_position)
+        } else {
+            None
+        }
+    }
+
+    pub fn len(&self) -> u64 {
+        self.data.len() as u64
+    }
+
+    fn remaining_len(&self) -> u64 {
+        self.len().saturating_sub(self.stream_position)
+    }
+}
+
+impl<'f> NtfsReadSeek for NtfsResidentAttributeValue<'f> {
+    fn read<T>(&mut self, _fs: &mut T, buf: &mut [u8]) -> Result<usize>
+    where
+        T: Read + Seek,
+    {
+        if self.remaining_len() == 0 {
+            return Ok(0);
+        }
+
+        let bytes_to_read = cmp::min(buf.len(), self.remaining_len() as usize);
+        let work_slice = &mut buf[..bytes_to_read];
+
+        let start = self.stream_position as usize;
+        let end = start + bytes_to_read;
+        work_slice.copy_from_slice(&self.data[start..end]);
+
+        self.stream_position += bytes_to_read as u64;
+        Ok(bytes_to_read)
+    }
+
+    fn seek<T>(&mut self, _fs: &mut T, pos: SeekFrom) -> Result<u64>
+    where
+        T: Read + Seek,
+    {
+        let length = self.len();
+        seek_contiguous(&mut self.stream_position, length, pos)
+    }
+
+    fn stream_position(&self) -> u64 {
+        self.stream_position
+    }
+}
+
+fn seek_contiguous(stream_position: &mut u64, length: u64, pos: SeekFrom) -> Result<u64> {
+    // This implementation is taken from https://github.com/rust-lang/rust/blob/18c524fbae3ab1bf6ed9196168d8c68fc6aec61a/library/std/src/io/cursor.rs
+    // It handles all signed/unsigned arithmetics properly and outputs the known `io` error message.
+    let (base_pos, offset) = match pos {
+        SeekFrom::Start(n) => {
+            *stream_position = n;
+            return Ok(n);
+        }
+        SeekFrom::End(n) => (length, n),
+        SeekFrom::Current(n) => (*stream_position, n),
+    };
+
+    let new_pos = if offset >= 0 {
+        base_pos.checked_add(offset as u64)
+    } else {
+        base_pos.checked_sub(offset.wrapping_neg() as u64)
+    };
+
+    match new_pos {
+        Some(n) => {
+            *stream_position = n;
+            Ok(*stream_position)
+        }
+        None => Err(NtfsError::Io(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid seek to a negative or overflowing position",
+        ))),
     }
 }

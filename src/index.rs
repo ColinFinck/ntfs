@@ -2,28 +2,20 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::error::{NtfsError, Result};
-use crate::index_entry::{NtfsIndexEntry, NtfsIndexNodeEntries};
-use crate::structured_values::{NewNtfsStructuredValue, NtfsIndexAllocation, NtfsIndexRoot};
+use crate::index_entry::{IndexEntryRange, IndexNodeEntryRanges, NtfsIndexEntry};
+use crate::structured_values::{NtfsIndexAllocation, NtfsIndexRoot};
 use alloc::vec::Vec;
 use binread::io::{Read, Seek};
-use core::marker::PhantomData;
 
-pub struct NtfsIndex<'n, 'a, K>
-where
-    K: NewNtfsStructuredValue<'n>,
-{
-    index_root: &'a NtfsIndexRoot<'n>,
-    index_allocation: Option<&'a NtfsIndexAllocation<'n>>,
-    key_type: PhantomData<K>,
+pub struct NtfsIndex<'n, 'f> {
+    index_root: NtfsIndexRoot<'f>,
+    index_allocation: Option<NtfsIndexAllocation<'n, 'f>>,
 }
 
-impl<'n, 'a, K> NtfsIndex<'n, 'a, K>
-where
-    K: NewNtfsStructuredValue<'n>,
-{
+impl<'n, 'f> NtfsIndex<'n, 'f> {
     pub fn new(
-        index_root: &'a NtfsIndexRoot<'n>,
-        index_allocation: Option<&'a NtfsIndexAllocation<'n>>,
+        index_root: NtfsIndexRoot<'f>,
+        index_allocation: Option<NtfsIndexAllocation<'n, 'f>>,
     ) -> Result<Self> {
         if index_root.is_large_index() && index_allocation.is_none() {
             return Err(NtfsError::MissingIndexAllocation {
@@ -31,31 +23,15 @@ where
             });
         }
 
-        let key_type = PhantomData;
-
         Ok(Self {
             index_root,
             index_allocation,
-            key_type,
         })
     }
 
-    pub fn iter<T>(&self, fs: &mut T) -> Result<NtfsIndexEntries<'n, 'a, K>>
-    where
-        K: NewNtfsStructuredValue<'n>,
-        T: Read + Seek,
-    {
-        NtfsIndexEntries::new(fs, self.index_root, self.index_allocation)
+    pub fn iter<'i>(&'i self) -> Result<NtfsIndexEntries<'n, 'f, 'i>> {
+        NtfsIndexEntries::new(self)
     }
-}
-
-enum StackEntry<'n, K>
-where
-    K: NewNtfsStructuredValue<'n>,
-{
-    EntryToExplore(NtfsIndexEntry<'n, K>),
-    EntryToReturn(NtfsIndexEntry<'n, K>),
-    Iter(NtfsIndexNodeEntries<'n, K>),
 }
 
 /// Iterator over
@@ -64,40 +40,25 @@ where
 ///   returning an [`NtfsIndexEntry`] for each entry.
 ///
 /// See [`NtfsIndexEntriesAttached`] for an iterator that implements [`Iterator`] and [`FusedIterator`].
-pub struct NtfsIndexEntries<'n, 'a, K>
-where
-    K: NewNtfsStructuredValue<'n>,
-{
-    index_root: &'a NtfsIndexRoot<'n>,
-    index_allocation: Option<&'a NtfsIndexAllocation<'n>>,
-    stack: Vec<StackEntry<'n, K>>,
+pub struct NtfsIndexEntries<'n, 'f, 'i> {
+    index: &'i NtfsIndex<'n, 'f>,
+    inner_iterators: Vec<IndexNodeEntryRanges>,
+    following_entries: Vec<IndexEntryRange>,
 }
 
-impl<'n, 'a, K> NtfsIndexEntries<'n, 'a, K>
-where
-    K: NewNtfsStructuredValue<'n>,
-{
-    fn new<T>(
-        fs: &mut T,
-        index_root: &'a NtfsIndexRoot<'n>,
-        index_allocation: Option<&'a NtfsIndexAllocation<'n>>,
-    ) -> Result<Self>
-    where
-        K: NewNtfsStructuredValue<'n>,
-        T: Read + Seek,
-    {
-        // Start with the entries of the top-most node of the B-tree.
-        // This is given by the `NtfsIndexNodeEntries` iterator over the Index Root entries.
-        let stack = vec![StackEntry::Iter(index_root.entries(fs)?)];
+impl<'n, 'f, 'i> NtfsIndexEntries<'n, 'f, 'i> {
+    fn new(index: &'i NtfsIndex<'n, 'f>) -> Result<Self> {
+        let inner_iterators = vec![index.index_root.entry_ranges()];
+        let following_entries = Vec::new();
 
         Ok(Self {
-            index_root,
-            index_allocation,
-            stack,
+            index,
+            inner_iterators,
+            following_entries,
         })
     }
 
-    pub fn next<T>(&mut self, fs: &mut T) -> Option<Result<NtfsIndexEntry<'n, K>>>
+    pub fn next<'a, T>(&'a mut self, fs: &mut T) -> Option<Result<NtfsIndexEntry<'a>>>
     where
         T: Read + Seek,
     {
@@ -119,50 +80,57 @@ where
         // INDEX ALLOCATION SUBNODE:           | 2 |
         //                                     -----
         //
-        loop {
-            match self.stack.pop()? {
-                StackEntry::EntryToExplore(entry) => {
-                    // We got an `NtfsIndexEntry` from a previous iteration, which we haven't explored yet.
-                    // Check if it has a subnode that needs to be returned first. In that case, push us on the
-                    // stack to be returned later and push the `NtfsIndexNodeEntries` iterator from the subnode
-                    // to iterate it first.
-                    // If this entry has no subnode, just return and forget about it.
-                    if let Some(subnode_vcn) = entry.subnode_vcn(fs) {
-                        let subnode_vcn = iter_try!(subnode_vcn);
-                        let index_allocation = iter_try!(self.index_allocation.ok_or_else(|| {
+        let entry_range = loop {
+            // Get the iterator from the current node level, if any.
+            let iter = self.inner_iterators.last_mut()?;
+
+            // Get the next `IndexEntryRange` from it.
+            if let Some(entry_range) = iter.next() {
+                // Convert that `IndexEntryRange` to a (lifetime-bound) `NtfsIndexEntry`.
+                let entry = entry_range.to_entry(iter.data());
+
+                // Does this entry have a subnode that needs to be iterated first?
+                if let Some(subnode_vcn) = entry.subnode_vcn() {
+                    // Read the subnode from the filesystem and get an iterator for it.
+                    let index_allocation =
+                        iter_try!(self.index.index_allocation.as_ref().ok_or_else(|| {
                             NtfsError::MissingIndexAllocation {
-                                position: self.index_root.position(),
+                                position: self.index.index_root.position(),
                             }
                         }));
-                        let subnode = iter_try!(index_allocation.record_from_vcn(
-                            fs,
-                            &self.index_root,
-                            subnode_vcn
-                        ));
-                        let iter = iter_try!(subnode.entries(fs));
-                        self.stack.push(StackEntry::EntryToReturn(entry));
-                        self.stack.push(StackEntry::Iter(iter));
-                    } else {
-                        return Some(Ok(entry));
-                    }
+                    let subnode = iter_try!(index_allocation.record_from_vcn(
+                        fs,
+                        &self.index.index_root,
+                        subnode_vcn
+                    ));
+                    let subnode_iter = subnode.into_entry_ranges();
+
+                    // Save this subnode's iterator and the entry range.
+                    // We'll pick up the iterator through `self.inner_iterators.last_mut()` in the
+                    // next loop iteration, and we will return that entry as soon as the subnode iterator
+                    // has been fully iterated.
+                    self.inner_iterators.push(subnode_iter);
+                    self.following_entries.push(entry_range);
+                } else {
+                    // There is no subnode, so our `entry` is next lexicographically.
+                    break entry_range;
                 }
-                StackEntry::EntryToReturn(entry) => {
-                    // We got an `NtfsIndexEntry` that we have already explored, hence all elements before it
-                    // have already been returned.
-                    // Now it's our turn.
-                    return Some(Ok(entry));
-                }
-                StackEntry::Iter(mut iter) => {
-                    // We got an `NtfsIndexNodeEntries` iterator over the entries of a node.
-                    // Get the next entry from it, and push the updated iterator and the entry back on the stack.
-                    // If this iterator yields no more entries, we are done with this node and can just forget about it.
-                    if let Some(entry) = iter.next(fs) {
-                        let entry = iter_try!(entry);
-                        self.stack.push(StackEntry::Iter(iter));
-                        self.stack.push(StackEntry::EntryToExplore(entry));
-                    }
-                }
+            } else {
+                // The iterator for this subnode level has been fully iterated.
+                // Drop it.
+                self.inner_iterators.pop();
+
+                // Return the entry, whose subnode we just iterated and which we saved in `following_entries` above.
+                // If we just finished iterating the top-level node, `following_entries` is empty and we are done.
+                // Otherwise, we can be sure that `inner_iterators` contains the matching iterator for converting
+                // `IndexEntryRange` to a (lifetime-bound) `NtfsIndexEntry`.
+                let entry_range = self.following_entries.pop()?;
+                break entry_range;
             }
-        }
+        };
+
+        let iter = self.inner_iterators.last().unwrap();
+        let entry = entry_range.to_entry(iter.data());
+        Some(Ok(entry))
     }
 }

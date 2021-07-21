@@ -18,7 +18,7 @@ pub enum NtfsError {
     },
     /// The given buffer should have at least {expected} bytes, but it only has {actual} bytes
     BufferTooSmall { expected: usize, actual: usize },
-    /// The header of an NTFS data run should indicate a maximum byte count of {expected}, but the header at byte position {position:#010x} indicates a byte count of {actual}
+    /// The NTFS data run header at byte position {position:#010x} indicates a maximum byte count of {expected}, but {actual} is the limit
     InvalidByteCountInDataRunHeader {
         position: u64,
         expected: u8,
@@ -26,6 +26,42 @@ pub enum NtfsError {
     },
     /// The cluster count {cluster_count} is too big
     InvalidClusterCount { cluster_count: u64 },
+    /// The NTFS attribute at byte position {position:#010x} indicates that its name starts at offset {expected}, but the attribute only has a size of {actual} bytes
+    InvalidNtfsAttributeNameOffset {
+        position: u64,
+        expected: u16,
+        actual: u32,
+    },
+    /// The NTFS attribute at byte position {position:#010x} indicates a name length up to offset {expected}, but the attribute only has a size of {actual} bytes
+    InvalidNtfsAttributeNameLength {
+        position: u64,
+        expected: usize,
+        actual: u32,
+    },
+    /// The NTFS file record at byte position {position:#010x} indicates an allocated size of {expected} bytes, but the record only has a size of {actual} bytes
+    InvalidNtfsFileAllocatedSize {
+        position: u64,
+        expected: u32,
+        actual: u32,
+    },
+    /// The NTFS file record at byte position {position:#010x} indicates a used size of {expected} bytes, but only {actual} bytes are allocated
+    InvalidNtfsFileUsedSize {
+        position: u64,
+        expected: u32,
+        actual: u32,
+    },
+    /// The resident NTFS attribute at byte position {position:#010x} indicates that its value starts at offset {expected}, but the attribute only has a size of {actual} bytes
+    InvalidNtfsResidentAttributeValueOffset {
+        position: u64,
+        expected: u16,
+        actual: u32,
+    },
+    /// The resident NTFS attribute at byte position {position:#010x} indicates a value length up to offset {expected}, but the attribute only has a size of {actual} bytes
+    InvalidNtfsResidentAttributeValueLength {
+        position: u64,
+        expected: u32,
+        actual: u32,
+    },
     /// The requested NTFS file {n} is invalid
     InvalidNtfsFile { n: u64 },
     /// The NTFS file record at byte position {position:#010x} should have signature {expected:?}, but it has signature {actual:?}
@@ -46,6 +82,18 @@ pub enum NtfsError {
         expected: u32,
         actual: u32,
     },
+    /// The NTFS index root at byte position {position:#010x} indicates that its entries start at offset {expected}, but the index root only has a size of {actual} bytes
+    InvalidNtfsIndexRootEntriesOffset {
+        position: u64,
+        expected: usize,
+        actual: usize,
+    },
+    /// The NTFS index root at byte position {position:#010x} indicates a used size up to offset {expected}, but the index root only has a size of {actual} bytes
+    InvalidNtfsIndexRootUsedSize {
+        position: u64,
+        expected: usize,
+        actual: usize,
+    },
     /// The given time can't be represented as an NtfsTime
     InvalidNtfsTime,
     /// A record size field in the BIOS Parameter Block denotes {size_info}, which is invalid considering the cluster size of {cluster_size} bytes
@@ -54,8 +102,8 @@ pub enum NtfsError {
     InvalidStructuredValueSize {
         position: u64,
         ty: NtfsAttributeType,
-        expected: u64,
-        actual: u64,
+        expected: usize,
+        actual: usize,
     },
     /// The 2-byte signature field at byte position {position:#010x} should contain {expected:?}, but it contains {actual:?}
     InvalidTwoByteSignature {
@@ -75,19 +123,42 @@ pub enum NtfsError {
     LcnTooBig { lcn: Lcn },
     /// The index root at byte position {position:#010x} is a large index, but no matching index allocation attribute was provided
     MissingIndexAllocation { position: u64 },
+    /// The NTFS attribute at byte position {position:#010x} has type {ty:?}, but a different type has been requested
+    StructuredValueOfDifferentType {
+        position: u64,
+        ty: NtfsAttributeType,
+    },
+    /// The NTFS attribute at byte position {position:#010x} should be resident, but it is non-resident
+    UnexpectedNonResidentAttribute { position: u64 },
+    /// The NTFS attribute at byte position {position:#010x} should be non-resident, but it is resident
+    UnexpectedResidentAttribute { position: u64 },
     /// The cluster size is {actual} bytes, but the maximum supported one is {expected}
     UnsupportedClusterSize { expected: u32, actual: u32 },
     /// The type of the NTFS attribute at byte position {position:#010x} is {actual:#010x}, which is not supported
     UnsupportedNtfsAttributeType { position: u64, actual: u32 },
     /// The namespace of the NTFS file name starting at byte position {position:#010x} is {actual}, which is not supported
     UnsupportedNtfsFileNamespace { position: u64, actual: u8 },
-    /// The NTFS attribute at byte position {position:#010x} has type {ty:?}, which cannot be read as a structured value
-    UnsupportedStructuredValue {
+    /// The Update Sequence Array (USA) of the record at byte position {position:#010x} has entries for {array_count} sectors of {sector_size} bytes, but the record is only {record_size} bytes long
+    UpdateSequenceArrayExceedsRecordSize {
         position: u64,
-        ty: NtfsAttributeType,
+        array_count: u16,
+        sector_size: u16,
+        record_size: usize,
     },
-    /// The requested Virtual Cluster Number (VCN) {requested_vcn} leads to a record with VCN {record_vcn}
-    VcnMismatch { requested_vcn: Vcn, record_vcn: Vcn },
+    /// Sector corruption: The 2 bytes at byte position {position:#010x} should match the Update Sequence Number (USN) {expected:?}, but they are {actual:?}
+    UpdateSequenceNumberMismatch {
+        position: u64,
+        expected: [u8; 2],
+        actual: [u8; 2],
+    },
+    /// The index allocation at byte position {position:#010x} references a Virtual Cluster Number (VCN) {expected}, but a record with VCN {actual} is found at that offset
+    VcnMismatchInIndexAllocation {
+        position: u64,
+        expected: Vcn,
+        actual: Vcn,
+    },
+    /// The index allocation at byte position {position:#010x} references a Virtual Cluster Number (VCN) {vcn}, but this VCN exceeds the boundaries of the filesystem.
+    VcnOutOfBoundsInIndexAllocation { position: u64, vcn: Vcn },
     /// The Virtual Cluster Number (VCN) {vcn} is too big to be processed
     VcnTooBig { vcn: Vcn },
 }
