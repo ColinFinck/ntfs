@@ -80,11 +80,11 @@ impl Ntfs {
     {
         let offset = n
             .checked_mul(self.file_record_size as u64)
-            .ok_or(NtfsError::InvalidNtfsFile { n })?;
+            .ok_or(NtfsError::InvalidFile { n })?;
         let position = self
             .mft_position
             .checked_add(offset)
-            .ok_or(NtfsError::InvalidNtfsFile { n })?;
+            .ok_or(NtfsError::InvalidFile { n })?;
         NtfsFile::new(&self, fs, position)
     }
 

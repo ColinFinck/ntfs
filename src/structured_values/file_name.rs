@@ -92,7 +92,7 @@ impl NtfsFileName {
         self.header.name_length as usize * mem::size_of::<u16>()
     }
 
-    /// Returns the namespace this name belongs to, or [`NtfsError::UnsupportedNtfsFileNamespace`]
+    /// Returns the namespace this name belongs to, or [`NtfsError::UnsupportedFileNamespace`]
     /// if it's an unknown namespace.
     pub fn namespace(&self) -> NtfsFileNamespace {
         NtfsFileNamespace::n(self.header.namespace).unwrap()
@@ -122,7 +122,7 @@ impl NtfsFileName {
 
     fn validate_namespace(&self, position: u64) -> Result<()> {
         if NtfsFileNamespace::n(self.header.namespace).is_none() {
-            return Err(NtfsError::UnsupportedNtfsFileNamespace {
+            return Err(NtfsError::UnsupportedFileNamespace {
                 position,
                 actual: self.header.namespace,
             });

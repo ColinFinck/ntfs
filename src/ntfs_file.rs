@@ -126,7 +126,7 @@ impl<'n> NtfsFile<'n> {
         if signature == expected {
             Ok(())
         } else {
-            Err(NtfsError::InvalidNtfsFileSignature {
+            Err(NtfsError::InvalidFileSignature {
                 position: self.record.position(),
                 expected,
                 actual: *signature,
@@ -136,7 +136,7 @@ impl<'n> NtfsFile<'n> {
 
     fn validate_sizes(&self) -> Result<()> {
         if self.allocated_size() > self.record.len() {
-            return Err(NtfsError::InvalidNtfsFileAllocatedSize {
+            return Err(NtfsError::InvalidFileAllocatedSize {
                 position: self.record.position(),
                 expected: self.allocated_size(),
                 actual: self.record.len(),
@@ -144,7 +144,7 @@ impl<'n> NtfsFile<'n> {
         }
 
         if self.used_size() > self.allocated_size() {
-            return Err(NtfsError::InvalidNtfsFileUsedSize {
+            return Err(NtfsError::InvalidFileUsedSize {
                 position: self.record.position(),
                 expected: self.used_size(),
                 actual: self.allocated_size(),

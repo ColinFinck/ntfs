@@ -116,7 +116,7 @@ impl<'n> NtfsIndexRecord<'n> {
         if signature == expected {
             Ok(())
         } else {
-            Err(NtfsError::InvalidNtfsIndexSignature {
+            Err(NtfsError::InvalidIndexSignature {
                 position: self.record.position(),
                 expected,
                 actual: *signature,
@@ -131,7 +131,7 @@ impl<'n> NtfsIndexRecord<'n> {
         // the size defined for all index records of this index.
         let total_allocated_size = INDEX_RECORD_HEADER_SIZE + self.index_allocated_size();
         if total_allocated_size > index_record_size {
-            return Err(NtfsError::InvalidNtfsIndexAllocatedSize {
+            return Err(NtfsError::InvalidIndexAllocatedSize {
                 position: self.record.position(),
                 expected: index_record_size,
                 actual: total_allocated_size,
@@ -142,7 +142,7 @@ impl<'n> NtfsIndexRecord<'n> {
         // larger than the total allocated size.
         let total_used_size = INDEX_RECORD_HEADER_SIZE + self.index_used_size();
         if total_used_size > total_allocated_size {
-            return Err(NtfsError::InvalidNtfsIndexUsedSize {
+            return Err(NtfsError::InvalidIndexUsedSize {
                 position: self.record.position(),
                 expected: total_allocated_size,
                 actual: total_used_size,

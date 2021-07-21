@@ -10,6 +10,7 @@ pub type Result<T, E = NtfsError> = core::result::Result<T, E>;
 
 /// Central error type of ntfs.
 #[derive(Debug, Display)]
+#[non_exhaustive]
 pub enum NtfsError {
     /// The NTFS file at byte position {position:#010x} has no attribute of type {ty:?}, but it was expected
     AttributeNotFound {
@@ -18,6 +19,18 @@ pub enum NtfsError {
     },
     /// The given buffer should have at least {expected} bytes, but it only has {actual} bytes
     BufferTooSmall { expected: usize, actual: usize },
+    /// The NTFS attribute at byte position {position:#010x} indicates a name length up to offset {expected}, but the attribute only has a size of {actual} bytes
+    InvalidAttributeNameLength {
+        position: u64,
+        expected: usize,
+        actual: u32,
+    },
+    /// The NTFS attribute at byte position {position:#010x} indicates that its name starts at offset {expected}, but the attribute only has a size of {actual} bytes
+    InvalidAttributeNameOffset {
+        position: u64,
+        expected: u16,
+        actual: u32,
+    },
     /// The NTFS data run header at byte position {position:#010x} indicates a maximum byte count of {expected}, but {actual} is the limit
     InvalidByteCountInDataRunHeader {
         position: u64,
@@ -26,82 +39,68 @@ pub enum NtfsError {
     },
     /// The cluster count {cluster_count} is too big
     InvalidClusterCount { cluster_count: u64 },
-    /// The NTFS attribute at byte position {position:#010x} indicates that its name starts at offset {expected}, but the attribute only has a size of {actual} bytes
-    InvalidNtfsAttributeNameOffset {
-        position: u64,
-        expected: u16,
-        actual: u32,
-    },
-    /// The NTFS attribute at byte position {position:#010x} indicates a name length up to offset {expected}, but the attribute only has a size of {actual} bytes
-    InvalidNtfsAttributeNameLength {
-        position: u64,
-        expected: usize,
-        actual: u32,
-    },
+    /// The requested NTFS file {n} is invalid
+    InvalidFile { n: u64 },
     /// The NTFS file record at byte position {position:#010x} indicates an allocated size of {expected} bytes, but the record only has a size of {actual} bytes
-    InvalidNtfsFileAllocatedSize {
+    InvalidFileAllocatedSize {
         position: u64,
         expected: u32,
         actual: u32,
+    },
+    /// The NTFS file record at byte position {position:#010x} should have signature {expected:?}, but it has signature {actual:?}
+    InvalidFileSignature {
+        position: u64,
+        expected: &'static [u8],
+        actual: [u8; 4],
     },
     /// The NTFS file record at byte position {position:#010x} indicates a used size of {expected} bytes, but only {actual} bytes are allocated
-    InvalidNtfsFileUsedSize {
+    InvalidFileUsedSize {
         position: u64,
         expected: u32,
         actual: u32,
-    },
-    /// The resident NTFS attribute at byte position {position:#010x} indicates that its value starts at offset {expected}, but the attribute only has a size of {actual} bytes
-    InvalidNtfsResidentAttributeValueOffset {
-        position: u64,
-        expected: u16,
-        actual: u32,
-    },
-    /// The resident NTFS attribute at byte position {position:#010x} indicates a value length up to offset {expected}, but the attribute only has a size of {actual} bytes
-    InvalidNtfsResidentAttributeValueLength {
-        position: u64,
-        expected: u32,
-        actual: u32,
-    },
-    /// The requested NTFS file {n} is invalid
-    InvalidNtfsFile { n: u64 },
-    /// The NTFS file record at byte position {position:#010x} should have signature {expected:?}, but it has signature {actual:?}
-    InvalidNtfsFileSignature {
-        position: u64,
-        expected: &'static [u8],
-        actual: [u8; 4],
-    },
-    /// The NTFS index record at byte position {position:#010x} should have signature {expected:?}, but it has signature {actual:?}
-    InvalidNtfsIndexSignature {
-        position: u64,
-        expected: &'static [u8],
-        actual: [u8; 4],
     },
     /// The NTFS index record at byte position {position:#010x} indicates an allocated size of {expected} bytes, but the record only has a size of {actual} bytes
-    InvalidNtfsIndexAllocatedSize {
-        position: u64,
-        expected: u32,
-        actual: u32,
-    },
-    /// The NTFS index record at byte position {position:#010x} indicates a used size of {expected} bytes, but only {actual} bytes are allocated
-    InvalidNtfsIndexUsedSize {
+    InvalidIndexAllocatedSize {
         position: u64,
         expected: u32,
         actual: u32,
     },
     /// The NTFS index root at byte position {position:#010x} indicates that its entries start at offset {expected}, but the index root only has a size of {actual} bytes
-    InvalidNtfsIndexRootEntriesOffset {
+    InvalidIndexRootEntriesOffset {
         position: u64,
         expected: usize,
         actual: usize,
     },
     /// The NTFS index root at byte position {position:#010x} indicates a used size up to offset {expected}, but the index root only has a size of {actual} bytes
-    InvalidNtfsIndexRootUsedSize {
+    InvalidIndexRootUsedSize {
         position: u64,
         expected: usize,
         actual: usize,
     },
-    /// The given time can't be represented as an NtfsTime
-    InvalidNtfsTime,
+    /// The NTFS index record at byte position {position:#010x} should have signature {expected:?}, but it has signature {actual:?}
+    InvalidIndexSignature {
+        position: u64,
+        expected: &'static [u8],
+        actual: [u8; 4],
+    },
+    /// The NTFS index record at byte position {position:#010x} indicates a used size of {expected} bytes, but only {actual} bytes are allocated
+    InvalidIndexUsedSize {
+        position: u64,
+        expected: u32,
+        actual: u32,
+    },
+    /// The resident NTFS attribute at byte position {position:#010x} indicates a value length up to offset {expected}, but the attribute only has a size of {actual} bytes
+    InvalidResidentAttributeValueLength {
+        position: u64,
+        expected: u32,
+        actual: u32,
+    },
+    /// The resident NTFS attribute at byte position {position:#010x} indicates that its value starts at offset {expected}, but the attribute only has a size of {actual} bytes
+    InvalidResidentAttributeValueOffset {
+        position: u64,
+        expected: u16,
+        actual: u32,
+    },
     /// A record size field in the BIOS Parameter Block denotes {size_info}, which is invalid considering the cluster size of {cluster_size} bytes
     InvalidRecordSizeInfo { size_info: i8, cluster_size: u32 },
     /// The NTFS structured value at byte position {position:#010x} of type {ty:?} has {actual} bytes where {expected} bytes were expected
@@ -111,6 +110,8 @@ pub enum NtfsError {
         expected: usize,
         actual: usize,
     },
+    /// The given time can't be represented as an NtfsTime
+    InvalidTime,
     /// The 2-byte signature field at byte position {position:#010x} should contain {expected:?}, but it contains {actual:?}
     InvalidTwoByteSignature {
         position: u64,
@@ -138,12 +139,12 @@ pub enum NtfsError {
     UnexpectedNonResidentAttribute { position: u64 },
     /// The NTFS attribute at byte position {position:#010x} should be non-resident, but it is resident
     UnexpectedResidentAttribute { position: u64 },
+    /// The type of the NTFS attribute at byte position {position:#010x} is {actual:#010x}, which is not supported
+    UnsupportedAttributeType { position: u64, actual: u32 },
     /// The cluster size is {actual} bytes, but the maximum supported one is {expected}
     UnsupportedClusterSize { expected: u32, actual: u32 },
-    /// The type of the NTFS attribute at byte position {position:#010x} is {actual:#010x}, which is not supported
-    UnsupportedNtfsAttributeType { position: u64, actual: u32 },
     /// The namespace of the NTFS file name starting at byte position {position:#010x} is {actual}, which is not supported
-    UnsupportedNtfsFileNamespace { position: u64, actual: u8 },
+    UnsupportedFileNamespace { position: u64, actual: u8 },
     /// The Update Sequence Array (USA) of the record at byte position {position:#010x} has entries for {array_count} sectors of {sector_size} bytes, but the record is only {record_size} bytes long
     UpdateSequenceArrayExceedsRecordSize {
         position: u64,

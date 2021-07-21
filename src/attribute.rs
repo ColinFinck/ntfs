@@ -285,13 +285,13 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         LittleEndian::read_u16(&self.file.record_data()[start..])
     }
 
-    /// Returns the type of this NTFS attribute, or [`NtfsError::UnsupportedNtfsAttributeType`]
+    /// Returns the type of this NTFS attribute, or [`NtfsError::UnsupportedAttributeType`]
     /// if it's an unknown type.
     pub fn ty(&self) -> Result<NtfsAttributeType> {
         let start = self.offset + offset_of!(NtfsAttributeHeader, ty);
         let ty = LittleEndian::read_u32(&self.file.record_data()[start..]);
 
-        NtfsAttributeType::n(ty).ok_or(NtfsError::UnsupportedNtfsAttributeType {
+        NtfsAttributeType::n(ty).ok_or(NtfsError::UnsupportedAttributeType {
             position: self.position(),
             actual: ty,
         })
@@ -300,7 +300,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
     fn validate_name_sizes(&self) -> Result<()> {
         let start = self.name_offset();
         if start as u32 >= self.attribute_length() {
-            return Err(NtfsError::InvalidNtfsAttributeNameOffset {
+            return Err(NtfsError::InvalidAttributeNameOffset {
                 position: self.position(),
                 expected: start,
                 actual: self.attribute_length(),
@@ -309,7 +309,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
 
         let end = start as usize + self.name_length();
         if end > self.attribute_length() as usize {
-            return Err(NtfsError::InvalidNtfsAttributeNameLength {
+            return Err(NtfsError::InvalidAttributeNameLength {
                 position: self.position(),
                 expected: end,
                 actual: self.attribute_length(),
@@ -324,7 +324,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
 
         let start = self.resident_value_offset();
         if start as u32 >= self.attribute_length() {
-            return Err(NtfsError::InvalidNtfsResidentAttributeValueOffset {
+            return Err(NtfsError::InvalidResidentAttributeValueOffset {
                 position: self.position(),
                 expected: start,
                 actual: self.attribute_length(),
@@ -333,7 +333,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
 
         let end = start as u32 + self.resident_value_length();
         if end > self.attribute_length() {
-            return Err(NtfsError::InvalidNtfsResidentAttributeValueLength {
+            return Err(NtfsError::InvalidResidentAttributeValueLength {
                 position: self.position(),
                 expected: end,
                 actual: self.attribute_length(),

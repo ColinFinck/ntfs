@@ -72,13 +72,13 @@ impl TryFrom<DateTime<Utc>> for NtfsTime {
         let num_days_from_ce = dt.num_days_from_ce();
         let num_days_from_1601 = num_days_from_ce
             .checked_sub(DAYS_FROM_0001_TO_1601)
-            .ok_or(NtfsError::InvalidNtfsTime)?;
+            .ok_or(NtfsError::InvalidTime)?;
         let intervals_days = INTERVALS_PER_DAY
             .checked_mul(num_days_from_1601 as u64)
-            .ok_or(NtfsError::InvalidNtfsTime)?;
+            .ok_or(NtfsError::InvalidTime)?;
         intervals = intervals
             .checked_add(intervals_days)
-            .ok_or(NtfsError::InvalidNtfsTime)?;
+            .ok_or(NtfsError::InvalidTime)?;
 
         Ok(Self(intervals))
     }

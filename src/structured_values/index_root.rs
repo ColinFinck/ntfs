@@ -89,7 +89,7 @@ impl<'f> NtfsIndexRoot<'f> {
         let (entries_range, _position) = self.entries_range_and_position();
 
         if entries_range.start >= self.data.len() {
-            return Err(NtfsError::InvalidNtfsIndexRootEntriesOffset {
+            return Err(NtfsError::InvalidIndexRootEntriesOffset {
                 position: self.position,
                 expected: entries_range.start,
                 actual: self.data.len(),
@@ -97,7 +97,7 @@ impl<'f> NtfsIndexRoot<'f> {
         }
 
         if entries_range.end > self.data.len() {
-            return Err(NtfsError::InvalidNtfsIndexRootUsedSize {
+            return Err(NtfsError::InvalidIndexRootUsedSize {
                 position: self.position,
                 expected: entries_range.end,
                 actual: self.data.len(),
