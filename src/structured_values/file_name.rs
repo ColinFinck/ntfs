@@ -3,6 +3,7 @@
 
 use crate::attribute::NtfsAttributeType;
 use crate::error::{NtfsError, Result};
+use crate::file_reference::NtfsFileReference;
 use crate::string::NtfsString;
 use crate::structured_values::{
     NtfsFileAttributeFlags, NtfsStructuredValue, NtfsStructuredValueFromData,
@@ -23,7 +24,7 @@ const FILE_NAME_MIN_SIZE: usize = FILE_NAME_HEADER_SIZE + mem::size_of::<u16>();
 #[allow(unused)]
 #[derive(BinRead, Clone, Debug)]
 struct FileNameHeader {
-    parent_directory_ref: u64,
+    parent_directory_ref: NtfsFileReference,
     creation_time: NtfsTime,
     modification_time: NtfsTime,
     mft_record_modification_time: NtfsTime,
