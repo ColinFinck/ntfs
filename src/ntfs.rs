@@ -135,7 +135,7 @@ impl Ntfs {
     /// of this NTFS volume.
     /// Note that a volume may also have no label, which is why the return value is further
     /// encapsulated in an `Option`.
-    pub fn volume_name<'d, T>(&self, fs: &mut T) -> Option<Result<NtfsVolumeName>>
+    pub fn volume_name<T>(&self, fs: &mut T) -> Option<Result<NtfsVolumeName>>
     where
         T: Read + Seek,
     {
