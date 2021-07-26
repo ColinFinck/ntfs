@@ -18,6 +18,7 @@ mod guid;
 mod index;
 mod index_entry;
 mod index_record;
+pub mod indexes;
 mod ntfs;
 mod ntfs_file;
 mod record;

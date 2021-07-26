@@ -4,6 +4,7 @@
 use crate::attribute_value::NtfsNonResidentAttributeValue;
 use crate::error::{NtfsError, Result};
 use crate::index_entry::{IndexNodeEntryRanges, NtfsIndexNodeEntries};
+use crate::indexes::NtfsIndexEntryType;
 use crate::record::Record;
 use crate::record::RecordHeader;
 use crate::traits::NtfsReadSeek;
@@ -66,7 +67,10 @@ impl<'n> NtfsIndexRecord<'n> {
         Ok(index_record)
     }
 
-    pub fn entries<'r>(&'r self) -> Result<NtfsIndexNodeEntries<'r>> {
+    pub fn entries<'r, E>(&'r self) -> Result<NtfsIndexNodeEntries<'r, E>>
+    where
+        E: NtfsIndexEntryType,
+    {
         let (entries_range, position) = self.entries_range_and_position();
         let data = &self.record.data()[entries_range];
 
@@ -104,7 +108,10 @@ impl<'n> NtfsIndexRecord<'n> {
         LittleEndian::read_u32(&self.record.data()[start..])
     }
 
-    pub(crate) fn into_entry_ranges(self) -> IndexNodeEntryRanges {
+    pub(crate) fn into_entry_ranges<E>(self) -> IndexNodeEntryRanges<E>
+    where
+        E: NtfsIndexEntryType,
+    {
         let (entries_range, position) = self.entries_range_and_position();
         IndexNodeEntryRanges::new(self.record.into_data(), entries_range, position)
     }

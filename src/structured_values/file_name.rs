@@ -4,6 +4,7 @@
 use crate::attribute::NtfsAttributeType;
 use crate::error::{NtfsError, Result};
 use crate::file_reference::NtfsFileReference;
+use crate::indexes::NtfsIndexEntryKey;
 use crate::string::NtfsString;
 use crate::structured_values::{
     NtfsFileAttributeFlags, NtfsStructuredValue, NtfsStructuredValueFromSlice,
@@ -160,6 +161,13 @@ impl<'s> NtfsStructuredValueFromSlice<'s> for NtfsFileName {
         file_name.read_name(slice);
 
         Ok(file_name)
+    }
+}
+
+// `NtfsFileName` is special in the regard that the index entry key has the same structure as the structured value.
+impl NtfsIndexEntryKey for NtfsFileName {
+    fn key_from_slice(slice: &[u8], position: u64) -> Result<Self> {
+        Self::from_slice(slice, position)
     }
 }
 

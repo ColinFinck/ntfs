@@ -3,16 +3,25 @@
 
 use crate::error::{NtfsError, Result};
 use crate::index_entry::{IndexEntryRange, IndexNodeEntryRanges, NtfsIndexEntry};
+use crate::indexes::NtfsIndexEntryType;
 use crate::structured_values::{NtfsIndexAllocation, NtfsIndexRoot};
 use alloc::vec::Vec;
 use binread::io::{Read, Seek};
+use core::marker::PhantomData;
 
-pub struct NtfsIndex<'n, 'f> {
+pub struct NtfsIndex<'n, 'f, E>
+where
+    E: NtfsIndexEntryType,
+{
     index_root: NtfsIndexRoot<'f>,
     index_allocation: Option<NtfsIndexAllocation<'n, 'f>>,
+    entry_type: PhantomData<E>,
 }
 
-impl<'n, 'f> NtfsIndex<'n, 'f> {
+impl<'n, 'f, E> NtfsIndex<'n, 'f, E>
+where
+    E: NtfsIndexEntryType,
+{
     pub fn new(
         index_root: NtfsIndexRoot<'f>,
         index_allocation: Option<NtfsIndexAllocation<'n, 'f>>,
@@ -23,13 +32,16 @@ impl<'n, 'f> NtfsIndex<'n, 'f> {
             });
         }
 
+        let entry_type = PhantomData;
+
         Ok(Self {
             index_root,
             index_allocation,
+            entry_type,
         })
     }
 
-    pub fn iter<'i>(&'i self) -> Result<NtfsIndexEntries<'n, 'f, 'i>> {
+    pub fn iter<'i>(&'i self) -> Result<NtfsIndexEntries<'n, 'f, 'i, E>> {
         NtfsIndexEntries::new(self)
     }
 }
@@ -40,14 +52,20 @@ impl<'n, 'f> NtfsIndex<'n, 'f> {
 ///   returning an [`NtfsIndexEntry`] for each entry.
 ///
 /// See [`NtfsIndexEntriesAttached`] for an iterator that implements [`Iterator`] and [`FusedIterator`].
-pub struct NtfsIndexEntries<'n, 'f, 'i> {
-    index: &'i NtfsIndex<'n, 'f>,
-    inner_iterators: Vec<IndexNodeEntryRanges>,
-    following_entries: Vec<IndexEntryRange>,
+pub struct NtfsIndexEntries<'n, 'f, 'i, E>
+where
+    E: NtfsIndexEntryType,
+{
+    index: &'i NtfsIndex<'n, 'f, E>,
+    inner_iterators: Vec<IndexNodeEntryRanges<E>>,
+    following_entries: Vec<IndexEntryRange<E>>,
 }
 
-impl<'n, 'f, 'i> NtfsIndexEntries<'n, 'f, 'i> {
-    fn new(index: &'i NtfsIndex<'n, 'f>) -> Result<Self> {
+impl<'n, 'f, 'i, E> NtfsIndexEntries<'n, 'f, 'i, E>
+where
+    E: NtfsIndexEntryType,
+{
+    fn new(index: &'i NtfsIndex<'n, 'f, E>) -> Result<Self> {
         let inner_iterators = vec![index.index_root.entry_ranges()];
         let following_entries = Vec::new();
 
@@ -58,7 +76,7 @@ impl<'n, 'f, 'i> NtfsIndexEntries<'n, 'f, 'i> {
         })
     }
 
-    pub fn next<'a, T>(&'a mut self, fs: &mut T) -> Option<Result<NtfsIndexEntry<'a>>>
+    pub fn next<'a, T>(&'a mut self, fs: &mut T) -> Option<Result<NtfsIndexEntry<'a, E>>>
     where
         T: Read + Seek,
     {

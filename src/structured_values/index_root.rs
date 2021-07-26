@@ -5,6 +5,7 @@ use crate::attribute::NtfsAttributeType;
 use crate::error::{NtfsError, Result};
 use crate::index_entry::{IndexNodeEntryRanges, NtfsIndexNodeEntries};
 use crate::index_record::{IndexNodeHeader, INDEX_NODE_HEADER_SIZE};
+use crate::indexes::NtfsIndexEntryType;
 use crate::structured_values::{NtfsStructuredValue, NtfsStructuredValueFromSlice};
 use byteorder::{ByteOrder, LittleEndian};
 use core::ops::Range;
@@ -30,7 +31,10 @@ pub struct NtfsIndexRoot<'f> {
 const LARGE_INDEX_FLAG: u8 = 0x01;
 
 impl<'f> NtfsIndexRoot<'f> {
-    pub fn entries(&self) -> Result<NtfsIndexNodeEntries<'f>> {
+    pub fn entries<E>(&self) -> Result<NtfsIndexNodeEntries<'f, E>>
+    where
+        E: NtfsIndexEntryType,
+    {
         let (entries_range, position) = self.entries_range_and_position();
         let slice = &self.slice[entries_range];
 
@@ -45,7 +49,10 @@ impl<'f> NtfsIndexRoot<'f> {
         (start..end, position)
     }
 
-    pub(crate) fn entry_ranges(&self) -> IndexNodeEntryRanges {
+    pub(crate) fn entry_ranges<E>(&self) -> IndexNodeEntryRanges<E>
+    where
+        E: NtfsIndexEntryType,
+    {
         let (entries_range, position) = self.entries_range_and_position();
         let entries_data = self.slice[entries_range].to_vec();
         let range = 0..entries_data.len();
