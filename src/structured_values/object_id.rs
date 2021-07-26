@@ -4,7 +4,7 @@
 use crate::attribute::NtfsAttributeType;
 use crate::error::{NtfsError, Result};
 use crate::guid::{NtfsGuid, GUID_SIZE};
-use crate::structured_values::{NtfsStructuredValue, NtfsStructuredValueFromData};
+use crate::structured_values::{NtfsStructuredValue, NtfsStructuredValueFromSlice};
 use binread::io::Cursor;
 use binread::BinReaderExt;
 
@@ -38,32 +38,32 @@ impl NtfsStructuredValue for NtfsObjectId {
     const TY: NtfsAttributeType = NtfsAttributeType::ObjectId;
 }
 
-impl<'d> NtfsStructuredValueFromData<'d> for NtfsObjectId {
-    fn from_data(data: &'d [u8], position: u64) -> Result<Self> {
-        if data.len() < GUID_SIZE {
+impl<'s> NtfsStructuredValueFromSlice<'s> for NtfsObjectId {
+    fn from_slice(slice: &'s [u8], position: u64) -> Result<Self> {
+        if slice.len() < GUID_SIZE {
             return Err(NtfsError::InvalidStructuredValueSize {
                 position,
                 ty: NtfsAttributeType::ObjectId,
                 expected: GUID_SIZE,
-                actual: data.len(),
+                actual: slice.len(),
             });
         }
 
-        let mut cursor = Cursor::new(data);
+        let mut cursor = Cursor::new(slice);
         let object_id = cursor.read_le::<NtfsGuid>()?;
 
         let mut birth_volume_id = None;
-        if data.len() >= 2 * GUID_SIZE {
+        if slice.len() >= 2 * GUID_SIZE {
             birth_volume_id = Some(cursor.read_le::<NtfsGuid>()?);
         }
 
         let mut birth_object_id = None;
-        if data.len() >= 3 * GUID_SIZE {
+        if slice.len() >= 3 * GUID_SIZE {
             birth_object_id = Some(cursor.read_le::<NtfsGuid>()?);
         }
 
         let mut domain_id = None;
-        if data.len() >= 4 * GUID_SIZE {
+        if slice.len() >= 4 * GUID_SIZE {
             domain_id = Some(cursor.read_le::<NtfsGuid>()?);
         }
 

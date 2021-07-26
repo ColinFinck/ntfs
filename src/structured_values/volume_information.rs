@@ -3,7 +3,7 @@
 
 use crate::attribute::NtfsAttributeType;
 use crate::error::{NtfsError, Result};
-use crate::structured_values::{NtfsStructuredValue, NtfsStructuredValueFromData};
+use crate::structured_values::{NtfsStructuredValue, NtfsStructuredValueFromSlice};
 use binread::io::Cursor;
 use binread::{BinRead, BinReaderExt};
 use bitflags::bitflags;
@@ -56,18 +56,18 @@ impl NtfsStructuredValue for NtfsVolumeInformation {
     const TY: NtfsAttributeType = NtfsAttributeType::VolumeInformation;
 }
 
-impl<'d> NtfsStructuredValueFromData<'d> for NtfsVolumeInformation {
-    fn from_data(data: &'d [u8], position: u64) -> Result<Self> {
-        if data.len() < VOLUME_INFORMATION_SIZE {
+impl<'s> NtfsStructuredValueFromSlice<'s> for NtfsVolumeInformation {
+    fn from_slice(slice: &'s [u8], position: u64) -> Result<Self> {
+        if slice.len() < VOLUME_INFORMATION_SIZE {
             return Err(NtfsError::InvalidStructuredValueSize {
                 position,
                 ty: NtfsAttributeType::StandardInformation,
                 expected: VOLUME_INFORMATION_SIZE,
-                actual: data.len(),
+                actual: slice.len(),
             });
         }
 
-        let mut cursor = Cursor::new(data);
+        let mut cursor = Cursor::new(slice);
         let info = cursor.read_le::<VolumeInformationData>()?;
 
         Ok(Self { info })

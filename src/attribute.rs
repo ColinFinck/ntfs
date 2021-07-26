@@ -8,7 +8,7 @@ use crate::error::{NtfsError, Result};
 use crate::ntfs_file::NtfsFile;
 use crate::string::NtfsString;
 use crate::structured_values::{
-    NtfsStructuredValueFromData, NtfsStructuredValueFromNonResidentAttributeValue,
+    NtfsStructuredValueFromNonResidentAttributeValue, NtfsStructuredValueFromSlice,
 };
 use crate::types::Vcn;
 use binread::io::{Read, Seek};
@@ -242,7 +242,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
 
     pub fn resident_structured_value<S>(&self) -> Result<S>
     where
-        S: NtfsStructuredValueFromData<'f>,
+        S: NtfsStructuredValueFromSlice<'f>,
     {
         let ty = self.ty()?;
         if ty != S::TY {
@@ -259,7 +259,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         }
 
         let resident_value = self.resident_value()?;
-        S::from_data(resident_value.data(), self.position())
+        S::from_slice(resident_value.data(), self.position())
     }
 
     pub(crate) fn resident_value(&self) -> Result<NtfsResidentAttributeValue<'f>> {

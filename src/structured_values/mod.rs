@@ -51,8 +51,8 @@ pub trait NtfsStructuredValue: Sized {
 
 /// Create a structured value from an arbitrary data slice.
 /// This handles Resident Attributes of File Records AND Keys of Index Records (when an attribute is indexed).
-pub trait NtfsStructuredValueFromData<'d>: NtfsStructuredValue {
-    fn from_data(data: &'d [u8], position: u64) -> Result<Self>;
+pub trait NtfsStructuredValueFromSlice<'s>: NtfsStructuredValue {
+    fn from_slice(slice: &'s [u8], position: u64) -> Result<Self>;
 }
 
 /// Create a structured value from a Non-Resident Attribute Value.

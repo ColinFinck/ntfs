@@ -4,7 +4,7 @@
 use crate::attribute::NtfsAttributeType;
 use crate::error::{NtfsError, Result};
 use crate::string::NtfsString;
-use crate::structured_values::{NtfsStructuredValue, NtfsStructuredValueFromData};
+use crate::structured_values::{NtfsStructuredValue, NtfsStructuredValueFromSlice};
 use alloc::vec::Vec;
 use core::mem;
 
@@ -37,25 +37,25 @@ impl NtfsStructuredValue for NtfsVolumeName {
     const TY: NtfsAttributeType = NtfsAttributeType::VolumeName;
 }
 
-impl<'d> NtfsStructuredValueFromData<'d> for NtfsVolumeName {
-    fn from_data(data: &'d [u8], position: u64) -> Result<Self> {
-        if data.len() < VOLUME_NAME_MIN_SIZE {
+impl<'s> NtfsStructuredValueFromSlice<'s> for NtfsVolumeName {
+    fn from_slice(slice: &'s [u8], position: u64) -> Result<Self> {
+        if slice.len() < VOLUME_NAME_MIN_SIZE {
             return Err(NtfsError::InvalidStructuredValueSize {
                 position,
                 ty: NtfsAttributeType::VolumeName,
                 expected: VOLUME_NAME_MIN_SIZE,
-                actual: data.len(),
+                actual: slice.len(),
             });
-        } else if data.len() > VOLUME_NAME_MAX_SIZE {
+        } else if slice.len() > VOLUME_NAME_MAX_SIZE {
             return Err(NtfsError::InvalidStructuredValueSize {
                 position,
                 ty: NtfsAttributeType::VolumeName,
                 expected: VOLUME_NAME_MAX_SIZE,
-                actual: data.len(),
+                actual: slice.len(),
             });
         }
 
-        let name = data.to_vec();
+        let name = slice.to_vec();
         Ok(Self { name })
     }
 }

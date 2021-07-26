@@ -6,7 +6,7 @@ use crate::error::{NtfsError, Result};
 use crate::file_reference::NtfsFileReference;
 use crate::string::NtfsString;
 use crate::structured_values::{
-    NtfsFileAttributeFlags, NtfsStructuredValue, NtfsStructuredValueFromData,
+    NtfsFileAttributeFlags, NtfsStructuredValue, NtfsStructuredValueFromSlice,
 };
 use crate::time::NtfsTime;
 use alloc::vec::Vec;
@@ -137,27 +137,27 @@ impl NtfsStructuredValue for NtfsFileName {
     const TY: NtfsAttributeType = NtfsAttributeType::FileName;
 }
 
-impl<'d> NtfsStructuredValueFromData<'d> for NtfsFileName {
-    fn from_data(data: &'d [u8], position: u64) -> Result<Self> {
-        if data.len() < FILE_NAME_MIN_SIZE {
+impl<'s> NtfsStructuredValueFromSlice<'s> for NtfsFileName {
+    fn from_slice(slice: &'s [u8], position: u64) -> Result<Self> {
+        if slice.len() < FILE_NAME_MIN_SIZE {
             return Err(NtfsError::InvalidStructuredValueSize {
                 position,
                 ty: NtfsAttributeType::FileName,
                 expected: FILE_NAME_MIN_SIZE,
-                actual: data.len(),
+                actual: slice.len(),
             });
         }
 
-        let mut cursor = Cursor::new(data);
+        let mut cursor = Cursor::new(slice);
         let header = cursor.read_le::<FileNameHeader>()?;
 
         let mut file_name = Self {
             header,
             name: Vec::new(),
         };
-        file_name.validate_name_length(data.len(), position)?;
+        file_name.validate_name_length(slice.len(), position)?;
         file_name.validate_namespace(position)?;
-        file_name.read_name(data);
+        file_name.read_name(slice);
 
         Ok(file_name)
     }

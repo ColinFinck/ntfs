@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::error::Result;
-use crate::structured_values::NtfsStructuredValueFromData;
+use crate::structured_values::NtfsStructuredValueFromSlice;
 use crate::types::Vcn;
 use bitflags::bitflags;
 use byteorder::{ByteOrder, LittleEndian};
@@ -41,35 +41,35 @@ impl IndexEntryRange {
         Self { range, position }
     }
 
-    pub(crate) fn to_entry<'d>(&self, data: &'d [u8]) -> NtfsIndexEntry<'d> {
-        NtfsIndexEntry::new(&data[self.range.clone()], self.position)
+    pub(crate) fn to_entry<'s>(&self, slice: &'s [u8]) -> NtfsIndexEntry<'s> {
+        NtfsIndexEntry::new(&slice[self.range.clone()], self.position)
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct NtfsIndexEntry<'d> {
-    data: &'d [u8],
+pub struct NtfsIndexEntry<'s> {
+    slice: &'s [u8],
     position: u64,
 }
 
-impl<'d> NtfsIndexEntry<'d> {
-    pub(crate) const fn new(data: &'d [u8], position: u64) -> Self {
-        Self { data, position }
+impl<'s> NtfsIndexEntry<'s> {
+    pub(crate) const fn new(slice: &'s [u8], position: u64) -> Self {
+        Self { slice, position }
     }
 
     pub fn flags(&self) -> NtfsIndexEntryFlags {
-        let flags = self.data[offset_of!(IndexEntryHeader, flags)];
+        let flags = self.slice[offset_of!(IndexEntryHeader, flags)];
         NtfsIndexEntryFlags::from_bits_truncate(flags)
     }
 
     pub fn index_entry_length(&self) -> u16 {
         let start = offset_of!(IndexEntryHeader, index_entry_length);
-        LittleEndian::read_u16(&self.data[start..])
+        LittleEndian::read_u16(&self.slice[start..])
     }
 
     pub fn key_length(&self) -> u16 {
         let start = offset_of!(IndexEntryHeader, key_length);
-        LittleEndian::read_u16(&self.data[start..])
+        LittleEndian::read_u16(&self.slice[start..])
     }
 
     /// Returns the structured value of the key of this Index Entry,
@@ -77,7 +77,7 @@ impl<'d> NtfsIndexEntry<'d> {
     /// The last Index Entry never has a key.
     pub fn key_structured_value<K>(&self) -> Option<Result<K>>
     where
-        K: NtfsStructuredValueFromData<'d>,
+        K: NtfsStructuredValueFromSlice<'s>,
     {
         // The key/stream is only set when the last entry flag is not set.
         // https://flatcap.org/linux-ntfs/ntfs/concepts/index_entry.html
@@ -89,7 +89,7 @@ impl<'d> NtfsIndexEntry<'d> {
         let end = start + self.key_length() as usize;
         let position = self.position + start as u64;
 
-        let structured_value = iter_try!(K::from_data(&self.data[start..end], position));
+        let structured_value = iter_try!(K::from_slice(&self.slice[start..end], position));
         Some(Ok(structured_value))
     }
 
@@ -102,7 +102,7 @@ impl<'d> NtfsIndexEntry<'d> {
 
         // Get the subnode VCN from the very end of the Index Entry.
         let start = self.index_entry_length() as usize - mem::size_of::<Vcn>();
-        let vcn = Vcn::from(LittleEndian::read_i64(&self.data[start..]));
+        let vcn = Vcn::from(LittleEndian::read_i64(&self.slice[start..]));
 
         Some(vcn)
     }
@@ -161,37 +161,37 @@ impl Iterator for IndexNodeEntryRanges {
 impl FusedIterator for IndexNodeEntryRanges {}
 
 #[derive(Clone, Debug)]
-pub struct NtfsIndexNodeEntries<'d> {
-    data: &'d [u8],
+pub struct NtfsIndexNodeEntries<'s> {
+    slice: &'s [u8],
     position: u64,
 }
 
-impl<'d> NtfsIndexNodeEntries<'d> {
-    pub(crate) const fn new(data: &'d [u8], position: u64) -> Self {
-        Self { data, position }
+impl<'s> NtfsIndexNodeEntries<'s> {
+    pub(crate) fn new(slice: &'s [u8], position: u64) -> Self {
+        Self { slice, position }
     }
 }
 
-impl<'d> Iterator for NtfsIndexNodeEntries<'d> {
-    type Item = NtfsIndexEntry<'d>;
+impl<'s> Iterator for NtfsIndexNodeEntries<'s> {
+    type Item = NtfsIndexEntry<'s>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.data.is_empty() {
+        if self.slice.is_empty() {
             return None;
         }
 
         // Get the current entry.
-        let entry = NtfsIndexEntry::new(self.data, self.position);
+        let entry = NtfsIndexEntry::new(self.slice, self.position);
 
         if entry.flags().contains(NtfsIndexEntryFlags::LAST_ENTRY) {
             // This is the last entry.
             // Ensure that we don't read any other entries by emptying the slice.
-            self.data = &[];
+            self.slice = &[];
         } else {
             // This is not the last entry.
             // Advance our iterator to the next entry.
             let bytes_to_advance = entry.index_entry_length() as usize;
-            self.data = &self.data[bytes_to_advance..];
+            self.slice = &self.slice[bytes_to_advance..];
             self.position += bytes_to_advance as u64;
         }
 
@@ -199,4 +199,4 @@ impl<'d> Iterator for NtfsIndexNodeEntries<'d> {
     }
 }
 
-impl<'d> FusedIterator for NtfsIndexNodeEntries<'d> {}
+impl<'s> FusedIterator for NtfsIndexNodeEntries<'s> {}
