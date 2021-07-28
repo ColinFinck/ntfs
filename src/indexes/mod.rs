@@ -6,12 +6,13 @@ mod file_name;
 pub use file_name::*;
 
 use crate::error::Result;
+use core::fmt;
 
-pub trait NtfsIndexEntryType {
+pub trait NtfsIndexEntryType: fmt::Debug {
     type KeyType: NtfsIndexEntryKey;
 }
 
-pub trait NtfsIndexEntryKey: Sized {
+pub trait NtfsIndexEntryKey: fmt::Debug + Sized {
     fn key_from_slice(slice: &[u8], position: u64) -> Result<Self>;
 }
 
@@ -21,7 +22,7 @@ pub trait NtfsIndexEntryHasData: NtfsIndexEntryType {
     type DataType: NtfsIndexEntryData;
 }
 
-pub trait NtfsIndexEntryData: Sized {
+pub trait NtfsIndexEntryData: fmt::Debug + Sized {
     fn data_from_slice(slice: &[u8], position: u64) -> Result<Self>;
 }
 
