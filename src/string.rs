@@ -41,12 +41,7 @@ impl<'a> NtfsString<'a> {
         }
     }
 
-    fn cmp_str(&self, other: &str) -> Ordering {
-        let other_iter = other.encode_utf16();
-        Self::cmp_iter(self.utf16le_iter(), other_iter)
-    }
-
-    fn utf16le_iter(&'a self) -> impl Iterator<Item = u16> + 'a {
+    fn u16_iter(&'a self) -> impl Iterator<Item = u16> + 'a {
         self.0
             .chunks_exact(2)
             .map(|two_bytes| u16::from_le_bytes(two_bytes.try_into().unwrap()))
@@ -68,14 +63,14 @@ impl<'a> NtfsString<'a> {
     /// Attempts to convert `self` to an owned `String`.
     /// Returns `Some(String)` if all characters could be converted successfully or `None` if a decoding error occurred.
     pub fn to_string_checked(&self) -> Option<String> {
-        char::decode_utf16(self.utf16le_iter())
+        char::decode_utf16(self.u16_iter())
             .map(|x| x.ok())
             .collect::<Option<String>>()
     }
 
     /// Converts `self` to an owned `String`, replacing invalid data with the replacement character (U+FFFD).
     pub fn to_string_lossy(&self) -> String {
-        char::decode_utf16(self.utf16le_iter())
+        char::decode_utf16(self.u16_iter())
             .map(|x| x.unwrap_or(char::REPLACEMENT_CHARACTER))
             .collect()
     }
@@ -83,8 +78,8 @@ impl<'a> NtfsString<'a> {
 
 impl<'a> fmt::Display for NtfsString<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let utf16_iter = char::decode_utf16(self.utf16le_iter())
-            .map(|x| x.unwrap_or(char::REPLACEMENT_CHARACTER));
+        let utf16_iter =
+            char::decode_utf16(self.u16_iter()).map(|x| x.unwrap_or(char::REPLACEMENT_CHARACTER));
 
         for single_char in utf16_iter {
             single_char.fmt(f)?;
@@ -96,39 +91,38 @@ impl<'a> fmt::Display for NtfsString<'a> {
 
 impl<'a> Ord for NtfsString<'a> {
     fn cmp(&self, other: &Self) -> Ordering {
-        Self::cmp_iter(self.utf16le_iter(), other.utf16le_iter())
+        NtfsString::cmp_iter(self.u16_iter(), other.u16_iter())
     }
 }
 
 impl<'a> PartialEq for NtfsString<'a> {
     /// Checks that two strings are a (case-sensitive!) match.
     fn eq(&self, other: &Self) -> bool {
-        let ordering = self.cmp(other);
-        ordering == Ordering::Equal
+        self.cmp(other) == Ordering::Equal
     }
 }
 
 impl<'a> PartialEq<str> for NtfsString<'a> {
     fn eq(&self, other: &str) -> bool {
-        self.cmp_str(other) == Ordering::Equal
+        NtfsString::cmp_iter(self.u16_iter(), other.encode_utf16()) == Ordering::Equal
     }
 }
 
 impl<'a> PartialEq<NtfsString<'a>> for str {
     fn eq(&self, other: &NtfsString<'a>) -> bool {
-        other.cmp_str(self) == Ordering::Equal
+        NtfsString::cmp_iter(self.encode_utf16(), other.u16_iter()) == Ordering::Equal
     }
 }
 
 impl<'a> PartialEq<&str> for NtfsString<'a> {
     fn eq(&self, other: &&str) -> bool {
-        self.cmp_str(other) == Ordering::Equal
+        NtfsString::cmp_iter(self.u16_iter(), other.encode_utf16()) == Ordering::Equal
     }
 }
 
 impl<'a> PartialEq<NtfsString<'a>> for &str {
     fn eq(&self, other: &NtfsString<'a>) -> bool {
-        other.cmp_str(self) == Ordering::Equal
+        NtfsString::cmp_iter(self.encode_utf16(), other.u16_iter()) == Ordering::Equal
     }
 }
 
@@ -140,24 +134,24 @@ impl<'a> PartialOrd for NtfsString<'a> {
 
 impl<'a> PartialOrd<str> for NtfsString<'a> {
     fn partial_cmp(&self, other: &str) -> Option<Ordering> {
-        Some(self.cmp_str(other))
+        Some(NtfsString::cmp_iter(self.u16_iter(), other.encode_utf16()))
     }
 }
 
 impl<'a> PartialOrd<NtfsString<'a>> for str {
     fn partial_cmp(&self, other: &NtfsString<'a>) -> Option<Ordering> {
-        Some(other.cmp_str(self))
+        Some(NtfsString::cmp_iter(self.encode_utf16(), other.u16_iter()))
     }
 }
 
 impl<'a> PartialOrd<&str> for NtfsString<'a> {
     fn partial_cmp(&self, other: &&str) -> Option<Ordering> {
-        Some(self.cmp_str(other))
+        Some(NtfsString::cmp_iter(self.u16_iter(), other.encode_utf16()))
     }
 }
 
 impl<'a> PartialOrd<NtfsString<'a>> for &str {
     fn partial_cmp(&self, other: &NtfsString<'a>) -> Option<Ordering> {
-        Some(other.cmp_str(self))
+        Some(NtfsString::cmp_iter(self.encode_utf16(), other.u16_iter()))
     }
 }
