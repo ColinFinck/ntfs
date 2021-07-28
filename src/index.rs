@@ -41,7 +41,7 @@ where
         })
     }
 
-    pub fn iter<'i>(&'i self) -> Result<NtfsIndexEntries<'n, 'f, 'i, E>> {
+    pub fn iter<'i>(&'i self) -> NtfsIndexEntries<'n, 'f, 'i, E> {
         NtfsIndexEntries::new(self)
     }
 }
@@ -65,15 +65,15 @@ impl<'n, 'f, 'i, E> NtfsIndexEntries<'n, 'f, 'i, E>
 where
     E: NtfsIndexEntryType,
 {
-    fn new(index: &'i NtfsIndex<'n, 'f, E>) -> Result<Self> {
+    fn new(index: &'i NtfsIndex<'n, 'f, E>) -> Self {
         let inner_iterators = vec![index.index_root.entry_ranges()];
         let following_entries = Vec::new();
 
-        Ok(Self {
+        Self {
             index,
             inner_iterators,
             following_entries,
-        })
+        }
     }
 
     pub fn next<'a, T>(&'a mut self, fs: &mut T) -> Option<Result<NtfsIndexEntry<'a, E>>>
