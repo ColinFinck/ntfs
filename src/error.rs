@@ -118,6 +118,8 @@ pub enum NtfsError {
         expected: &'static [u8],
         actual: [u8; 2],
     },
+    /// The Upcase Table should have a size of {expected} bytes, but it has {actual} bytes
+    InvalidUpcaseTableSize { expected: u64, actual: u64 },
     /// The VCN {vcn} read from the NTFS data run header at byte position {position:#010x} cannot be added to the LCN {previous_lcn} calculated from previous data runs
     InvalidVcnInDataRunHeader {
         position: u64,

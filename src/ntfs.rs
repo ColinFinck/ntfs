@@ -6,6 +6,7 @@ use crate::boot_sector::BootSector;
 use crate::error::{NtfsError, Result};
 use crate::ntfs_file::{KnownNtfsFile, NtfsFile};
 use crate::structured_values::{NtfsVolumeInformation, NtfsVolumeName};
+use crate::upcase_table::UpcaseTable;
 use binread::io::{Read, Seek, SeekFrom};
 use binread::BinReaderExt;
 
@@ -23,6 +24,8 @@ pub struct Ntfs {
     file_record_size: u32,
     /// Serial number of the NTFS volume.
     serial_number: u64,
+    /// Table of Unicode uppercase characters (only required for case-insensitive comparisons).
+    upcase_table: Option<UpcaseTable>,
 }
 
 impl Ntfs {
@@ -42,6 +45,7 @@ impl Ntfs {
         let mft_position = 0;
         let file_record_size = bpb.file_record_size()?;
         let serial_number = bpb.serial_number();
+        let upcase_table = None;
 
         let mut ntfs = Self {
             cluster_size,
@@ -50,6 +54,7 @@ impl Ntfs {
             mft_position,
             file_record_size,
             serial_number,
+            upcase_table,
         };
         ntfs.mft_position = bpb.mft_lcn().position(&ntfs)?;
 
@@ -88,6 +93,19 @@ impl Ntfs {
         NtfsFile::new(&self, fs, position)
     }
 
+    /// Reads the $UpCase file from the filesystem and stores it in this [`Ntfs`] object.
+    ///
+    /// This function only needs to be called if case-insensitive comparisons are later performed
+    /// (i.e. finding files).
+    pub fn read_upcase_table<T>(&mut self, fs: &mut T) -> Result<()>
+    where
+        T: Read + Seek,
+    {
+        let upcase_table = UpcaseTable::read(self, fs)?;
+        self.upcase_table = Some(upcase_table);
+        Ok(())
+    }
+
     /// Returns the root [`Dir`] of this NTFS volume.
     pub fn root_dir(&self) -> ! {
         panic!("TODO")
@@ -106,6 +124,17 @@ impl Ntfs {
     /// Returns the partition size in bytes.
     pub fn size(&self) -> u64 {
         self.size
+    }
+
+    /// Returns the stored [`UpcaseTable`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if [`read_upcase_table`][Ntfs::read_upcase_table] had not been called.
+    pub(crate) fn upcase_table(&self) -> &UpcaseTable {
+        self.upcase_table
+            .as_ref()
+            .expect("You need to call read_upcase_table first")
     }
 
     /// Returns an [`NtfsVolumeInformation`] containing general information about

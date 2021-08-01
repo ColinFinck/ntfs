@@ -7,6 +7,7 @@ use crate::indexes::NtfsIndexEntryType;
 use crate::structured_values::{NtfsIndexAllocation, NtfsIndexRoot};
 use alloc::vec::Vec;
 use binread::io::{Read, Seek};
+use core::cmp::Ordering;
 use core::marker::PhantomData;
 
 pub struct NtfsIndex<'n, 'f, E>
@@ -41,6 +42,12 @@ where
         })
     }
 
+    /// Returns an [`NtfsIndexFinder`] structure to efficiently find an entry in this index.
+    pub fn finder<'i>(&'i self) -> NtfsIndexFinder<'n, 'f, 'i, E> {
+        NtfsIndexFinder::new(self)
+    }
+
+    /// Returns an [`NtfsIndexEntries`] iterator to perform an in-order traversal of this index.
     pub fn iter<'i>(&'i self) -> NtfsIndexEntries<'n, 'f, 'i, E> {
         NtfsIndexEntries::new(self)
     }
@@ -150,5 +157,93 @@ where
         let iter = self.inner_iterators.last().unwrap();
         let entry = entry_range.to_entry(iter.data());
         Some(Ok(entry))
+    }
+}
+
+/// Helper structure to efficiently find an entry in an index, created by [`NtfsIndex::finder`].
+///
+/// This helper is required, because the returned entry borrows from the iterator it was created from.
+/// The idea is that you copy the field(s) you need from the returned entry and then drop the entry and the finder.
+pub struct NtfsIndexFinder<'n, 'f, 'i, E>
+where
+    E: NtfsIndexEntryType,
+{
+    index: &'i NtfsIndex<'n, 'f, E>,
+    inner_iterator: IndexNodeEntryRanges<E>,
+}
+
+impl<'n, 'f, 'i, E> NtfsIndexFinder<'n, 'f, 'i, E>
+where
+    E: NtfsIndexEntryType,
+{
+    fn new(index: &'i NtfsIndex<'n, 'f, E>) -> Self {
+        // This is superfluous and done again in `find`, but doesn't justify using an `Option` here.
+        let inner_iterator = index.index_root.entry_ranges();
+
+        Self {
+            index,
+            inner_iterator,
+        }
+    }
+
+    /// Finds an entry in this index using the given comparison function and returns an [`NtfsIndexEntry`]
+    /// (if there is one).
+    pub fn find<'a, T, F>(&'a mut self, fs: &mut T, cmp: F) -> Option<Result<NtfsIndexEntry<'a, E>>>
+    where
+        T: Read + Seek,
+        F: Fn(&E::KeyType) -> Ordering,
+    {
+        // Always (re)start by iterating through the Index Root entry ranges.
+        self.inner_iterator = self.index.index_root.entry_ranges();
+
+        loop {
+            // Get the next entry.
+            //
+            // A textbook B-tree search algorithm would get the middle entry and perform binary search.
+            // But we can't do that here, as we are dealing with variable-length entries.
+            let entry_range = self.inner_iterator.next()?;
+            let entry = entry_range.to_entry(self.inner_iterator.data());
+
+            // Check if this entry has a key.
+            if let Some(key) = entry.key() {
+                // The entry has a key, so compare it using the given function.
+                let key = iter_try!(key);
+
+                match cmp(&key) {
+                    Ordering::Equal => {
+                        // We found what we were looking for!
+                        // Recreate `entry` from the last `self.inner_iterator` to please the borrow checker.
+                        let entry = entry_range.to_entry(self.inner_iterator.data());
+                        return Some(Ok(entry));
+                    }
+                    Ordering::Less => {
+                        // What we are looking for comes BEFORE this entry.
+                        // Hence, it must be in a subnode of this entry and we continue below.
+                    }
+                    Ordering::Greater => {
+                        // What we are looking for comes AFTER this entry.
+                        // Keep searching on the same subnode level.
+                        continue;
+                    }
+                }
+            }
+
+            // Either this entry has no key (= is the last one on this subnode level) or
+            // it comes lexicographically AFTER what we're looking for.
+            // In both cases, we have to continue iterating in the subnode of this entry (if there is any).
+            let subnode_vcn = entry.subnode_vcn()?;
+            let index_allocation =
+                iter_try!(self.index.index_allocation.as_ref().ok_or_else(|| {
+                    NtfsError::MissingIndexAllocation {
+                        position: self.index.index_root.position(),
+                    }
+                }));
+            let subnode = iter_try!(index_allocation.record_from_vcn(
+                fs,
+                &self.index.index_root,
+                subnode_vcn
+            ));
+            self.inner_iterator = subnode.into_entry_ranges();
+        }
     }
 }

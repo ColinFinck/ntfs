@@ -27,6 +27,7 @@ pub mod structured_values;
 mod time;
 mod traits;
 mod types;
+mod upcase_table;
 
 pub use crate::attribute::*;
 pub use crate::attribute_value::*;
