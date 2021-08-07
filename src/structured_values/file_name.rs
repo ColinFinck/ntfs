@@ -10,7 +10,7 @@ use crate::structured_values::{
     NtfsFileAttributeFlags, NtfsStructuredValue, NtfsStructuredValueFromSlice,
 };
 use crate::time::NtfsTime;
-use alloc::vec::Vec;
+use arrayvec::ArrayVec;
 use binread::io::Cursor;
 use binread::{BinRead, BinReaderExt};
 use core::mem;
@@ -21,6 +21,10 @@ const FILE_NAME_HEADER_SIZE: usize = 66;
 
 /// The smallest FileName attribute has a name containing just a single character.
 const FILE_NAME_MIN_SIZE: usize = FILE_NAME_HEADER_SIZE + mem::size_of::<u16>();
+
+/// The "name" stored in the FileName attribute has an `u8` length field specifying the number of UTF-16 code points.
+/// Hence, the name occupies up to 510 bytes.
+const NAME_MAX_SIZE: usize = (u8::MAX as usize) * mem::size_of::<u16>();
 
 #[allow(unused)]
 #[derive(BinRead, Clone, Debug)]
@@ -50,7 +54,7 @@ pub enum NtfsFileNamespace {
 #[derive(Clone, Debug)]
 pub struct NtfsFileName {
     header: FileNameHeader,
-    name: Vec<u8>,
+    name: ArrayVec<u8, NAME_MAX_SIZE>,
 }
 
 impl NtfsFileName {
@@ -104,7 +108,7 @@ impl NtfsFileName {
         debug_assert!(self.name.is_empty());
         let start = FILE_NAME_HEADER_SIZE;
         let end = start + self.name_length();
-        self.name.extend_from_slice(&data[start..end]);
+        self.name.try_extend_from_slice(&data[start..end]).unwrap();
     }
 
     fn validate_name_length(&self, data_size: usize, position: u64) -> Result<()> {
@@ -154,7 +158,7 @@ impl<'s> NtfsStructuredValueFromSlice<'s> for NtfsFileName {
 
         let mut file_name = Self {
             header,
-            name: Vec::new(),
+            name: ArrayVec::new(),
         };
         file_name.validate_name_length(slice.len(), position)?;
         file_name.validate_namespace(position)?;

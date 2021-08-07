@@ -7,6 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+arrayvec = { version = "0.7.1", default-features = false }
 binread = { version = "2.1.1", features = ["const_generics"], default-features = false }
 byteorder = { version = "1.4.3", default-features = false }
 bitflags = "1.2.1"
@@ -17,4 +18,4 @@ memoffset = "0.6.4"
 
 [features]
 default = ["std"]
-std = ["binread/std", "byteorder/std"]
+std = ["arrayvec/std", "binread/std", "byteorder/std"]

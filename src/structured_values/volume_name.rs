@@ -5,7 +5,7 @@ use crate::attribute::NtfsAttributeType;
 use crate::error::{NtfsError, Result};
 use crate::string::NtfsString;
 use crate::structured_values::{NtfsStructuredValue, NtfsStructuredValueFromSlice};
-use alloc::vec::Vec;
+use arrayvec::ArrayVec;
 use core::mem;
 
 /// The smallest VolumeName attribute has a name containing just a single character.
@@ -16,7 +16,7 @@ const VOLUME_NAME_MAX_SIZE: usize = 128 * mem::size_of::<u16>();
 
 #[derive(Clone, Debug)]
 pub struct NtfsVolumeName {
-    name: Vec<u8>,
+    name: ArrayVec<u8, VOLUME_NAME_MAX_SIZE>,
 }
 
 impl NtfsVolumeName {
@@ -55,7 +55,9 @@ impl<'s> NtfsStructuredValueFromSlice<'s> for NtfsVolumeName {
             });
         }
 
-        let name = slice.to_vec();
+        let mut name = ArrayVec::new();
+        name.try_extend_from_slice(slice).unwrap();
+
         Ok(Self { name })
     }
 }
