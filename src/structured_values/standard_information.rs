@@ -125,16 +125,14 @@ impl<'s> NtfsStructuredValueFromSlice<'s> for NtfsStandardInformation {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::file::KnownNtfsFile;
     use crate::ntfs::Ntfs;
-    use crate::ntfs_file::KnownNtfsFile;
 
     #[test]
     fn test_standard_information() {
         let mut testfs1 = crate::helpers::tests::testfs1();
         let ntfs = Ntfs::new(&mut testfs1).unwrap();
-        let mft = ntfs
-            .ntfs_file(&mut testfs1, KnownNtfsFile::MFT as u64)
-            .unwrap();
+        let mft = ntfs.file(&mut testfs1, KnownNtfsFile::MFT as u64).unwrap();
         let mut mft_attributes = mft.attributes();
 
         // Check the StandardInformation attribute of the MFT.

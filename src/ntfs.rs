@@ -4,7 +4,7 @@
 use crate::attribute::NtfsAttributeType;
 use crate::boot_sector::BootSector;
 use crate::error::{NtfsError, Result};
-use crate::ntfs_file::{KnownNtfsFile, NtfsFile};
+use crate::file::{KnownNtfsFile, NtfsFile};
 use crate::structured_values::{NtfsVolumeInformation, NtfsVolumeName};
 use crate::upcase_table::UpcaseTable;
 use binread::io::{Read, Seek, SeekFrom};
@@ -66,10 +66,6 @@ impl Ntfs {
         self.cluster_size
     }
 
-    pub fn file_record_size(&self) -> u32 {
-        self.file_record_size
-    }
-
     /// Returns the [`NtfsFile`] for the `n`-th NTFS file record.
     ///
     /// The first few NTFS files have fixed indexes and contain filesystem
@@ -79,7 +75,7 @@ impl Ntfs {
     /// - Check if `n` can be u32 instead of u64.
     /// - Check if `n` should be in a newtype, with easier conversion from
     ///   KnownNtfsFile.
-    pub fn ntfs_file<'n, T>(&'n self, fs: &mut T, n: u64) -> Result<NtfsFile<'n>>
+    pub fn file<'n, T>(&'n self, fs: &mut T, n: u64) -> Result<NtfsFile<'n>>
     where
         T: Read + Seek,
     {
@@ -91,6 +87,10 @@ impl Ntfs {
             .checked_add(offset)
             .ok_or(NtfsError::InvalidFile { n })?;
         NtfsFile::new(&self, fs, position)
+    }
+
+    pub fn file_record_size(&self) -> u32 {
+        self.file_record_size
     }
 
     /// Reads the $UpCase file from the filesystem and stores it in this [`Ntfs`] object.
@@ -143,7 +143,7 @@ impl Ntfs {
     where
         T: Read + Seek,
     {
-        let volume_file = self.ntfs_file(fs, KnownNtfsFile::Volume as u64)?;
+        let volume_file = self.file(fs, KnownNtfsFile::Volume as u64)?;
         let attribute = volume_file
             .attributes()
             .find(|attribute| {
@@ -168,7 +168,7 @@ impl Ntfs {
     where
         T: Read + Seek,
     {
-        let volume_file = iter_try!(self.ntfs_file(fs, KnownNtfsFile::Volume as u64));
+        let volume_file = iter_try!(self.file(fs, KnownNtfsFile::Volume as u64));
         let attribute = volume_file.attributes().find(|attribute| {
             // TODO: Replace by attribute.ty().contains() once https://github.com/rust-lang/rust/issues/62358 has landed.
             attribute

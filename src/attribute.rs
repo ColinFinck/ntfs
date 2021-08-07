@@ -5,7 +5,7 @@ use crate::attribute_value::{
     NtfsAttributeValue, NtfsNonResidentAttributeValue, NtfsResidentAttributeValue,
 };
 use crate::error::{NtfsError, Result};
-use crate::ntfs_file::NtfsFile;
+use crate::file::NtfsFile;
 use crate::string::NtfsString;
 use crate::structured_values::{
     NtfsStructuredValueFromNonResidentAttributeValue, NtfsStructuredValueFromSlice,
