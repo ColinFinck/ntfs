@@ -233,7 +233,7 @@ where
 
         // Get the current entry.
         let start = self.range.start;
-        let position = self.position + self.range.start as u64;
+        let position = self.position;
         let entry = NtfsIndexEntry::<'_, E>::new(&self.data[start..], position);
         let end = start + entry.index_entry_length() as usize;
 
@@ -245,6 +245,7 @@ where
             // This is not the last entry.
             // Advance our iterator to the next entry.
             self.range.start = end;
+            self.position += entry.index_entry_length() as u64;
         }
 
         Some(IndexEntryRange::new(start..end, position))
