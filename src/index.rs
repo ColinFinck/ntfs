@@ -250,3 +250,76 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::indexes::NtfsFileNameIndex;
+    use crate::ntfs::Ntfs;
+
+    #[test]
+    fn test_index_find() {
+        let mut testfs1 = crate::helpers::tests::testfs1();
+        let mut ntfs = Ntfs::new(&mut testfs1).unwrap();
+        ntfs.read_upcase_table(&mut testfs1).unwrap();
+        let root_dir = ntfs.root_directory(&mut testfs1).unwrap();
+
+        // Find the "many_subdirs" subdirectory.
+        let root_dir_index = root_dir.directory_index(&mut testfs1).unwrap();
+        let mut root_dir_finder = root_dir_index.finder();
+        let entry =
+            NtfsFileNameIndex::find(&mut root_dir_finder, &ntfs, &mut testfs1, "many_subdirs")
+                .unwrap()
+                .unwrap();
+        let subdir = entry.to_file(&ntfs, &mut testfs1).unwrap();
+
+        // Prove that we can find all 512 indexed subdirectories.
+        let subdir_index = subdir.directory_index(&mut testfs1).unwrap();
+        let mut subdir_finder = subdir_index.finder();
+
+        for i in 1..=512 {
+            let dir_name = format!("{}", i);
+            let entry = NtfsFileNameIndex::find(&mut subdir_finder, &ntfs, &mut testfs1, &dir_name)
+                .unwrap()
+                .unwrap();
+            let entry_name = entry.key().unwrap().unwrap();
+            assert_eq!(entry_name.name(), dir_name.as_str());
+        }
+    }
+
+    #[test]
+    fn test_index_iter() {
+        let mut testfs1 = crate::helpers::tests::testfs1();
+        let mut ntfs = Ntfs::new(&mut testfs1).unwrap();
+        ntfs.read_upcase_table(&mut testfs1).unwrap();
+        let root_dir = ntfs.root_directory(&mut testfs1).unwrap();
+
+        // Find the "many_subdirs" subdirectory.
+        let root_dir_index = root_dir.directory_index(&mut testfs1).unwrap();
+        let mut root_dir_finder = root_dir_index.finder();
+        let entry =
+            NtfsFileNameIndex::find(&mut root_dir_finder, &ntfs, &mut testfs1, "many_subdirs")
+                .unwrap()
+                .unwrap();
+        let subdir = entry.to_file(&ntfs, &mut testfs1).unwrap();
+
+        // Prove that we can iterate through all 512 indexed subdirectories in order.
+        // Keep in mind that subdirectories are ordered like "1", "10", "100", "101", ...
+        // We can create the same order by adding them to a vector and sorting that vector.
+        let mut dir_names = Vec::with_capacity(512);
+        for i in 1..=512 {
+            dir_names.push(format!("{}", i));
+        }
+
+        dir_names.sort_unstable();
+
+        let subdir_index = subdir.directory_index(&mut testfs1).unwrap();
+        let mut subdir_iter = subdir_index.iter();
+
+        for dir_name in dir_names {
+            let entry = subdir_iter.next(&mut testfs1).unwrap().unwrap();
+            let entry_name = entry.key().unwrap().unwrap();
+            assert_eq!(entry_name.name(), dir_name.as_str());
+        }
+    }
+}
