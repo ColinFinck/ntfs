@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::error::{NtfsError, Result};
-use crate::index_entry::{IndexEntryRange, IndexNodeEntryRanges, NtfsIndexEntry};
+use crate::index_entry::{
+    IndexEntryRange, IndexNodeEntryRanges, NtfsIndexEntry, NtfsIndexEntryFlags,
+};
 use crate::indexes::NtfsIndexEntryType;
 use crate::structured_values::{NtfsIndexAllocation, NtfsIndexRoot};
 use alloc::vec::Vec;
@@ -136,8 +138,9 @@ where
                     // has been fully iterated.
                     self.inner_iterators.push(subnode_iter);
                     self.following_entries.push(entry_range);
-                } else {
-                    // There is no subnode, so our `entry` is next lexicographically.
+                } else if !entry.flags().contains(NtfsIndexEntryFlags::LAST_ENTRY) {
+                    // There is no subnode, and this is not the empty "last entry",
+                    // so our `entry` comes next lexicographically.
                     break entry_range;
                 }
             } else {
