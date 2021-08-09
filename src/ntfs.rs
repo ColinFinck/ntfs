@@ -106,9 +106,12 @@ impl Ntfs {
         Ok(())
     }
 
-    /// Returns the root [`Dir`] of this NTFS volume.
-    pub fn root_dir(&self) -> ! {
-        panic!("TODO")
+    /// Returns the root directory of this NTFS volume as an [`NtfsFile`].
+    pub fn root_directory<'n, T>(&'n self, fs: &mut T) -> Result<NtfsFile<'n>>
+    where
+        T: Read + Seek,
+    {
+        self.file(fs, KnownNtfsFile::RootDirectory as u64)
     }
 
     /// Returns the size of a single sector in bytes.
@@ -144,19 +147,7 @@ impl Ntfs {
         T: Read + Seek,
     {
         let volume_file = self.file(fs, KnownNtfsFile::Volume as u64)?;
-        let attribute = volume_file
-            .attributes()
-            .find(|attribute| {
-                // TODO: Replace by attribute.ty().contains() once https://github.com/rust-lang/rust/issues/62358 has landed.
-                attribute
-                    .ty()
-                    .map(|ty| ty == NtfsAttributeType::VolumeInformation)
-                    .unwrap_or(false)
-            })
-            .ok_or(NtfsError::AttributeNotFound {
-                position: volume_file.position(),
-                ty: NtfsAttributeType::VolumeName,
-            })?;
+        let attribute = volume_file.attribute_by_ty(NtfsAttributeType::VolumeInformation)?;
         attribute.resident_structured_value::<NtfsVolumeInformation>()
     }
 
@@ -169,13 +160,9 @@ impl Ntfs {
         T: Read + Seek,
     {
         let volume_file = iter_try!(self.file(fs, KnownNtfsFile::Volume as u64));
-        let attribute = volume_file.attributes().find(|attribute| {
-            // TODO: Replace by attribute.ty().contains() once https://github.com/rust-lang/rust/issues/62358 has landed.
-            attribute
-                .ty()
-                .map(|ty| ty == NtfsAttributeType::VolumeName)
-                .unwrap_or(false)
-        })?;
+        let attribute = volume_file
+            .attribute_by_ty(NtfsAttributeType::VolumeName)
+            .ok()?;
         let volume_name = iter_try!(attribute.resident_structured_value::<NtfsVolumeName>());
 
         Some(Ok(volume_name))
@@ -192,7 +179,7 @@ mod tests {
         let ntfs = Ntfs::new(&mut testfs1).unwrap();
         assert_eq!(ntfs.cluster_size(), 512);
         assert_eq!(ntfs.sector_size(), 512);
-        assert_eq!(ntfs.size(), 1049088);
+        assert_eq!(ntfs.size(), 2096640);
     }
 
     #[test]

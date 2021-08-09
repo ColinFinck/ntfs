@@ -132,6 +132,8 @@ pub enum NtfsError {
     LcnTooBig { lcn: Lcn },
     /// The index root at byte position {position:#010x} is a large index, but no matching index allocation attribute was provided
     MissingIndexAllocation { position: u64 },
+    /// The NTFS file at byte position {position:#010x} is not a directory.
+    NotADirectory { position: u64 },
     /// The NTFS attribute at byte position {position:#010x} has type {ty:?}, but a different type has been requested
     StructuredValueOfDifferentType {
         position: u64,

@@ -2,14 +2,18 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::error::Result;
+use crate::file::NtfsFile;
 use crate::file_reference::NtfsFileReference;
 use crate::indexes::{
     NtfsIndexEntryData, NtfsIndexEntryHasData, NtfsIndexEntryHasFileReference, NtfsIndexEntryKey,
     NtfsIndexEntryType,
 };
+use crate::ntfs::Ntfs;
 use crate::types::Vcn;
+use binread::io::{Read, Seek};
 use bitflags::bitflags;
 use byteorder::{ByteOrder, LittleEndian};
+use core::convert::TryInto;
 use core::iter::FusedIterator;
 use core::marker::PhantomData;
 use core::mem;
@@ -43,6 +47,7 @@ bitflags! {
     }
 }
 
+#[derive(Clone, Debug)]
 pub(crate) struct IndexEntryRange<E>
 where
     E: NtfsIndexEntryType,
@@ -128,6 +133,7 @@ where
         LittleEndian::read_u16(&self.slice[start..])
     }
 
+    /// Returns an [`NtfsFileReference`] for the file referenced by this index entry.
     pub fn file_reference(&self) -> NtfsFileReference
     where
         E: NtfsIndexEntryHasFileReference,
@@ -185,6 +191,15 @@ where
         let vcn = Vcn::from(LittleEndian::read_i64(&self.slice[start..]));
 
         Some(vcn)
+    }
+
+    /// Returns an [`NtfsFile`] for the file referenced by this index entry.
+    pub fn to_file<'n, T>(&self, ntfs: &'n Ntfs, fs: &mut T) -> Result<NtfsFile<'n>>
+    where
+        E: NtfsIndexEntryHasFileReference,
+        T: Read + Seek,
+    {
+        self.file_reference().to_file(ntfs, fs)
     }
 }
 

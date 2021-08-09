@@ -36,19 +36,7 @@ impl UpcaseTable {
     {
         // Lookup the $UpCase file and its $DATA attribute.
         let upcase_file = ntfs.file(fs, KnownNtfsFile::UpCase as u64)?;
-        let data_attribute = upcase_file
-            .attributes()
-            .find(|attribute| {
-                // TODO: Replace by attribute.ty().contains() once https://github.com/rust-lang/rust/issues/62358 has landed.
-                attribute
-                    .ty()
-                    .map(|ty| ty == NtfsAttributeType::Data)
-                    .unwrap_or(false)
-            })
-            .ok_or(NtfsError::AttributeNotFound {
-                position: upcase_file.position(),
-                ty: NtfsAttributeType::VolumeName,
-            })?;
+        let data_attribute = upcase_file.attribute_by_ty(NtfsAttributeType::Data)?;
         if data_attribute.value_length() != UPCASE_TABLE_SIZE {
             return Err(NtfsError::InvalidUpcaseTableSize {
                 expected: UPCASE_TABLE_SIZE,

@@ -1,10 +1,15 @@
 // Copyright 2021 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use crate::attribute::NtfsAttributes;
+use crate::attribute::{NtfsAttribute, NtfsAttributeType, NtfsAttributes};
 use crate::error::{NtfsError, Result};
+use crate::index::NtfsIndex;
+use crate::indexes::NtfsFileNameIndex;
 use crate::ntfs::Ntfs;
 use crate::record::{Record, RecordHeader};
+use crate::structured_values::{
+    NtfsFileName, NtfsIndexAllocation, NtfsIndexRoot, NtfsStandardInformation,
+};
 use binread::io::{Read, Seek, SeekFrom};
 use bitflags::bitflags;
 use byteorder::{ByteOrder, LittleEndian};
@@ -77,8 +82,108 @@ impl<'n> NtfsFile<'n> {
         LittleEndian::read_u32(&self.record.data()[start..])
     }
 
+    /// Returns the first attribute of the given type, or `NtfsError::AttributeNotFound`.
+    pub(crate) fn attribute_by_ty<'f>(
+        &'f self,
+        ty: NtfsAttributeType,
+    ) -> Result<NtfsAttribute<'n, 'f>> {
+        self.attributes()
+            .find(|attribute| {
+                // TODO: Replace by attribute.ty().contains() once https://github.com/rust-lang/rust/issues/62358 has landed.
+                attribute.ty().map(|x| x == ty).unwrap_or(false)
+            })
+            .ok_or(NtfsError::AttributeNotFound {
+                position: self.position(),
+                ty,
+            })
+    }
+
     pub fn attributes<'f>(&'f self) -> NtfsAttributes<'n, 'f> {
         NtfsAttributes::new(self)
+    }
+
+    /// Convenience function to get a $DATA attribute of this file.
+    ///
+    /// As NTFS supports multiple data streams per file, you can optionally specify a data stream
+    /// name and NTFS will look up the corresponding $DATA attribute.
+    /// If you specify `None` for `data_stream_name`, the default unnamed $DATA attribute will be looked
+    /// up (commonly known as the "file data").
+    ///
+    /// If you need more control over which $DATA attribute is available and picked up,
+    /// you can use [`NtfsFile::attributes`] to iterate over all attributes of this file.
+    pub fn data<'f>(
+        &'f self,
+        data_stream_name: Option<&str>,
+    ) -> Option<Result<NtfsAttribute<'n, 'f>>> {
+        // Create an iterator that emits all $DATA attributes.
+        let iter = self.attributes().filter(|attribute| {
+            // TODO: Replace by attribute.ty().contains() once https://github.com/rust-lang/rust/issues/62358 has landed.
+            attribute
+                .ty()
+                .map(|ty| ty == NtfsAttributeType::Data)
+                .unwrap_or(false)
+        });
+
+        for attribute in iter {
+            match (attribute.name(), data_stream_name) {
+                (None, None) => {
+                    // We found the unnamed $DATA attribute and are looking for the unnamed $DATA attribute.
+                    return Some(Ok(attribute));
+                }
+                (Some(Ok(name)), Some(data_stream_name)) => {
+                    // We found a named $DATA attribute and are looking for a named $DATA attribute.
+                    if data_stream_name == name {
+                        return Some(Ok(attribute));
+                    }
+                }
+                (Some(Err(e)), _) => {
+                    // We hit an error while fetching the $DATA attribute name.
+                    return Some(Err(e));
+                }
+                _ => {
+                    // In any other case, we didn't find what we are looking for.
+                    continue;
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Convenience function to return an [`NtfsIndex`] if this file is a directory.
+    ///
+    /// Apart from any propagated error, this function may return [`NtfsError::NotADirectory`]
+    /// if this [`NtfsFile`] is not a directory.
+    ///
+    /// If you need more control over the picked up $INDEX_ROOT and $INDEX_ALLOCATION attributes
+    /// you can use [`NtfsFile::attributes`] to iterate over all attributes of this file.
+    pub fn directory_index<'f, T>(
+        &'f self,
+        fs: &mut T,
+    ) -> Result<NtfsIndex<'n, 'f, NtfsFileNameIndex>>
+    where
+        T: Read + Seek,
+    {
+        if !self.flags().contains(NtfsFileFlags::IS_DIRECTORY) {
+            return Err(NtfsError::NotADirectory {
+                position: self.position(),
+            });
+        }
+
+        // Get the Index Root attribute that needs to exist.
+        let index_root = self
+            .attribute_by_ty(NtfsAttributeType::IndexRoot)?
+            .resident_structured_value::<NtfsIndexRoot>()?;
+
+        // Get the Index Allocation attribute that is only required for large indexes.
+        let index_allocation_attribute = self.attribute_by_ty(NtfsAttributeType::IndexAllocation);
+        let index_allocation = if let Ok(attribute) = index_allocation_attribute {
+            Some(attribute.non_resident_structured_value::<_, NtfsIndexAllocation>(fs)?)
+        } else {
+            None
+        };
+
+        NtfsIndex::<NtfsFileNameIndex>::new(index_root, index_allocation)
     }
 
     pub(crate) fn first_attribute_offset(&self) -> u16 {
@@ -95,6 +200,25 @@ impl<'n> NtfsFile<'n> {
     pub fn hard_link_count(&self) -> u16 {
         let start = offset_of!(FileRecordHeader, hard_link_count);
         LittleEndian::read_u16(&self.record.data()[start..])
+    }
+
+    /// Convenience function to get the $STANDARD_INFORMATION attribute of this file
+    /// (see [`NtfsStandardInformation`]).
+    ///
+    /// This internally calls [`NtfsFile::attributes`] to iterate through the file's
+    /// attributes and pick up the first $STANDARD_INFORMATION attribute.
+    pub fn info(&self) -> Result<NtfsStandardInformation> {
+        let attribute = self.attribute_by_ty(NtfsAttributeType::StandardInformation)?;
+        attribute.resident_structured_value::<NtfsStandardInformation>()
+    }
+
+    /// Convenience function to get the $FILE_NAME attribute of this file (see [`NtfsFileName`]).
+    ///
+    /// This internally calls [`NtfsFile::attributes`] to iterate through the file's
+    /// attributes and pick up the first $FILE_NAME attribute.
+    pub fn name(&self) -> Result<NtfsFileName> {
+        let attribute = self.attribute_by_ty(NtfsAttributeType::FileName)?;
+        attribute.resident_structured_value::<NtfsFileName>()
     }
 
     pub(crate) fn ntfs(&self) -> &'n Ntfs {
