@@ -29,7 +29,7 @@ const NAME_MAX_SIZE: usize = (u8::MAX as usize) * mem::size_of::<u16>();
 #[allow(unused)]
 #[derive(BinRead, Clone, Debug)]
 struct FileNameHeader {
-    parent_directory_ref: NtfsFileReference,
+    parent_directory_reference: NtfsFileReference,
     creation_time: NtfsTime,
     modification_time: NtfsTime,
     mft_record_modification_time: NtfsTime,
@@ -102,6 +102,10 @@ impl NtfsFileName {
     /// if it's an unknown namespace.
     pub fn namespace(&self) -> NtfsFileNamespace {
         NtfsFileNamespace::n(self.header.namespace).unwrap()
+    }
+
+    pub fn parent_directory_reference(&self) -> NtfsFileReference {
+        self.header.parent_directory_reference
     }
 
     fn read_name(&mut self, data: &[u8]) {

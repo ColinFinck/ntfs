@@ -134,8 +134,7 @@ where
     {
         // The "file_reference_data" is at the same position as the `data_offset`, `data_length`, and `padding` fields.
         // There can either be extra data or a file reference!
-        let file_reference_data = LittleEndian::read_u64(self.slice);
-        NtfsFileReference::new(file_reference_data)
+        NtfsFileReference::new(self.slice[..mem::size_of::<u64>()].try_into().unwrap())
     }
 
     pub fn flags(&self) -> NtfsIndexEntryFlags {
