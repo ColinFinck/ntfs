@@ -3,7 +3,7 @@
 
 use crate::attribute::NtfsAttributeType;
 use crate::error::{NtfsError, Result};
-use crate::file::KnownNtfsFile;
+use crate::file::KnownNtfsFileRecordNumber;
 use crate::ntfs::Ntfs;
 use crate::traits::NtfsReadSeek;
 use binread::io::{Read, Seek};
@@ -35,7 +35,7 @@ impl UpcaseTable {
         T: Read + Seek,
     {
         // Lookup the $UpCase file and its $DATA attribute.
-        let upcase_file = ntfs.file(fs, KnownNtfsFile::UpCase as u64)?;
+        let upcase_file = ntfs.file(fs, KnownNtfsFileRecordNumber::UpCase as u64)?;
         let data_attribute = upcase_file.attribute_by_ty(NtfsAttributeType::Data)?;
         if data_attribute.value_length() != UPCASE_TABLE_SIZE {
             return Err(NtfsError::InvalidUpcaseTableSize {

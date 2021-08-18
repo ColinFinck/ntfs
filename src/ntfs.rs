@@ -4,7 +4,7 @@
 use crate::attribute::NtfsAttributeType;
 use crate::boot_sector::BootSector;
 use crate::error::{NtfsError, Result};
-use crate::file::{KnownNtfsFile, NtfsFile};
+use crate::file::{KnownNtfsFileRecordNumber, NtfsFile};
 use crate::structured_values::{NtfsVolumeInformation, NtfsVolumeName};
 use crate::upcase_table::UpcaseTable;
 use binread::io::{Read, Seek, SeekFrom};
@@ -66,26 +66,21 @@ impl Ntfs {
         self.cluster_size
     }
 
-    /// Returns the [`NtfsFile`] for the `n`-th NTFS file record.
+    /// Returns the [`NtfsFile`] for the given NTFS file record number.
     ///
     /// The first few NTFS files have fixed indexes and contain filesystem
-    /// management information (see the [`KnownNtfsFile`] enum).
-    ///
-    /// TODO:
-    /// - Check if `n` can be u32 instead of u64.
-    /// - Check if `n` should be in a newtype, with easier conversion from
-    ///   KnownNtfsFile.
-    pub fn file<'n, T>(&'n self, fs: &mut T, n: u64) -> Result<NtfsFile<'n>>
+    /// management information (see the [`KnownNtfsFileRecordNumber`] enum).
+    pub fn file<'n, T>(&'n self, fs: &mut T, file_record_number: u64) -> Result<NtfsFile<'n>>
     where
         T: Read + Seek,
     {
-        let offset = n
+        let offset = file_record_number
             .checked_mul(self.file_record_size as u64)
-            .ok_or(NtfsError::InvalidFile { n })?;
+            .ok_or(NtfsError::InvalidFileRecordNumber { file_record_number })?;
         let position = self
             .mft_position
             .checked_add(offset)
-            .ok_or(NtfsError::InvalidFile { n })?;
+            .ok_or(NtfsError::InvalidFileRecordNumber { file_record_number })?;
         NtfsFile::new(&self, fs, position)
     }
 
@@ -111,7 +106,7 @@ impl Ntfs {
     where
         T: Read + Seek,
     {
-        self.file(fs, KnownNtfsFile::RootDirectory as u64)
+        self.file(fs, KnownNtfsFileRecordNumber::RootDirectory as u64)
     }
 
     /// Returns the size of a single sector in bytes.
@@ -146,7 +141,7 @@ impl Ntfs {
     where
         T: Read + Seek,
     {
-        let volume_file = self.file(fs, KnownNtfsFile::Volume as u64)?;
+        let volume_file = self.file(fs, KnownNtfsFileRecordNumber::Volume as u64)?;
         let attribute = volume_file.attribute_by_ty(NtfsAttributeType::VolumeInformation)?;
         attribute.resident_structured_value::<NtfsVolumeInformation>()
     }
@@ -159,7 +154,7 @@ impl Ntfs {
     where
         T: Read + Seek,
     {
-        let volume_file = iter_try!(self.file(fs, KnownNtfsFile::Volume as u64));
+        let volume_file = iter_try!(self.file(fs, KnownNtfsFileRecordNumber::Volume as u64));
         let attribute = volume_file
             .attribute_by_ty(NtfsAttributeType::VolumeName)
             .ok()?;

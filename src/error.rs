@@ -39,14 +39,14 @@ pub enum NtfsError {
     },
     /// The cluster count {cluster_count} is too big
     InvalidClusterCount { cluster_count: u64 },
-    /// The requested NTFS file {n} is invalid
-    InvalidFile { n: u64 },
     /// The NTFS file record at byte position {position:#010x} indicates an allocated size of {expected} bytes, but the record only has a size of {actual} bytes
     InvalidFileAllocatedSize {
         position: u64,
         expected: u32,
         actual: u32,
     },
+    /// The requested NTFS file record number {file_record_number} is invalid
+    InvalidFileRecordNumber { file_record_number: u64 },
     /// The NTFS file record at byte position {position:#010x} should have signature {expected:?}, but it has signature {actual:?}
     InvalidFileSignature {
         position: u64,

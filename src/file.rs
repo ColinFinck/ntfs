@@ -16,7 +16,7 @@ use byteorder::{ByteOrder, LittleEndian};
 use memoffset::offset_of;
 
 #[repr(u64)]
-pub enum KnownNtfsFile {
+pub enum KnownNtfsFileRecordNumber {
     MFT = 0,
     MFTMirr = 1,
     LogFile = 2,
