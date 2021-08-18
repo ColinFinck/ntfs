@@ -12,6 +12,7 @@ use binread::io::{Read, Seek};
 use core::cmp::Ordering;
 use core::marker::PhantomData;
 
+#[derive(Clone, Debug)]
 pub struct NtfsIndex<'n, 'f, E>
 where
     E: NtfsIndexEntryType,
@@ -61,6 +62,7 @@ where
 ///   returning an [`NtfsIndexEntry`] for each entry.
 ///
 /// See [`NtfsIndexEntriesAttached`] for an iterator that implements [`Iterator`] and [`FusedIterator`].
+#[derive(Clone, Debug)]
 pub struct NtfsIndexEntries<'n, 'f, 'i, E>
 where
     E: NtfsIndexEntryType,
@@ -115,6 +117,7 @@ where
             if let Some(entry_range) = iter.next() {
                 // Convert that `IndexEntryRange` to a (lifetime-bound) `NtfsIndexEntry`.
                 let entry = entry_range.to_entry(iter.data());
+                let is_last_entry = entry.flags().contains(NtfsIndexEntryFlags::LAST_ENTRY);
 
                 // Does this entry have a subnode that needs to be iterated first?
                 if let Some(subnode_vcn) = entry.subnode_vcn() {
@@ -132,13 +135,16 @@ where
                     ));
                     let subnode_iter = subnode.into_entry_ranges();
 
-                    // Save this subnode's iterator and the entry range.
-                    // We'll pick up the iterator through `self.inner_iterators.last_mut()` in the
-                    // next loop iteration, and we will return that entry as soon as the subnode iterator
-                    // has been fully iterated.
+                    // Save this subnode's iterator.
+                    // We'll pick it up through `self.inner_iterators.last_mut()` in the next loop iteration.
                     self.inner_iterators.push(subnode_iter);
-                    self.following_entries.push(entry_range);
-                } else if !entry.flags().contains(NtfsIndexEntryFlags::LAST_ENTRY) {
+
+                    if !is_last_entry {
+                        // This is not the empty "last entry", so save it as well.
+                        // We'll pick it up again after the subnode iterator has been fully iterated.
+                        self.following_entries.push(entry_range);
+                    }
+                } else if !is_last_entry {
                     // There is no subnode, and this is not the empty "last entry",
                     // so our `entry` comes next lexicographically.
                     break entry_range;
@@ -321,5 +327,7 @@ mod tests {
             let entry_name = entry.key().unwrap().unwrap();
             assert_eq!(entry_name.name(), dir_name.as_str());
         }
+
+        assert!(subdir_iter.next(&mut testfs1).is_none());
     }
 }

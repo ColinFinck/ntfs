@@ -203,6 +203,7 @@ where
     }
 }
 
+#[derive(Clone, Debug)]
 pub(crate) struct IndexNodeEntryRanges<E>
 where
     E: NtfsIndexEntryType,
@@ -248,7 +249,7 @@ where
         // Get the current entry.
         let start = self.range.start;
         let position = self.position;
-        let entry = NtfsIndexEntry::<'_, E>::new(&self.data[start..], position);
+        let entry = NtfsIndexEntry::<E>::new(&self.data[start..], position);
         let end = start + entry.index_entry_length() as usize;
 
         if entry.flags().contains(NtfsIndexEntryFlags::LAST_ENTRY) {
