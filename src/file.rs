@@ -68,10 +68,10 @@ impl<'n> NtfsFile<'n> {
         fs.read_exact(&mut data)?;
 
         let mut record = Record::new(ntfs, data, position);
+        Self::validate_signature(&record)?;
         record.fixup()?;
 
         let file = Self { record };
-        file.validate_signature()?;
         file.validate_sizes()?;
 
         Ok(file)
@@ -243,15 +243,15 @@ impl<'n> NtfsFile<'n> {
         LittleEndian::read_u32(&self.record.data()[start..])
     }
 
-    fn validate_signature(&self) -> Result<()> {
-        let signature = &self.record.signature();
+    fn validate_signature(record: &Record) -> Result<()> {
+        let signature = &record.signature();
         let expected = b"FILE";
 
         if signature == expected {
             Ok(())
         } else {
             Err(NtfsError::InvalidFileSignature {
-                position: self.record.position(),
+                position: record.position(),
                 expected,
                 actual: *signature,
             })

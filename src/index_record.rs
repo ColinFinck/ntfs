@@ -58,10 +58,10 @@ impl<'n> NtfsIndexRecord<'n> {
         value.read_exact(fs, &mut data)?;
 
         let mut record = Record::new(value.ntfs(), data, data_position);
+        Self::validate_signature(&record)?;
         record.fixup()?;
 
         let index_record = Self { record };
-        index_record.validate_signature()?;
         index_record.validate_sizes()?;
 
         Ok(index_record)
@@ -116,15 +116,15 @@ impl<'n> NtfsIndexRecord<'n> {
         IndexNodeEntryRanges::new(self.record.into_data(), entries_range, position)
     }
 
-    fn validate_signature(&self) -> Result<()> {
-        let signature = &self.record.signature();
+    fn validate_signature(record: &Record) -> Result<()> {
+        let signature = &record.signature();
         let expected = b"INDX";
 
         if signature == expected {
             Ok(())
         } else {
             Err(NtfsError::InvalidIndexSignature {
-                position: self.record.position(),
+                position: record.position(),
                 expected,
                 actual: *signature,
             })
