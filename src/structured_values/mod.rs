@@ -42,6 +42,7 @@ bitflags! {
         const OFFLINE = 0x1000;
         const NOT_CONTENT_INDEXED = 0x2000;
         const ENCRYPTED = 0x4000;
+        const IS_DIRECTORY = 0x1000_0000;
     }
 }
 
