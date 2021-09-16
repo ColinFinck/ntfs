@@ -209,7 +209,7 @@ mod tests {
             .unwrap();
 
         let creation_time = file_name.creation_time();
-        assert!(*creation_time > NT_TIMESTAMP_2021_01_01);
+        assert!(creation_time.nt_timestamp() > NT_TIMESTAMP_2021_01_01);
         assert_eq!(creation_time, file_name.modification_time());
         assert_eq!(creation_time, file_name.mft_record_modification_time());
         assert_eq!(creation_time, file_name.access_time());

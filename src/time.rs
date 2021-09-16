@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use binread::BinRead;
-use core::ops::Deref;
+use derive_more::From;
 
 #[cfg(any(feature = "chrono", feature = "std"))]
 use core::convert::TryFrom;
@@ -32,20 +32,13 @@ const INTERVALS_PER_SECOND: u64 = 10_000_000;
 #[cfg(feature = "chrono")]
 const INTERVALS_PER_DAY: u64 = 24 * 60 * 60 * INTERVALS_PER_SECOND;
 
-#[derive(BinRead, Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(BinRead, Clone, Copy, Debug, Eq, From, Ord, PartialEq, PartialOrd)]
 pub struct NtfsTime(u64);
 
-impl Deref for NtfsTime {
-    type Target = u64;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl From<u64> for NtfsTime {
-    fn from(value: u64) -> Self {
-        Self(value)
+impl NtfsTime {
+    /// Returns the stored NT timestamp (number of 100-nanosecond intervals since January 1, 1601).
+    pub fn nt_timestamp(&self) -> u64 {
+        self.0
     }
 }
 
@@ -87,7 +80,7 @@ impl TryFrom<DateTime<Utc>> for NtfsTime {
 #[cfg(feature = "chrono")]
 impl From<NtfsTime> for DateTime<Utc> {
     fn from(nt: NtfsTime) -> DateTime<Utc> {
-        let mut remainder = *nt;
+        let mut remainder = nt.nt_timestamp();
 
         let nano = (remainder % INTERVALS_PER_SECOND) as u32 * 100;
         remainder /= INTERVALS_PER_SECOND;
@@ -163,6 +156,6 @@ pub(crate) mod tests {
     fn test_systemtime() {
         let st = SystemTime::now();
         let nt = NtfsTime::try_from(st).unwrap();
-        assert!(*nt > NT_TIMESTAMP_2021_01_01);
+        assert!(nt.nt_timestamp() > NT_TIMESTAMP_2021_01_01);
     }
 }

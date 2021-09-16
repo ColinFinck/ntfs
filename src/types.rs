@@ -4,9 +4,24 @@
 use crate::error::{NtfsError, Result};
 use crate::ntfs::Ntfs;
 use binread::BinRead;
-use core::fmt;
+use derive_more::{Binary, Display, From, LowerHex, Octal, UpperHex};
 
-#[derive(BinRead, Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(
+    Binary,
+    BinRead,
+    Clone,
+    Copy,
+    Debug,
+    Display,
+    Eq,
+    From,
+    LowerHex,
+    Octal,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    UpperHex,
+)]
 pub struct Lcn(u64);
 
 impl Lcn {
@@ -27,19 +42,22 @@ impl Lcn {
     }
 }
 
-impl fmt::Display for Lcn {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl From<u64> for Lcn {
-    fn from(value: u64) -> Self {
-        Self(value)
-    }
-}
-
-#[derive(BinRead, Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(
+    Binary,
+    BinRead,
+    Clone,
+    Copy,
+    Debug,
+    Display,
+    Eq,
+    From,
+    LowerHex,
+    Octal,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    UpperHex,
+)]
 pub struct Vcn(i64);
 
 impl Vcn {
@@ -47,17 +65,5 @@ impl Vcn {
         self.0
             .checked_mul(ntfs.cluster_size() as i64)
             .ok_or(NtfsError::VcnTooBig { vcn: *self })
-    }
-}
-
-impl fmt::Display for Vcn {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl From<i64> for Vcn {
-    fn from(value: i64) -> Self {
-        Self(value)
     }
 }

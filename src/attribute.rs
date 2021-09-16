@@ -19,6 +19,7 @@ use core::mem;
 use core::ops::Range;
 use enumn::N;
 use memoffset::offset_of;
+use strum_macros::Display;
 
 /// On-disk structure of the generic header of an NTFS attribute.
 #[repr(C, packed)]
@@ -93,7 +94,7 @@ struct NtfsNonResidentAttributeHeader {
     initialized_size: u64,
 }
 
-#[derive(Clone, Copy, Debug, Eq, N, PartialEq)]
+#[derive(Clone, Copy, Debug, Display, Eq, N, PartialEq)]
 #[repr(u32)]
 pub enum NtfsAttributeType {
     StandardInformation = 0x10,
