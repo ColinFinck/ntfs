@@ -365,6 +365,16 @@ impl<'n, 'f> NtfsNonResidentAttributeValue<'n, 'f> {
         })
     }
 
+    pub fn attach<'a, T>(
+        self,
+        fs: &'a mut T,
+    ) -> NtfsNonResidentAttributeValueAttached<'n, 'f, 'a, T>
+    where
+        T: Read + Seek,
+    {
+        NtfsNonResidentAttributeValueAttached::new(fs, self)
+    }
+
     /// Returns the absolute current data seek position within the filesystem, in bytes.
     /// This may be `None` if:
     ///   * The current seek position is outside the valid range, or
@@ -540,6 +550,50 @@ impl<'n, 'f> NtfsReadSeek for NtfsNonResidentAttributeValue<'n, 'f> {
 
     fn stream_position(&self) -> u64 {
         self.stream_position
+    }
+}
+
+pub struct NtfsNonResidentAttributeValueAttached<'n, 'f, 'a, T: Read + Seek> {
+    fs: &'a mut T,
+    value: NtfsNonResidentAttributeValue<'n, 'f>,
+}
+
+impl<'n, 'f, 'a, T> NtfsNonResidentAttributeValueAttached<'n, 'f, 'a, T>
+where
+    T: Read + Seek,
+{
+    fn new(fs: &'a mut T, value: NtfsNonResidentAttributeValue<'n, 'f>) -> Self {
+        Self { fs, value }
+    }
+
+    pub fn data_position(&self) -> Option<u64> {
+        self.value.data_position()
+    }
+
+    pub fn detach(self) -> NtfsNonResidentAttributeValue<'n, 'f> {
+        self.value
+    }
+
+    pub fn len(&self) -> u64 {
+        self.value.len()
+    }
+}
+
+impl<'n, 'f, 'a, T> Read for NtfsNonResidentAttributeValueAttached<'n, 'f, 'a, T>
+where
+    T: Read + Seek,
+{
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.value.read(self.fs, buf).map_err(io::Error::from)
+    }
+}
+
+impl<'n, 'f, 'a, T> Seek for NtfsNonResidentAttributeValueAttached<'n, 'f, 'a, T>
+where
+    T: Read + Seek,
+{
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        self.value.seek(self.fs, pos).map_err(io::Error::from)
     }
 }
 

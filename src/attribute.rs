@@ -292,6 +292,19 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         LittleEndian::read_u16(&self.file.record_data()[start..])
     }
 
+    pub fn structured_value<T, S>(&self, fs: &mut T) -> Result<S>
+    where
+        T: Read + Seek,
+        S: NtfsStructuredValueFromSlice<'f>
+            + NtfsStructuredValueFromNonResidentAttributeValue<'n, 'f>,
+    {
+        if self.is_resident() {
+            self.resident_structured_value()
+        } else {
+            self.non_resident_structured_value(fs)
+        }
+    }
+
     /// Returns the type of this NTFS attribute, or [`NtfsError::UnsupportedAttributeType`]
     /// if it's an unknown type.
     pub fn ty(&self) -> Result<NtfsAttributeType> {
