@@ -6,6 +6,7 @@ use crate::boot_sector::BootSector;
 use crate::error::{NtfsError, Result};
 use crate::file::{KnownNtfsFileRecordNumber, NtfsFile};
 use crate::structured_values::{NtfsVolumeInformation, NtfsVolumeName};
+use crate::traits::NtfsReadSeek;
 use crate::upcase_table::UpcaseTable;
 use binread::io::{Read, Seek, SeekFrom};
 use binread::BinReaderExt;
@@ -77,15 +78,29 @@ impl Ntfs {
         let offset = file_record_number
             .checked_mul(self.file_record_size as u64)
             .ok_or(NtfsError::InvalidFileRecordNumber { file_record_number })?;
-        let position = self
-            .mft_position
-            .checked_add(offset)
+
+        let mft = NtfsFile::new(&self, fs, self.mft_position, 0)?;
+        let mft_data_attribute = mft.data("").ok_or(NtfsError::AttributeNotFound {
+            position: self.mft_position,
+            ty: NtfsAttributeType::Data,
+        })??;
+        let mut mft_data_value = mft_data_attribute.value()?;
+
+        mft_data_value.seek(fs, SeekFrom::Start(offset))?;
+        let position = mft_data_value
+            .data_position()
             .ok_or(NtfsError::InvalidFileRecordNumber { file_record_number })?;
-        NtfsFile::new(&self, fs, position)
+
+        NtfsFile::new(&self, fs, position, file_record_number)
     }
 
     pub fn file_record_size(&self) -> u32 {
         self.file_record_size
+    }
+
+    /// Returns the absolute byte position of the Master File Table (MFT).
+    pub fn mft_position(&self) -> u64 {
+        self.mft_position
     }
 
     /// Reads the $UpCase file from the filesystem and stores it in this [`Ntfs`] object.

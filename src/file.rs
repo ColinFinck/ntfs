@@ -56,10 +56,16 @@ bitflags! {
 #[derive(Debug)]
 pub struct NtfsFile<'n> {
     record: Record<'n>,
+    file_record_number: u64,
 }
 
 impl<'n> NtfsFile<'n> {
-    pub(crate) fn new<T>(ntfs: &'n Ntfs, fs: &mut T, position: u64) -> Result<Self>
+    pub(crate) fn new<T>(
+        ntfs: &'n Ntfs,
+        fs: &mut T,
+        position: u64,
+        file_record_number: u64,
+    ) -> Result<Self>
     where
         T: Read + Seek,
     {
@@ -71,7 +77,10 @@ impl<'n> NtfsFile<'n> {
         Self::validate_signature(&record)?;
         record.fixup()?;
 
-        let file = Self { record };
+        let file = Self {
+            record,
+            file_record_number,
+        };
         file.validate_sizes()?;
 
         Ok(file)
@@ -184,6 +193,14 @@ impl<'n> NtfsFile<'n> {
         };
 
         NtfsIndex::<NtfsFileNameIndex>::new(index_root, index_allocation)
+    }
+
+    /// Returns the NTFS file record number of this file.
+    ///
+    /// This number uniquely identifies this file and can be used to recreate this [`NtfsFile`]
+    /// object via [`Ntfs::file`].
+    pub fn file_record_number(&self) -> u64 {
+        self.file_record_number
     }
 
     pub(crate) fn first_attribute_offset(&self) -> u16 {
