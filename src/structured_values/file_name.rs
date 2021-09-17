@@ -78,6 +78,11 @@ impl NtfsFileName {
         NtfsFileAttributeFlags::from_bits_truncate(self.header.file_attributes)
     }
 
+    pub fn is_directory(&self) -> bool {
+        self.file_attributes()
+            .contains(NtfsFileAttributeFlags::IS_DIRECTORY)
+    }
+
     pub fn mft_record_modification_time(&self) -> NtfsTime {
         self.header.mft_record_modification_time
     }
@@ -98,8 +103,7 @@ impl NtfsFileName {
         self.header.name_length as usize * mem::size_of::<u16>()
     }
 
-    /// Returns the namespace this name belongs to, or [`NtfsError::UnsupportedFileNamespace`]
-    /// if it's an unknown namespace.
+    /// Returns the [`NtfsFileNamespace`] of this file name.
     pub fn namespace(&self) -> NtfsFileNamespace {
         NtfsFileNamespace::n(self.header.namespace).unwrap()
     }

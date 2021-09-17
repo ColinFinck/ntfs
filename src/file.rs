@@ -3,6 +3,7 @@
 
 use crate::attribute::{NtfsAttribute, NtfsAttributeType, NtfsAttributes};
 use crate::error::{NtfsError, Result};
+use crate::file_reference::NtfsFileReference;
 use crate::index::NtfsIndex;
 use crate::indexes::NtfsFileNameIndex;
 use crate::ntfs::Ntfs;
@@ -40,8 +41,8 @@ struct FileRecordHeader {
     flags: u16,
     used_size: u32,
     allocated_size: u32,
-    base_file_record: u64,
-    next_attribute_number: u16,
+    base_file_record: NtfsFileReference,
+    next_attribute_instance: u16,
 }
 
 bitflags! {
@@ -154,7 +155,7 @@ impl<'n> NtfsFile<'n> {
     where
         T: Read + Seek,
     {
-        if !self.flags().contains(NtfsFileFlags::IS_DIRECTORY) {
+        if !self.is_directory() {
             return Err(NtfsError::NotADirectory {
                 position: self.position(),
             });
@@ -210,6 +211,10 @@ impl<'n> NtfsFile<'n> {
         attribute.resident_structured_value::<NtfsStandardInformation>()
     }
 
+    pub fn is_directory(&self) -> bool {
+        self.flags().contains(NtfsFileFlags::IS_DIRECTORY)
+    }
+
     /// Convenience function to get the $FILE_NAME attribute of this file (see [`NtfsFileName`]).
     ///
     /// This internally calls [`NtfsFile::attributes`] to iterate through the file's
@@ -219,10 +224,12 @@ impl<'n> NtfsFile<'n> {
         attribute.resident_structured_value::<NtfsFileName>()
     }
 
-    pub(crate) fn ntfs(&self) -> &'n Ntfs {
+    /// Returns the [`Ntfs`] object associated to this file.
+    pub fn ntfs(&self) -> &'n Ntfs {
         self.record.ntfs()
     }
 
+    /// Returns the absolute byte position of this file record in the NTFS filesystem.
     pub fn position(&self) -> u64 {
         self.record.position()
     }

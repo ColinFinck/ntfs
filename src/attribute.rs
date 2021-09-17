@@ -145,6 +145,12 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         ))
     }
 
+    /// Returns the identifier of this attribute that is unique within the [`NtfsFile`].
+    pub fn instance(&self) -> u16 {
+        let start = self.offset + offset_of!(NtfsAttributeHeader, instance);
+        LittleEndian::read_u16(&self.file.record_data()[start..])
+    }
+
     /// Returns `true` if this is a resident attribute, i.e. one where its value
     /// is part of the attribute structure.
     pub fn is_resident(&self) -> bool {
