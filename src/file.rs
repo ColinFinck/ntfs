@@ -113,17 +113,13 @@ impl<'n> NtfsFile<'n> {
 
     /// Convenience function to get a $DATA attribute of this file.
     ///
-    /// As NTFS supports multiple data streams per file, you can optionally specify a data stream
-    /// name and NTFS will look up the corresponding $DATA attribute.
-    /// If you specify `None` for `data_stream_name`, the default unnamed $DATA attribute will be looked
-    /// up (commonly known as the "file data").
+    /// As NTFS supports multiple data streams per file, you can specify the name of the $DATA attribute
+    /// to look up.
+    /// Passing an empty string here looks up the default unnamed $DATA attribute (commonly known as the "file data").
     ///
     /// If you need more control over which $DATA attribute is available and picked up,
     /// you can use [`NtfsFile::attributes`] to iterate over all attributes of this file.
-    pub fn data<'f>(
-        &'f self,
-        data_stream_name: Option<&str>,
-    ) -> Option<Result<NtfsAttribute<'n, 'f>>> {
+    pub fn data<'f>(&'f self, data_stream_name: &str) -> Option<Result<NtfsAttribute<'n, 'f>>> {
         // Create an iterator that emits all $DATA attributes.
         let iter = self.attributes().filter(|attribute| {
             // TODO: Replace by attribute.ty().contains() once https://github.com/rust-lang/rust/issues/62358 has landed.
@@ -134,25 +130,10 @@ impl<'n> NtfsFile<'n> {
         });
 
         for attribute in iter {
-            match (attribute.name(), data_stream_name) {
-                (None, None) => {
-                    // We found the unnamed $DATA attribute and are looking for the unnamed $DATA attribute.
-                    return Some(Ok(attribute));
-                }
-                (Some(Ok(name)), Some(data_stream_name)) => {
-                    // We found a named $DATA attribute and are looking for a named $DATA attribute.
-                    if data_stream_name == name {
-                        return Some(Ok(attribute));
-                    }
-                }
-                (Some(Err(e)), _) => {
-                    // We hit an error while fetching the $DATA attribute name.
-                    return Some(Err(e));
-                }
-                _ => {
-                    // In any other case, we didn't find what we are looking for.
-                    continue;
-                }
+            let name = iter_try!(attribute.name());
+
+            if data_stream_name == name {
+                return Some(Ok(attribute));
             }
         }
 

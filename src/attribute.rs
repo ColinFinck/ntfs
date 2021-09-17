@@ -157,18 +157,18 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
     ///
     /// Note that most NTFS attributes have no name and are distinguished by their types.
     /// Use [`NtfsAttribute::ty`] to get the attribute type.
-    pub fn name(&self) -> Option<Result<NtfsString<'f>>> {
+    pub fn name(&self) -> Result<NtfsString<'f>> {
         if self.name_offset() == 0 || self.name_length() == 0 {
-            return None;
+            return Ok(NtfsString(&[]));
         }
 
-        iter_try!(self.validate_name_sizes());
+        self.validate_name_sizes()?;
 
         let start = self.offset + self.name_offset() as usize;
         let end = start + self.name_length();
         let string = NtfsString(&self.file.record_data()[start..end]);
 
-        Some(Ok(string))
+        Ok(string)
     }
 
     fn name_offset(&self) -> u16 {
