@@ -1,7 +1,9 @@
 // Copyright 2021 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use crate::attribute::{NtfsAttribute, NtfsAttributeType, NtfsAttributes};
+use crate::attribute::{
+    NtfsAttribute, NtfsAttributeItem, NtfsAttributeType, NtfsAttributes, NtfsAttributesRaw,
+};
 use crate::error::{NtfsError, Result};
 use crate::file_reference::NtfsFileReference;
 use crate::index::NtfsIndex;
@@ -54,7 +56,7 @@ bitflags! {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct NtfsFile<'n> {
     record: Record<'n>,
     file_record_number: u64,
@@ -97,7 +99,7 @@ impl<'n> NtfsFile<'n> {
         &'f self,
         ty: NtfsAttributeType,
     ) -> Result<NtfsAttribute<'n, 'f>> {
-        self.attributes()
+        self.attributes_raw()
             .find(|attribute| {
                 // TODO: Replace by attribute.ty().contains() once https://github.com/rust-lang/rust/issues/62358 has landed.
                 attribute.ty().map(|x| x == ty).unwrap_or(false)
@@ -108,8 +110,15 @@ impl<'n> NtfsFile<'n> {
             })
     }
 
+    /// This provides a flattened "data-centric" view of the attributes and abstracts away the filesystem details
+    /// to deal with many or large attributes (Attribute Lists and split attributes).
+    /// Use [`NtfsFile::attributes_raw`] to iterate over the plain attributes on the filesystem.
     pub fn attributes<'f>(&'f self) -> NtfsAttributes<'n, 'f> {
-        NtfsAttributes::new(self)
+        NtfsAttributes::<'n, 'f>::new(self)
+    }
+
+    pub fn attributes_raw<'f>(&'f self) -> NtfsAttributesRaw<'n, 'f> {
+        NtfsAttributesRaw::new(self)
     }
 
     /// Convenience function to get a $DATA attribute of this file.
@@ -120,22 +129,31 @@ impl<'n> NtfsFile<'n> {
     ///
     /// If you need more control over which $DATA attribute is available and picked up,
     /// you can use [`NtfsFile::attributes`] to iterate over all attributes of this file.
-    pub fn data<'f>(&'f self, data_stream_name: &str) -> Option<Result<NtfsAttribute<'n, 'f>>> {
-        // Create an iterator that emits all $DATA attributes.
-        let iter = self.attributes().filter(|attribute| {
-            // TODO: Replace by attribute.ty().contains() once https://github.com/rust-lang/rust/issues/62358 has landed.
-            attribute
-                .ty()
-                .map(|ty| ty == NtfsAttributeType::Data)
-                .unwrap_or(false)
-        });
+    pub fn data<'f, T>(
+        &'f self,
+        fs: &mut T,
+        data_stream_name: &str,
+    ) -> Option<Result<NtfsAttributeItem<'n, 'f>>>
+    where
+        T: Read + Seek,
+    {
+        let mut iter = self.attributes();
 
-        for attribute in iter {
-            let name = iter_try!(attribute.name());
+        while let Some(item) = iter.next(fs) {
+            let item = iter_try!(item);
+            let attribute = item.to_attribute();
 
-            if data_stream_name == name {
-                return Some(Ok(attribute));
+            let ty = iter_try!(attribute.ty());
+            if ty != NtfsAttributeType::Data {
+                continue;
             }
+
+            let name = iter_try!(attribute.name());
+            if name != data_stream_name {
+                continue;
+            }
+
+            return Some(Ok(item));
         }
 
         None

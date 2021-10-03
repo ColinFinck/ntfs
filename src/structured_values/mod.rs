@@ -22,8 +22,8 @@ pub use volume_information::*;
 pub use volume_name::*;
 
 use crate::attribute::NtfsAttributeType;
-use crate::attribute_value::NtfsNonResidentAttributeValue;
 use crate::error::Result;
+use crate::value::non_resident_attribute::NtfsNonResidentAttributeValue;
 use binread::io::{Read, Seek};
 use bitflags::bitflags;
 

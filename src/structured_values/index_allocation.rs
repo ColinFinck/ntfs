@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::attribute::NtfsAttributeType;
-use crate::attribute_value::NtfsNonResidentAttributeValue;
 use crate::error::{NtfsError, Result};
 use crate::index_record::NtfsIndexRecord;
 use crate::structured_values::index_root::NtfsIndexRoot;
@@ -11,6 +10,7 @@ use crate::structured_values::{
 };
 use crate::traits::NtfsReadSeek;
 use crate::types::Vcn;
+use crate::value::non_resident_attribute::NtfsNonResidentAttributeValue;
 use binread::io::{Read, Seek, SeekFrom};
 use core::iter::FusedIterator;
 

@@ -79,11 +79,22 @@ impl Ntfs {
             .checked_mul(self.file_record_size as u64)
             .ok_or(NtfsError::InvalidFileRecordNumber { file_record_number })?;
 
+        // The MFT may be split into multiple data runs, referenced by its $DATA attribute.
+        // We therefore read it just like any other non-resident attribute value.
+        // However, this code assumes that the MFT does not have an AttributeList!
         let mft = NtfsFile::new(&self, fs, self.mft_position, 0)?;
-        let mft_data_attribute = mft.data("").ok_or(NtfsError::AttributeNotFound {
-            position: self.mft_position,
-            ty: NtfsAttributeType::Data,
-        })??;
+        let mft_data_attribute = mft
+            .attributes_raw()
+            .find(|attribute| {
+                attribute
+                    .ty()
+                    .map(|ty| ty == NtfsAttributeType::Data)
+                    .unwrap_or(false)
+            })
+            .ok_or(NtfsError::AttributeNotFound {
+                position: self.mft_position,
+                ty: NtfsAttributeType::Data,
+            })?;
         let mut mft_data_value = mft_data_attribute.value()?;
 
         mft_data_value.seek(fs, SeekFrom::Start(offset))?;

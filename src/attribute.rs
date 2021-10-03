@@ -1,16 +1,18 @@
 // Copyright 2021 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use crate::attribute_value::{
-    NtfsAttributeValue, NtfsNonResidentAttributeValue, NtfsResidentAttributeValue,
-};
 use crate::error::{NtfsError, Result};
 use crate::file::NtfsFile;
 use crate::string::NtfsString;
 use crate::structured_values::{
-    NtfsStructuredValueFromNonResidentAttributeValue, NtfsStructuredValueFromSlice,
+    NtfsAttributeList, NtfsAttributeListEntries, NtfsStructuredValueFromNonResidentAttributeValue,
+    NtfsStructuredValueFromSlice,
 };
 use crate::types::Vcn;
+use crate::value::attribute_list_non_resident_attribute::NtfsAttributeListNonResidentAttributeValue;
+use crate::value::non_resident_attribute::NtfsNonResidentAttributeValue;
+use crate::value::slice::NtfsSliceValue;
+use crate::value::NtfsValue;
 use binread::io::{Read, Seek};
 use bitflags::bitflags;
 use byteorder::{ByteOrder, LittleEndian};
@@ -116,15 +118,26 @@ pub enum NtfsAttributeType {
     End = 0xFFFF_FFFF,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct NtfsAttribute<'n, 'f> {
     file: &'f NtfsFile<'n>,
     offset: usize,
+    /// Has a value if this attribute's value may be split over multiple attributes.
+    /// The connected attributes can be iterated using the encapsulated iterator.
+    list_entries: Option<&'f NtfsAttributeListEntries<'n, 'f>>,
 }
 
 impl<'n, 'f> NtfsAttribute<'n, 'f> {
-    fn new(file: &'f NtfsFile<'n>, offset: usize) -> Self {
-        Self { file, offset }
+    pub(crate) fn new(
+        file: &'f NtfsFile<'n>,
+        offset: usize,
+        list_entries: Option<&'f NtfsAttributeListEntries<'n, 'f>>,
+    ) -> Self {
+        Self {
+            file,
+            offset,
+            list_entries,
+        }
     }
 
     /// Returns the length of this NTFS attribute, in bytes.
@@ -215,12 +228,8 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         S::from_non_resident_attribute_value(fs, self.non_resident_value()?)
     }
 
-    fn non_resident_value(&self) -> Result<NtfsNonResidentAttributeValue<'n, 'f>> {
-        debug_assert!(!self.is_resident());
-        let start = self.offset + self.non_resident_value_data_runs_offset() as usize;
-        let end = start + self.attribute_length() as usize;
-        let data = &self.file.record_data()[start..end];
-        let position = self.file.position() + start as u64;
+    pub(crate) fn non_resident_value(&self) -> Result<NtfsNonResidentAttributeValue<'n, 'f>> {
+        let (data, position) = self.non_resident_value_data_and_position();
 
         NtfsNonResidentAttributeValue::new(
             self.file.ntfs(),
@@ -228,6 +237,16 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
             position,
             self.non_resident_value_data_size(),
         )
+    }
+
+    pub(crate) fn non_resident_value_data_and_position(&self) -> (&'f [u8], u64) {
+        debug_assert!(!self.is_resident());
+        let start = self.offset + self.non_resident_value_data_runs_offset() as usize;
+        let end = start + self.attribute_length() as usize;
+        let data = &self.file.record_data()[start..end];
+        let position = self.file.position() + start as u64;
+
+        (data, position)
     }
 
     fn non_resident_value_data_size(&self) -> u64 {
@@ -240,6 +259,10 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         debug_assert!(!self.is_resident());
         let start = self.offset + offset_of!(NtfsNonResidentAttributeHeader, data_runs_offset);
         LittleEndian::read_u16(&self.file.record_data()[start..])
+    }
+
+    pub(crate) fn offset(&self) -> usize {
+        self.offset
     }
 
     /// Returns the absolute position of this NTFS attribute within the filesystem, in bytes.
@@ -269,7 +292,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         S::from_slice(resident_value.data(), self.position())
     }
 
-    pub(crate) fn resident_value(&self) -> Result<NtfsResidentAttributeValue<'f>> {
+    pub(crate) fn resident_value(&self) -> Result<NtfsSliceValue<'f>> {
         debug_assert!(self.is_resident());
         self.validate_resident_value_sizes()?;
 
@@ -277,7 +300,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         let end = start + self.resident_value_length() as usize;
         let data = &self.file.record_data()[start..end];
 
-        Ok(NtfsResidentAttributeValue::new(data, self.position()))
+        Ok(NtfsSliceValue::new(data, self.position()))
     }
 
     fn resident_value_length(&self) -> u32 {
@@ -364,13 +387,27 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
     }
 
     /// Returns an [`NtfsAttributeValue`] structure to read the value of this NTFS attribute.
-    pub fn value(&self) -> Result<NtfsAttributeValue<'n, 'f>> {
-        if self.is_resident() {
-            let resident_value = self.resident_value()?;
-            Ok(NtfsAttributeValue::Resident(resident_value))
+    pub fn value(&self) -> Result<NtfsValue<'n, 'f>> {
+        if let Some(list_entries) = self.list_entries {
+            // The first attribute reports the entire data size for all connected attributes
+            // (remaining ones are set to zero).
+            // Fortunately, we are the first attribute :)
+            let data_size = self.non_resident_value_data_size();
+
+            let value = NtfsAttributeListNonResidentAttributeValue::new(
+                self.file.ntfs(),
+                list_entries.clone(),
+                self.instance(),
+                self.ty()?,
+                data_size,
+            );
+            Ok(NtfsValue::AttributeListNonResidentAttribute(value))
+        } else if self.is_resident() {
+            let value = self.resident_value()?;
+            Ok(NtfsValue::Slice(value))
         } else {
-            let non_resident_value = self.non_resident_value()?;
-            Ok(NtfsAttributeValue::NonResident(non_resident_value))
+            let value = self.non_resident_value()?;
+            Ok(NtfsValue::NonResidentAttribute(value))
         }
     }
 
@@ -384,13 +421,127 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
     }
 }
 
-pub struct NtfsAttributes<'n, 'a> {
-    file: &'a NtfsFile<'n>,
+pub struct NtfsAttributes<'n, 'f> {
+    raw_iter: NtfsAttributesRaw<'n, 'f>,
+    list_entries: Option<NtfsAttributeListEntries<'n, 'f>>,
+    list_skip_info: Option<(u16, NtfsAttributeType)>,
+}
+
+impl<'n, 'f> NtfsAttributes<'n, 'f> {
+    pub(crate) fn new(file: &'f NtfsFile<'n>) -> Self {
+        Self {
+            raw_iter: NtfsAttributesRaw::new(file),
+            list_entries: None,
+            list_skip_info: None,
+        }
+    }
+
+    pub fn next<T>(&mut self, fs: &mut T) -> Option<Result<NtfsAttributeItem<'n, 'f>>>
+    where
+        T: Read + Seek,
+    {
+        loop {
+            if let Some(attribute_list_entries) = &mut self.list_entries {
+                loop {
+                    // If the next AttributeList entry turns out to be a non-resident attribute, that attribute's
+                    // value may be split over multiple (adjacent) attributes.
+                    // To view this value as a single one, we need an `AttributeListConnectedEntries` iterator
+                    // and that iterator needs `NtfsAttributeListEntries` where the next call to `next` yields
+                    // the first connected attribute.
+                    // Therefore, we need to clone `attribute_list_entries` before every call.
+                    let attribute_list_entries_clone = attribute_list_entries.clone();
+
+                    let entry = match attribute_list_entries.next(fs) {
+                        Some(Ok(entry)) => entry,
+                        Some(Err(e)) => return Some(Err(e)),
+                        None => break,
+                    };
+                    let entry_instance = entry.instance();
+                    let entry_record_number = entry.base_file_reference().file_record_number();
+                    let entry_ty = iter_try!(entry.ty());
+
+                    // Ignore all AttributeList entries that just repeat attributes of the raw iterator.
+                    if entry_record_number == self.raw_iter.file.file_record_number() {
+                        continue;
+                    }
+
+                    // Ignore all AttributeList entries that are connected attributes of a previous one.
+                    if let Some((skip_instance, skip_ty)) = self.list_skip_info {
+                        if entry_instance == skip_instance && entry_ty == skip_ty {
+                            continue;
+                        }
+                    }
+
+                    // We found an attribute that we want to return.
+                    self.list_skip_info = None;
+
+                    let ntfs = self.raw_iter.file.ntfs();
+                    let entry_file = iter_try!(entry.to_file(ntfs, fs));
+                    let entry_attribute = iter_try!(entry.to_attribute(&entry_file));
+                    let attribute_offset = entry_attribute.offset();
+
+                    let mut list_entries = None;
+                    if !entry_attribute.is_resident() {
+                        list_entries = Some(attribute_list_entries_clone);
+                        self.list_skip_info = Some((entry_instance, entry_ty));
+                    }
+
+                    let item = NtfsAttributeItem {
+                        attribute_file: self.raw_iter.file,
+                        attribute_value_file: Some(entry_file),
+                        attribute_offset,
+                        list_entries,
+                    };
+                    return Some(Ok(item));
+                }
+            }
+
+            let attribute = self.raw_iter.next()?;
+            if let Ok(NtfsAttributeType::AttributeList) = attribute.ty() {
+                let attribute_list =
+                    iter_try!(attribute.structured_value::<T, NtfsAttributeList>(fs));
+                self.list_entries = Some(attribute_list.iter());
+            } else {
+                let item = NtfsAttributeItem {
+                    attribute_file: self.raw_iter.file,
+                    attribute_value_file: None,
+                    attribute_offset: attribute.offset(),
+                    list_entries: None,
+                };
+                return Some(Ok(item));
+            }
+        }
+    }
+}
+
+pub struct NtfsAttributeItem<'n, 'f> {
+    attribute_file: &'f NtfsFile<'n>,
+    attribute_value_file: Option<NtfsFile<'n>>,
+    attribute_offset: usize,
+    list_entries: Option<NtfsAttributeListEntries<'n, 'f>>,
+}
+
+impl<'n, 'f> NtfsAttributeItem<'n, 'f> {
+    pub fn to_attribute<'i>(&'i self) -> NtfsAttribute<'n, 'i> {
+        if let Some(file) = &self.attribute_value_file {
+            NtfsAttribute::new(file, self.attribute_offset, self.list_entries.as_ref())
+        } else {
+            NtfsAttribute::new(
+                self.attribute_file,
+                self.attribute_offset,
+                self.list_entries.as_ref(),
+            )
+        }
+    }
+}
+
+pub struct NtfsAttributesRaw<'n, 'f> {
+    file: &'f NtfsFile<'n>,
     items_range: Range<usize>,
 }
 
-impl<'n, 'a> NtfsAttributes<'n, 'a> {
-    pub(crate) fn new(file: &'a NtfsFile<'n>) -> Self {
+impl<'n, 'f> NtfsAttributesRaw<'n, 'f> {
+    pub(crate) fn new(file: &'f NtfsFile<'n>) -> Self {
         let start = file.first_attribute_offset() as usize;
         let end = file.used_size() as usize;
         let items_range = start..end;
@@ -399,8 +550,8 @@ impl<'n, 'a> NtfsAttributes<'n, 'a> {
     }
 }
 
-impl<'n, 'a> Iterator for NtfsAttributes<'n, 'a> {
-    type Item = NtfsAttribute<'n, 'a>;
+impl<'n, 'f> Iterator for NtfsAttributesRaw<'n, 'f> {
+    type Item = NtfsAttribute<'n, 'f>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.items_range.is_empty() {
@@ -415,11 +566,11 @@ impl<'n, 'a> Iterator for NtfsAttributes<'n, 'a> {
         }
 
         // It's a real attribute.
-        let attribute = NtfsAttribute::new(self.file, self.items_range.start);
+        let attribute = NtfsAttribute::new(self.file, self.items_range.start, None);
         self.items_range.start += attribute.attribute_length() as usize;
 
         Some(attribute)
     }
 }
 
-impl<'n, 'a> FusedIterator for NtfsAttributes<'n, 'a> {}
+impl<'n, 'f> FusedIterator for NtfsAttributesRaw<'n, 'f> {}

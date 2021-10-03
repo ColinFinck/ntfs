@@ -135,7 +135,7 @@ mod tests {
         let mft = ntfs
             .file(&mut testfs1, KnownNtfsFileRecordNumber::MFT as u64)
             .unwrap();
-        let mut mft_attributes = mft.attributes();
+        let mut mft_attributes = mft.attributes_raw();
 
         // Check the StandardInformation attribute of the MFT.
         let attribute = mft_attributes.nth(0).unwrap();

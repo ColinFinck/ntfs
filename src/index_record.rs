@@ -1,7 +1,6 @@
 // Copyright 2021 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use crate::attribute_value::NtfsNonResidentAttributeValue;
 use crate::error::{NtfsError, Result};
 use crate::index_entry::{IndexNodeEntryRanges, NtfsIndexNodeEntries};
 use crate::indexes::NtfsIndexEntryType;
@@ -9,6 +8,7 @@ use crate::record::Record;
 use crate::record::RecordHeader;
 use crate::traits::NtfsReadSeek;
 use crate::types::Vcn;
+use crate::value::non_resident_attribute::NtfsNonResidentAttributeValue;
 use binread::io::{Read, Seek};
 use byteorder::{ByteOrder, LittleEndian};
 use core::ops::Range;

@@ -10,7 +10,6 @@ extern crate alloc;
 mod helpers;
 
 mod attribute;
-mod attribute_value;
 mod boot_sector;
 mod error;
 mod file;
@@ -28,9 +27,9 @@ mod time;
 mod traits;
 mod types;
 mod upcase_table;
+pub mod value;
 
 pub use crate::attribute::*;
-pub use crate::attribute_value::*;
 pub use crate::error::*;
 pub use crate::file::*;
 pub use crate::file_reference::*;

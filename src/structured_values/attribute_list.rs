@@ -1,10 +1,11 @@
 // Copyright 2021 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use crate::attribute::NtfsAttributeType;
-use crate::attribute_value::NtfsNonResidentAttributeValue;
+use crate::attribute::{NtfsAttribute, NtfsAttributeType};
 use crate::error::{NtfsError, Result};
+use crate::file::NtfsFile;
 use crate::file_reference::NtfsFileReference;
+use crate::ntfs::Ntfs;
 use crate::string::NtfsString;
 use crate::structured_values::{
     NtfsStructuredValue, NtfsStructuredValueFromNonResidentAttributeValue,
@@ -12,6 +13,7 @@ use crate::structured_values::{
 };
 use crate::traits::NtfsReadSeek;
 use crate::types::Vcn;
+use crate::value::non_resident_attribute::NtfsNonResidentAttributeValue;
 use arrayvec::ArrayVec;
 use binread::io::{Cursor, Read, Seek, SeekFrom};
 use binread::{BinRead, BinReaderExt};
@@ -219,6 +221,37 @@ impl NtfsAttributeListEntry {
         self.name.truncate(name_length);
 
         Ok(())
+    }
+
+    pub fn to_attribute<'n, 'f>(&self, file: &'f NtfsFile<'n>) -> Result<NtfsAttribute<'n, 'f>> {
+        let file_record_number = self.base_file_reference().file_record_number();
+        assert_eq!(
+            file.file_record_number(),
+            file_record_number,
+            "The given NtfsFile's record number does not match the expected record number. \
+            Always use NtfsAttributeListEntry::to_file to retrieve the correct NtfsFile."
+        );
+
+        let instance = self.instance();
+        let ty = self.ty()?;
+
+        file.attributes_raw()
+            .find(|attribute| {
+                attribute.instance() == instance
+                    && attribute.ty().map(|attr_ty| attr_ty == ty).unwrap_or(false)
+            })
+            .ok_or(NtfsError::AttributeNotFound {
+                position: file.position(),
+                ty,
+            })
+    }
+
+    pub fn to_file<'n, T>(&self, ntfs: &'n Ntfs, fs: &mut T) -> Result<NtfsFile<'n>>
+    where
+        T: Read + Seek,
+    {
+        let file_record_number = self.base_file_reference().file_record_number();
+        ntfs.file(fs, file_record_number)
     }
 
     /// Returns the type of this NTFS attribute, or [`NtfsError::UnsupportedAttributeType`]
