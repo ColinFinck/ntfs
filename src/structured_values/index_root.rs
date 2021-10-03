@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::attribute::NtfsAttributeType;
+use crate::attribute_value::{NtfsAttributeValue, NtfsResidentAttributeValue};
 use crate::error::{NtfsError, Result};
 use crate::index_entry::{IndexNodeEntryRanges, NtfsIndexNodeEntries};
 use crate::index_record::{IndexNodeHeader, INDEX_NODE_HEADER_SIZE};
@@ -9,8 +10,6 @@ use crate::indexes::NtfsIndexEntryType;
 use crate::structured_values::{
     NtfsStructuredValue, NtfsStructuredValueFromResidentAttributeValue,
 };
-use crate::value::slice::NtfsSliceValue;
-use crate::value::NtfsValue;
 use binread::io::{Read, Seek};
 use byteorder::{ByteOrder, LittleEndian};
 use core::ops::Range;
@@ -139,25 +138,25 @@ impl<'f> NtfsIndexRoot<'f> {
 impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsIndexRoot<'f> {
     const TY: NtfsAttributeType = NtfsAttributeType::IndexRoot;
 
-    fn from_value<T>(_fs: &mut T, value: NtfsValue<'n, 'f>) -> Result<Self>
+    fn from_attribute_value<T>(_fs: &mut T, value: NtfsAttributeValue<'n, 'f>) -> Result<Self>
     where
         T: Read + Seek,
     {
-        let slice_value = match value {
-            NtfsValue::Slice(slice_value) => slice_value,
+        let resident_value = match value {
+            NtfsAttributeValue::Resident(resident_value) => resident_value,
             _ => {
                 let position = value.data_position().unwrap();
                 return Err(NtfsError::UnexpectedNonResidentAttribute { position });
             }
         };
 
-        let position = slice_value.data_position().unwrap();
-        Self::new(slice_value.data(), position)
+        let position = resident_value.data_position().unwrap();
+        Self::new(resident_value.data(), position)
     }
 }
 
 impl<'n, 'f> NtfsStructuredValueFromResidentAttributeValue<'n, 'f> for NtfsIndexRoot<'f> {
-    fn from_resident_attribute_value(value: NtfsSliceValue<'f>) -> Result<Self> {
+    fn from_resident_attribute_value(value: NtfsResidentAttributeValue<'f>) -> Result<Self> {
         Self::new(value.data(), value.data_position().unwrap())
     }
 }

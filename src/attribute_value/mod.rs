@@ -1,60 +1,61 @@
 // Copyright 2021 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-pub(crate) mod attribute_list_non_resident_attribute;
-pub(crate) mod non_resident_attribute;
-pub(crate) mod slice;
+mod attribute_list_non_resident;
+mod non_resident;
+mod resident;
+
+pub use attribute_list_non_resident::*;
+pub use non_resident::*;
+pub use resident::*;
 
 use binread::io;
 use binread::io::{Read, Seek, SeekFrom};
 
 use crate::error::{NtfsError, Result};
 use crate::traits::NtfsReadSeek;
-use attribute_list_non_resident_attribute::NtfsAttributeListNonResidentAttributeValue;
-use non_resident_attribute::NtfsNonResidentAttributeValue;
-use slice::NtfsSliceValue;
 
 #[derive(Clone, Debug)]
-pub enum NtfsValue<'n, 'f> {
-    Slice(NtfsSliceValue<'f>),
-    NonResidentAttribute(NtfsNonResidentAttributeValue<'n, 'f>),
-    AttributeListNonResidentAttribute(NtfsAttributeListNonResidentAttributeValue<'n, 'f>),
+pub enum NtfsAttributeValue<'n, 'f> {
+    Resident(NtfsResidentAttributeValue<'f>),
+    NonResident(NtfsNonResidentAttributeValue<'n, 'f>),
+    AttributeListNonResident(NtfsAttributeListNonResidentAttributeValue<'n, 'f>),
 }
 
-impl<'n, 'f> NtfsValue<'n, 'f> {
-    pub fn attach<'a, T>(self, fs: &'a mut T) -> NtfsValueAttached<'n, 'f, 'a, T>
+impl<'n, 'f> NtfsAttributeValue<'n, 'f> {
+    pub fn attach<'a, T>(self, fs: &'a mut T) -> NtfsAttributeValueAttached<'n, 'f, 'a, T>
     where
         T: Read + Seek,
     {
-        NtfsValueAttached::new(fs, self)
+        NtfsAttributeValueAttached::new(fs, self)
     }
 
     pub fn data_position(&self) -> Option<u64> {
         match self {
-            Self::Slice(inner) => inner.data_position(),
-            Self::NonResidentAttribute(inner) => inner.data_position(),
-            Self::AttributeListNonResidentAttribute(inner) => inner.data_position(),
+            Self::Resident(inner) => inner.data_position(),
+            Self::NonResident(inner) => inner.data_position(),
+            Self::AttributeListNonResident(inner) => inner.data_position(),
         }
     }
 
     pub fn len(&self) -> u64 {
         match self {
-            Self::Slice(inner) => inner.len(),
-            Self::NonResidentAttribute(inner) => inner.len(),
-            Self::AttributeListNonResidentAttribute(inner) => inner.len(),
+            Self::Resident(inner) => inner.len(),
+            Self::NonResident(inner) => inner.len(),
+            Self::AttributeListNonResident(inner) => inner.len(),
         }
     }
 }
 
-impl<'n, 'f> NtfsReadSeek for NtfsValue<'n, 'f> {
+impl<'n, 'f> NtfsReadSeek for NtfsAttributeValue<'n, 'f> {
     fn read<T>(&mut self, fs: &mut T, buf: &mut [u8]) -> Result<usize>
     where
         T: Read + Seek,
     {
         match self {
-            Self::Slice(inner) => inner.read(fs, buf),
-            Self::NonResidentAttribute(inner) => inner.read(fs, buf),
-            Self::AttributeListNonResidentAttribute(inner) => inner.read(fs, buf),
+            Self::Resident(inner) => inner.read(fs, buf),
+            Self::NonResident(inner) => inner.read(fs, buf),
+            Self::AttributeListNonResident(inner) => inner.read(fs, buf),
         }
     }
 
@@ -63,31 +64,31 @@ impl<'n, 'f> NtfsReadSeek for NtfsValue<'n, 'f> {
         T: Read + Seek,
     {
         match self {
-            Self::Slice(inner) => inner.seek(fs, pos),
-            Self::NonResidentAttribute(inner) => inner.seek(fs, pos),
-            Self::AttributeListNonResidentAttribute(inner) => inner.seek(fs, pos),
+            Self::Resident(inner) => inner.seek(fs, pos),
+            Self::NonResident(inner) => inner.seek(fs, pos),
+            Self::AttributeListNonResident(inner) => inner.seek(fs, pos),
         }
     }
 
     fn stream_position(&self) -> u64 {
         match self {
-            Self::Slice(inner) => inner.stream_position(),
-            Self::NonResidentAttribute(inner) => inner.stream_position(),
-            Self::AttributeListNonResidentAttribute(inner) => inner.stream_position(),
+            Self::Resident(inner) => inner.stream_position(),
+            Self::NonResident(inner) => inner.stream_position(),
+            Self::AttributeListNonResident(inner) => inner.stream_position(),
         }
     }
 }
 
-pub struct NtfsValueAttached<'n, 'f, 'a, T: Read + Seek> {
+pub struct NtfsAttributeValueAttached<'n, 'f, 'a, T: Read + Seek> {
     fs: &'a mut T,
-    value: NtfsValue<'n, 'f>,
+    value: NtfsAttributeValue<'n, 'f>,
 }
 
-impl<'n, 'f, 'a, T> NtfsValueAttached<'n, 'f, 'a, T>
+impl<'n, 'f, 'a, T> NtfsAttributeValueAttached<'n, 'f, 'a, T>
 where
     T: Read + Seek,
 {
-    fn new(fs: &'a mut T, value: NtfsValue<'n, 'f>) -> Self {
+    fn new(fs: &'a mut T, value: NtfsAttributeValue<'n, 'f>) -> Self {
         Self { fs, value }
     }
 
@@ -95,7 +96,7 @@ where
         self.value.data_position()
     }
 
-    pub fn detach(self) -> NtfsValue<'n, 'f> {
+    pub fn detach(self) -> NtfsAttributeValue<'n, 'f> {
         self.value
     }
 
@@ -104,7 +105,7 @@ where
     }
 }
 
-impl<'n, 'f, 'a, T> Read for NtfsValueAttached<'n, 'f, 'a, T>
+impl<'n, 'f, 'a, T> Read for NtfsAttributeValueAttached<'n, 'f, 'a, T>
 where
     T: Read + Seek,
 {
@@ -113,7 +114,7 @@ where
     }
 }
 
-impl<'n, 'f, 'a, T> Seek for NtfsValueAttached<'n, 'f, 'a, T>
+impl<'n, 'f, 'a, T> Seek for NtfsAttributeValueAttached<'n, 'f, 'a, T>
 where
     T: Read + Seek,
 {

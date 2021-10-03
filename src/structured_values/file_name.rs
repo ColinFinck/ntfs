@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::attribute::NtfsAttributeType;
+use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
 use crate::file_reference::NtfsFileReference;
 use crate::indexes::NtfsIndexEntryKey;
 use crate::string::NtfsString;
 use crate::structured_values::{NtfsFileAttributeFlags, NtfsStructuredValue};
 use crate::time::NtfsTime;
-use crate::value::NtfsValue;
 use arrayvec::ArrayVec;
 use binread::io::{Cursor, Read, Seek};
 use binread::{BinRead, BinReaderExt};
@@ -180,7 +180,7 @@ impl NtfsFileName {
 impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsFileName {
     const TY: NtfsAttributeType = NtfsAttributeType::FileName;
 
-    fn from_value<T>(fs: &mut T, value: NtfsValue<'n, 'f>) -> Result<Self>
+    fn from_attribute_value<T>(fs: &mut T, value: NtfsAttributeValue<'n, 'f>) -> Result<Self>
     where
         T: Read + Seek,
     {

@@ -2,13 +2,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::attribute::NtfsAttributeType;
+use crate::attribute_value::{NtfsAttributeValue, NtfsResidentAttributeValue};
 use crate::error::{NtfsError, Result};
 use crate::guid::{NtfsGuid, GUID_SIZE};
 use crate::structured_values::{
     NtfsStructuredValue, NtfsStructuredValueFromResidentAttributeValue,
 };
-use crate::value::slice::NtfsSliceValue;
-use crate::value::NtfsValue;
 use binread::io::{Cursor, Read, Seek};
 use binread::BinReaderExt;
 
@@ -79,7 +78,7 @@ impl NtfsObjectId {
 impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsObjectId {
     const TY: NtfsAttributeType = NtfsAttributeType::ObjectId;
 
-    fn from_value<T>(fs: &mut T, value: NtfsValue<'n, 'f>) -> Result<Self>
+    fn from_attribute_value<T>(fs: &mut T, value: NtfsAttributeValue<'n, 'f>) -> Result<Self>
     where
         T: Read + Seek,
     {
@@ -92,7 +91,7 @@ impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsObjectId {
 }
 
 impl<'n, 'f> NtfsStructuredValueFromResidentAttributeValue<'n, 'f> for NtfsObjectId {
-    fn from_resident_attribute_value(value: NtfsSliceValue<'f>) -> Result<Self> {
+    fn from_resident_attribute_value(value: NtfsResidentAttributeValue<'f>) -> Result<Self> {
         let position = value.data_position().unwrap();
         let value_length = value.len();
 

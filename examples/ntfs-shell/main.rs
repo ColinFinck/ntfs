@@ -10,11 +10,11 @@ use std::io::{BufReader, Read, Seek, Write};
 
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Utc};
+use ntfs::attribute_value::NtfsAttributeValue;
 use ntfs::indexes::NtfsFileNameIndex;
 use ntfs::structured_values::{
     NtfsAttributeList, NtfsFileName, NtfsFileNamespace, NtfsStandardInformation,
 };
-use ntfs::value::NtfsValue;
 use ntfs::{Ntfs, NtfsAttribute, NtfsAttributeType, NtfsFile, NtfsReadSeek};
 
 use sector_reader::SectorReader;
@@ -176,7 +176,7 @@ fn attr_print_attribute<'n>(
     );
 
     if with_runs {
-        if let NtfsValue::NonResidentAttribute(non_resident_value) = attribute.value()? {
+        if let NtfsAttributeValue::NonResident(non_resident_value) = attribute.value()? {
             for (i, data_run) in non_resident_value.data_runs().enumerate() {
                 let data_run = data_run?;
                 let instance = format!("{}{}", data_run_prefix, i);

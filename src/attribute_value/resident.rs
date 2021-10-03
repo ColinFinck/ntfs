@@ -14,13 +14,13 @@ use crate::error::Result;
 use crate::traits::NtfsReadSeek;
 
 #[derive(Clone, Debug)]
-pub struct NtfsSliceValue<'f> {
+pub struct NtfsResidentAttributeValue<'f> {
     data: &'f [u8],
     position: u64,
     stream_position: u64,
 }
 
-impl<'f> NtfsSliceValue<'f> {
+impl<'f> NtfsResidentAttributeValue<'f> {
     pub(crate) fn new(data: &'f [u8], position: u64) -> Self {
         Self {
             data,
@@ -52,7 +52,7 @@ impl<'f> NtfsSliceValue<'f> {
     }
 }
 
-impl<'f> NtfsReadSeek for NtfsSliceValue<'f> {
+impl<'f> NtfsReadSeek for NtfsResidentAttributeValue<'f> {
     fn read<T>(&mut self, _fs: &mut T, buf: &mut [u8]) -> Result<usize>
     where
         T: Read + Seek,

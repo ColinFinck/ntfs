@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::attribute::NtfsAttributeType;
+use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
 use crate::index_record::NtfsIndexRecord;
 use crate::ntfs::Ntfs;
@@ -9,14 +10,13 @@ use crate::structured_values::index_root::NtfsIndexRoot;
 use crate::structured_values::NtfsStructuredValue;
 use crate::traits::NtfsReadSeek;
 use crate::types::Vcn;
-use crate::value::NtfsValue;
 use binread::io::{Read, Seek, SeekFrom};
 use core::iter::FusedIterator;
 
 #[derive(Clone, Debug)]
 pub struct NtfsIndexAllocation<'n, 'f> {
     ntfs: &'n Ntfs,
-    value: NtfsValue<'n, 'f>,
+    value: NtfsAttributeValue<'n, 'f>,
 }
 
 impl<'n, 'f> NtfsIndexAllocation<'n, 'f> {
@@ -66,14 +66,14 @@ impl<'n, 'f> NtfsIndexAllocation<'n, 'f> {
 impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsIndexAllocation<'n, 'f> {
     const TY: NtfsAttributeType = NtfsAttributeType::IndexAllocation;
 
-    fn from_value<T>(_fs: &mut T, value: NtfsValue<'n, 'f>) -> Result<Self>
+    fn from_attribute_value<T>(_fs: &mut T, value: NtfsAttributeValue<'n, 'f>) -> Result<Self>
     where
         T: Read + Seek,
     {
         let ntfs = match &value {
-            NtfsValue::AttributeListNonResidentAttribute(value) => value.ntfs(),
-            NtfsValue::NonResidentAttribute(value) => value.ntfs(),
-            NtfsValue::Slice(_) => {
+            NtfsAttributeValue::AttributeListNonResident(value) => value.ntfs(),
+            NtfsAttributeValue::NonResident(value) => value.ntfs(),
+            NtfsAttributeValue::Resident(_) => {
                 let position = value.data_position().unwrap();
                 return Err(NtfsError::UnexpectedResidentAttribute { position });
             }

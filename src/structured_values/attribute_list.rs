@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::attribute::{NtfsAttribute, NtfsAttributeType};
+use crate::attribute_value::{NtfsAttributeValue, NtfsNonResidentAttributeValue};
 use crate::error::{NtfsError, Result};
 use crate::file::NtfsFile;
 use crate::file_reference::NtfsFileReference;
@@ -10,8 +11,6 @@ use crate::string::NtfsString;
 use crate::structured_values::NtfsStructuredValue;
 use crate::traits::NtfsReadSeek;
 use crate::types::Vcn;
-use crate::value::non_resident_attribute::NtfsNonResidentAttributeValue;
-use crate::value::NtfsValue;
 use arrayvec::ArrayVec;
 use binread::io::{Cursor, Read, Seek, SeekFrom};
 use binread::{BinRead, BinReaderExt};
@@ -67,18 +66,18 @@ impl<'n, 'f> NtfsAttributeList<'n, 'f> {
 impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsAttributeList<'n, 'f> {
     const TY: NtfsAttributeType = NtfsAttributeType::AttributeList;
 
-    fn from_value<T>(_fs: &mut T, value: NtfsValue<'n, 'f>) -> Result<Self>
+    fn from_attribute_value<T>(_fs: &mut T, value: NtfsAttributeValue<'n, 'f>) -> Result<Self>
     where
         T: Read + Seek,
     {
         match value {
-            NtfsValue::Slice(value) => {
+            NtfsAttributeValue::Resident(value) => {
                 let slice = value.data();
                 let position = value.data_position().unwrap();
                 Ok(Self::Resident(slice, position))
             }
-            NtfsValue::NonResidentAttribute(value) => Ok(Self::NonResident(value)),
-            NtfsValue::AttributeListNonResidentAttribute(value) => {
+            NtfsAttributeValue::NonResident(value) => Ok(Self::NonResident(value)),
+            NtfsAttributeValue::AttributeListNonResident(value) => {
                 // Attribute Lists are never nested.
                 // Hence, we must not create this attribute from an attribute that is already part of Attribute List.
                 let position = value.data_position().unwrap();

@@ -1,6 +1,10 @@
 // Copyright 2021 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+use crate::attribute_value::{
+    NtfsAttributeListNonResidentAttributeValue, NtfsAttributeValue, NtfsNonResidentAttributeValue,
+    NtfsResidentAttributeValue,
+};
 use crate::error::{NtfsError, Result};
 use crate::file::NtfsFile;
 use crate::string::NtfsString;
@@ -9,10 +13,6 @@ use crate::structured_values::{
     NtfsStructuredValueFromResidentAttributeValue,
 };
 use crate::types::Vcn;
-use crate::value::attribute_list_non_resident_attribute::NtfsAttributeListNonResidentAttributeValue;
-use crate::value::non_resident_attribute::NtfsNonResidentAttributeValue;
-use crate::value::slice::NtfsSliceValue;
-use crate::value::NtfsValue;
 use binread::io::{Read, Seek};
 use bitflags::bitflags;
 use byteorder::{ByteOrder, LittleEndian};
@@ -271,7 +271,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         S::from_resident_attribute_value(resident_value)
     }
 
-    pub(crate) fn resident_value(&self) -> Result<NtfsSliceValue<'f>> {
+    pub(crate) fn resident_value(&self) -> Result<NtfsResidentAttributeValue<'f>> {
         debug_assert!(self.is_resident());
         self.validate_resident_value_sizes()?;
 
@@ -279,7 +279,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         let end = start + self.resident_value_length() as usize;
         let data = &self.file.record_data()[start..end];
 
-        Ok(NtfsSliceValue::new(data, self.position()))
+        Ok(NtfsResidentAttributeValue::new(data, self.position()))
     }
 
     fn resident_value_length(&self) -> u32 {
@@ -308,7 +308,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
             });
         }
 
-        S::from_value(fs, self.value()?)
+        S::from_attribute_value(fs, self.value()?)
     }
 
     /// Returns the type of this NTFS attribute, or [`NtfsError::UnsupportedAttributeType`]
@@ -370,7 +370,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
     }
 
     /// Returns an [`NtfsAttributeValue`] structure to read the value of this NTFS attribute.
-    pub fn value(&self) -> Result<NtfsValue<'n, 'f>> {
+    pub fn value(&self) -> Result<NtfsAttributeValue<'n, 'f>> {
         if let Some(list_entries) = self.list_entries {
             // The first attribute reports the entire data size for all connected attributes
             // (remaining ones are set to zero).
@@ -384,13 +384,13 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
                 self.ty()?,
                 data_size,
             );
-            Ok(NtfsValue::AttributeListNonResidentAttribute(value))
+            Ok(NtfsAttributeValue::AttributeListNonResident(value))
         } else if self.is_resident() {
             let value = self.resident_value()?;
-            Ok(NtfsValue::Slice(value))
+            Ok(NtfsAttributeValue::Resident(value))
         } else {
             let value = self.non_resident_value()?;
-            Ok(NtfsValue::NonResidentAttribute(value))
+            Ok(NtfsAttributeValue::NonResident(value))
         }
     }
 

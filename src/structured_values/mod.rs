@@ -22,9 +22,8 @@ pub use volume_information::*;
 pub use volume_name::*;
 
 use crate::attribute::NtfsAttributeType;
+use crate::attribute_value::{NtfsAttributeValue, NtfsResidentAttributeValue};
 use crate::error::Result;
-use crate::value::slice::NtfsSliceValue;
-use crate::value::NtfsValue;
 use binread::io::{Read, Seek};
 use bitflags::bitflags;
 
@@ -50,8 +49,8 @@ bitflags! {
 pub trait NtfsStructuredValue<'n, 'f>: Sized {
     const TY: NtfsAttributeType;
 
-    /// Create a structured value from an arbitrary `NtfsValue`.
-    fn from_value<T>(fs: &mut T, value: NtfsValue<'n, 'f>) -> Result<Self>
+    /// Create a structured value from an arbitrary `NtfsAttributeValue`.
+    fn from_attribute_value<T>(fs: &mut T, value: NtfsAttributeValue<'n, 'f>) -> Result<Self>
     where
         T: Read + Seek;
 }
@@ -61,5 +60,5 @@ pub trait NtfsStructuredValue<'n, 'f>: Sized {
 pub trait NtfsStructuredValueFromResidentAttributeValue<'n, 'f>:
     NtfsStructuredValue<'n, 'f>
 {
-    fn from_resident_attribute_value(value: NtfsSliceValue<'f>) -> Result<Self>;
+    fn from_resident_attribute_value(value: NtfsResidentAttributeValue<'f>) -> Result<Self>;
 }
