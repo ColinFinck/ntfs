@@ -5,8 +5,8 @@ use crate::error::{NtfsError, Result};
 use crate::file::NtfsFile;
 use crate::string::NtfsString;
 use crate::structured_values::{
-    NtfsAttributeList, NtfsAttributeListEntries, NtfsStructuredValueFromNonResidentAttributeValue,
-    NtfsStructuredValueFromSlice,
+    NtfsAttributeList, NtfsAttributeListEntries, NtfsStructuredValue,
+    NtfsStructuredValueFromResidentAttributeValue,
 };
 use crate::types::Vcn;
 use crate::value::attribute_list_non_resident_attribute::NtfsAttributeListNonResidentAttributeValue;
@@ -206,28 +206,6 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         name_length_in_characters as usize * mem::size_of::<u16>()
     }
 
-    pub fn non_resident_structured_value<T, S>(&self, fs: &mut T) -> Result<S>
-    where
-        T: Read + Seek,
-        S: NtfsStructuredValueFromNonResidentAttributeValue<'n, 'f>,
-    {
-        let ty = self.ty()?;
-        if ty != S::TY {
-            return Err(NtfsError::StructuredValueOfDifferentType {
-                position: self.position(),
-                ty,
-            });
-        }
-
-        if self.is_resident() {
-            return Err(NtfsError::UnexpectedResidentAttribute {
-                position: self.position(),
-            });
-        }
-
-        S::from_non_resident_attribute_value(fs, self.non_resident_value()?)
-    }
-
     pub(crate) fn non_resident_value(&self) -> Result<NtfsNonResidentAttributeValue<'n, 'f>> {
         let (data, position) = self.non_resident_value_data_and_position();
 
@@ -272,13 +250,14 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
 
     pub fn resident_structured_value<S>(&self) -> Result<S>
     where
-        S: NtfsStructuredValueFromSlice<'f>,
+        S: NtfsStructuredValueFromResidentAttributeValue<'n, 'f>,
     {
         let ty = self.ty()?;
         if ty != S::TY {
-            return Err(NtfsError::StructuredValueOfDifferentType {
+            return Err(NtfsError::AttributeOfDifferentType {
                 position: self.position(),
-                ty,
+                expected: S::TY,
+                actual: ty,
             });
         }
 
@@ -289,7 +268,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         }
 
         let resident_value = self.resident_value()?;
-        S::from_slice(resident_value.data(), self.position())
+        S::from_resident_attribute_value(resident_value)
     }
 
     pub(crate) fn resident_value(&self) -> Result<NtfsSliceValue<'f>> {
@@ -318,14 +297,18 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
     pub fn structured_value<T, S>(&self, fs: &mut T) -> Result<S>
     where
         T: Read + Seek,
-        S: NtfsStructuredValueFromSlice<'f>
-            + NtfsStructuredValueFromNonResidentAttributeValue<'n, 'f>,
+        S: NtfsStructuredValue<'n, 'f>,
     {
-        if self.is_resident() {
-            self.resident_structured_value()
-        } else {
-            self.non_resident_structured_value(fs)
+        let ty = self.ty()?;
+        if ty != S::TY {
+            return Err(NtfsError::AttributeOfDifferentType {
+                position: self.position(),
+                expected: S::TY,
+                actual: ty,
+            });
         }
+
+        S::from_value(fs, self.value()?)
     }
 
     /// Returns the type of this NTFS attribute, or [`NtfsError::UnsupportedAttributeType`]
@@ -514,6 +497,7 @@ impl<'n, 'f> NtfsAttributes<'n, 'f> {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct NtfsAttributeItem<'n, 'f> {
     attribute_file: &'f NtfsFile<'n>,
     attribute_value_file: Option<NtfsFile<'n>>,

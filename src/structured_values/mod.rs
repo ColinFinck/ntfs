@@ -23,7 +23,8 @@ pub use volume_name::*;
 
 use crate::attribute::NtfsAttributeType;
 use crate::error::Result;
-use crate::value::non_resident_attribute::NtfsNonResidentAttributeValue;
+use crate::value::slice::NtfsSliceValue;
+use crate::value::NtfsValue;
 use binread::io::{Read, Seek};
 use bitflags::bitflags;
 
@@ -46,22 +47,19 @@ bitflags! {
     }
 }
 
-pub trait NtfsStructuredValue: Sized {
+pub trait NtfsStructuredValue<'n, 'f>: Sized {
     const TY: NtfsAttributeType;
+
+    /// Create a structured value from an arbitrary `NtfsValue`.
+    fn from_value<T>(fs: &mut T, value: NtfsValue<'n, 'f>) -> Result<Self>
+    where
+        T: Read + Seek;
 }
 
 /// Create a structured value from an arbitrary data slice.
-/// This handles Resident Attributes of File Records AND Keys of Index Records (when an attribute is indexed).
-pub trait NtfsStructuredValueFromSlice<'s>: NtfsStructuredValue {
-    fn from_slice(slice: &'s [u8], position: u64) -> Result<Self>;
-}
-
-/// Create a structured value from a Non-Resident Attribute Value.
-pub trait NtfsStructuredValueFromNonResidentAttributeValue<'n, 'f>: NtfsStructuredValue {
-    fn from_non_resident_attribute_value<T>(
-        fs: &mut T,
-        value: NtfsNonResidentAttributeValue<'n, 'f>,
-    ) -> Result<Self>
-    where
-        T: Read + Seek;
+/// This is a fast path for the few structured values that are always in resident attributes.
+pub trait NtfsStructuredValueFromResidentAttributeValue<'n, 'f>:
+    NtfsStructuredValue<'n, 'f>
+{
+    fn from_resident_attribute_value(value: NtfsSliceValue<'f>) -> Result<Self>;
 }

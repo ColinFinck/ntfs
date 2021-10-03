@@ -1,6 +1,7 @@
 // Copyright 2021 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+use crate::attribute::{NtfsAttributeItem, NtfsAttributeType};
 use crate::error::{NtfsError, Result};
 use crate::index_entry::{
     IndexEntryRange, IndexNodeEntryRanges, NtfsIndexEntry, NtfsIndexEntryFlags,
@@ -18,7 +19,7 @@ where
     E: NtfsIndexEntryType,
 {
     index_root: NtfsIndexRoot<'f>,
-    index_allocation: Option<NtfsIndexAllocation<'n, 'f>>,
+    index_allocation_item: Option<NtfsAttributeItem<'n, 'f>>,
     entry_type: PhantomData<E>,
 }
 
@@ -28,9 +29,20 @@ where
 {
     pub fn new(
         index_root: NtfsIndexRoot<'f>,
-        index_allocation: Option<NtfsIndexAllocation<'n, 'f>>,
+        index_allocation_item: Option<NtfsAttributeItem<'n, 'f>>,
     ) -> Result<Self> {
-        if index_root.is_large_index() && index_allocation.is_none() {
+        if let Some(item) = &index_allocation_item {
+            let attribute = item.to_attribute();
+            let ty = attribute.ty()?;
+
+            if ty != NtfsAttributeType::IndexAllocation {
+                return Err(NtfsError::AttributeOfDifferentType {
+                    position: attribute.position(),
+                    expected: NtfsAttributeType::IndexAllocation,
+                    actual: ty,
+                });
+            }
+        } else if index_root.is_large_index() {
             return Err(NtfsError::MissingIndexAllocation {
                 position: index_root.position(),
             });
@@ -40,7 +52,7 @@ where
 
         Ok(Self {
             index_root,
-            index_allocation,
+            index_allocation_item,
             entry_type,
         })
     }
@@ -122,12 +134,17 @@ where
                 // Does this entry have a subnode that needs to be iterated first?
                 if let Some(subnode_vcn) = entry.subnode_vcn() {
                     // Read the subnode from the filesystem and get an iterator for it.
-                    let index_allocation =
-                        iter_try!(self.index.index_allocation.as_ref().ok_or_else(|| {
+                    let index_allocation_item =
+                        iter_try!(self.index.index_allocation_item.as_ref().ok_or_else(|| {
                             NtfsError::MissingIndexAllocation {
                                 position: self.index.index_root.position(),
                             }
                         }));
+                    let index_allocation_attribute = index_allocation_item.to_attribute();
+                    let index_allocation =
+                        iter_try!(index_allocation_attribute
+                            .structured_value::<_, NtfsIndexAllocation>(fs));
+
                     let subnode = iter_try!(index_allocation.record_from_vcn(
                         fs,
                         &self.index.index_root,
@@ -241,12 +258,17 @@ where
             // it comes lexicographically AFTER what we're looking for.
             // In both cases, we have to continue iterating in the subnode of this entry (if there is any).
             let subnode_vcn = entry.subnode_vcn()?;
-            let index_allocation =
-                iter_try!(self.index.index_allocation.as_ref().ok_or_else(|| {
+            let index_allocation_item =
+                iter_try!(self.index.index_allocation_item.as_ref().ok_or_else(|| {
                     NtfsError::MissingIndexAllocation {
                         position: self.index.index_root.position(),
                     }
                 }));
+            let index_allocation_attribute = index_allocation_item.to_attribute();
+            let index_allocation = iter_try!(
+                index_allocation_attribute.structured_value::<_, NtfsIndexAllocation>(fs)
+            );
+
             let subnode = iter_try!(index_allocation.record_from_vcn(
                 fs,
                 &self.index.index_root,

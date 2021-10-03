@@ -36,7 +36,14 @@ impl UpcaseTable {
     {
         // Lookup the $UpCase file and its $DATA attribute.
         let upcase_file = ntfs.file(fs, KnownNtfsFileRecordNumber::UpCase as u64)?;
-        let data_attribute = upcase_file.attribute_by_ty(NtfsAttributeType::Data)?;
+        let data_item = upcase_file
+            .data(fs, "")
+            .ok_or(NtfsError::AttributeNotFound {
+                position: upcase_file.position(),
+                ty: NtfsAttributeType::Data,
+            })??;
+
+        let data_attribute = data_item.to_attribute();
         if data_attribute.value_length() != UPCASE_TABLE_SIZE {
             return Err(NtfsError::InvalidUpcaseTableSize {
                 expected: UPCASE_TABLE_SIZE,

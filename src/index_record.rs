@@ -4,11 +4,12 @@
 use crate::error::{NtfsError, Result};
 use crate::index_entry::{IndexNodeEntryRanges, NtfsIndexNodeEntries};
 use crate::indexes::NtfsIndexEntryType;
+use crate::ntfs::Ntfs;
 use crate::record::Record;
 use crate::record::RecordHeader;
 use crate::traits::NtfsReadSeek;
 use crate::types::Vcn;
-use crate::value::non_resident_attribute::NtfsNonResidentAttributeValue;
+use crate::value::NtfsValue;
 use binread::io::{Read, Seek};
 use byteorder::{ByteOrder, LittleEndian};
 use core::ops::Range;
@@ -43,8 +44,9 @@ const HAS_SUBNODES_FLAG: u8 = 0x01;
 
 impl<'n> NtfsIndexRecord<'n> {
     pub(crate) fn new<T>(
+        ntfs: &'n Ntfs,
         fs: &mut T,
-        mut value: NtfsNonResidentAttributeValue<'n, '_>,
+        mut value: NtfsValue<'n, '_>,
         index_record_size: u32,
     ) -> Result<Self>
     where
@@ -57,7 +59,7 @@ impl<'n> NtfsIndexRecord<'n> {
         let mut data = vec![0; index_record_size as usize];
         value.read_exact(fs, &mut data)?;
 
-        let mut record = Record::new(value.ntfs(), data, data_position);
+        let mut record = Record::new(ntfs, data, data_position);
         Self::validate_signature(&record)?;
         record.fixup()?;
 

@@ -3,8 +3,12 @@
 
 use crate::attribute::NtfsAttributeType;
 use crate::error::{NtfsError, Result};
-use crate::structured_values::{NtfsStructuredValue, NtfsStructuredValueFromSlice};
-use binread::io::Cursor;
+use crate::structured_values::{
+    NtfsStructuredValue, NtfsStructuredValueFromResidentAttributeValue,
+};
+use crate::value::slice::NtfsSliceValue;
+use crate::value::NtfsValue;
+use binread::io::{Cursor, Read, Seek};
 use binread::{BinRead, BinReaderExt};
 use bitflags::bitflags;
 
@@ -39,6 +43,24 @@ pub struct NtfsVolumeInformation {
 }
 
 impl NtfsVolumeInformation {
+    fn new<T>(r: &mut T, position: u64, value_length: u64) -> Result<Self>
+    where
+        T: Read + Seek,
+    {
+        if value_length < VOLUME_INFORMATION_SIZE as u64 {
+            return Err(NtfsError::InvalidStructuredValueSize {
+                position,
+                ty: NtfsAttributeType::StandardInformation,
+                expected: VOLUME_INFORMATION_SIZE as u64,
+                actual: value_length,
+            });
+        }
+
+        let info = r.read_le::<VolumeInformationData>()?;
+
+        Ok(Self { info })
+    }
+
     pub fn flags(&self) -> NtfsVolumeFlags {
         NtfsVolumeFlags::from_bits_truncate(self.info.flags)
     }
@@ -52,24 +74,27 @@ impl NtfsVolumeInformation {
     }
 }
 
-impl NtfsStructuredValue for NtfsVolumeInformation {
+impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsVolumeInformation {
     const TY: NtfsAttributeType = NtfsAttributeType::VolumeInformation;
+
+    fn from_value<T>(fs: &mut T, value: NtfsValue<'n, 'f>) -> Result<Self>
+    where
+        T: Read + Seek,
+    {
+        let position = value.data_position().unwrap();
+        let value_length = value.len();
+
+        let mut value_attached = value.attach(fs);
+        Self::new(&mut value_attached, position, value_length)
+    }
 }
 
-impl<'s> NtfsStructuredValueFromSlice<'s> for NtfsVolumeInformation {
-    fn from_slice(slice: &'s [u8], position: u64) -> Result<Self> {
-        if slice.len() < VOLUME_INFORMATION_SIZE {
-            return Err(NtfsError::InvalidStructuredValueSize {
-                position,
-                ty: NtfsAttributeType::StandardInformation,
-                expected: VOLUME_INFORMATION_SIZE,
-                actual: slice.len(),
-            });
-        }
+impl<'n, 'f> NtfsStructuredValueFromResidentAttributeValue<'n, 'f> for NtfsVolumeInformation {
+    fn from_resident_attribute_value(value: NtfsSliceValue<'f>) -> Result<Self> {
+        let position = value.data_position().unwrap();
+        let value_length = value.len();
 
-        let mut cursor = Cursor::new(slice);
-        let info = cursor.read_le::<VolumeInformationData>()?;
-
-        Ok(Self { info })
+        let mut cursor = Cursor::new(value.data());
+        Self::new(&mut cursor, position, value_length)
     }
 }

@@ -17,6 +17,12 @@ pub enum NtfsError {
         position: u64,
         ty: NtfsAttributeType,
     },
+    /// The NTFS attribute at byte position {position:#010x} should have type {expected:?}, but it actually has type {actual:?}
+    AttributeOfDifferentType {
+        position: u64,
+        expected: NtfsAttributeType,
+        actual: NtfsAttributeType,
+    },
     /// The given buffer should have at least {expected} bytes, but it only has {actual} bytes
     BufferTooSmall { expected: usize, actual: usize },
     /// The NTFS attribute at byte position {position:#010x} indicates a name length up to offset {expected}, but the attribute only has a size of {actual} bytes
@@ -107,8 +113,8 @@ pub enum NtfsError {
     InvalidStructuredValueSize {
         position: u64,
         ty: NtfsAttributeType,
-        expected: usize,
-        actual: usize,
+        expected: u64,
+        actual: u64,
     },
     /// The given time can't be represented as an NtfsTime
     InvalidTime,
@@ -134,11 +140,8 @@ pub enum NtfsError {
     MissingIndexAllocation { position: u64 },
     /// The NTFS file at byte position {position:#010x} is not a directory.
     NotADirectory { position: u64 },
-    /// The NTFS attribute at byte position {position:#010x} has type {ty:?}, but a different type has been requested
-    StructuredValueOfDifferentType {
-        position: u64,
-        ty: NtfsAttributeType,
-    },
+    /// The NTFS attribute at byte position {position:#010x} should not belong to an Attribute List, but it does
+    UnexpectedAttributeListAttribute { position: u64 },
     /// The NTFS attribute at byte position {position:#010x} should be resident, but it is non-resident
     UnexpectedNonResidentAttribute { position: u64 },
     /// The NTFS attribute at byte position {position:#010x} should be non-resident, but it is resident

@@ -168,8 +168,7 @@ impl Ntfs {
         T: Read + Seek,
     {
         let volume_file = self.file(fs, KnownNtfsFileRecordNumber::Volume as u64)?;
-        let attribute = volume_file.attribute_by_ty(NtfsAttributeType::VolumeInformation)?;
-        attribute.resident_structured_value::<NtfsVolumeInformation>()
+        volume_file.find_resident_attribute_structured_value::<NtfsVolumeInformation>(None)
     }
 
     /// Returns an [`NtfsVolumeName`] to read the volume name (also called volume label)
@@ -181,12 +180,12 @@ impl Ntfs {
         T: Read + Seek,
     {
         let volume_file = iter_try!(self.file(fs, KnownNtfsFileRecordNumber::Volume as u64));
-        let attribute = volume_file
-            .attribute_by_ty(NtfsAttributeType::VolumeName)
-            .ok()?;
-        let volume_name = iter_try!(attribute.resident_structured_value::<NtfsVolumeName>());
 
-        Some(Ok(volume_name))
+        match volume_file.find_resident_attribute_structured_value::<NtfsVolumeName>(None) {
+            Ok(volume_name) => Some(Ok(volume_name)),
+            Err(NtfsError::AttributeNotFound { .. }) => None,
+            Err(e) => Some(Err(e)),
+        }
     }
 }
 

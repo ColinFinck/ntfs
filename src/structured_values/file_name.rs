@@ -6,12 +6,11 @@ use crate::error::{NtfsError, Result};
 use crate::file_reference::NtfsFileReference;
 use crate::indexes::NtfsIndexEntryKey;
 use crate::string::NtfsString;
-use crate::structured_values::{
-    NtfsFileAttributeFlags, NtfsStructuredValue, NtfsStructuredValueFromSlice,
-};
+use crate::structured_values::{NtfsFileAttributeFlags, NtfsStructuredValue};
 use crate::time::NtfsTime;
+use crate::value::NtfsValue;
 use arrayvec::ArrayVec;
-use binread::io::Cursor;
+use binread::io::{Cursor, Read, Seek};
 use binread::{BinRead, BinReaderExt};
 use core::mem;
 use enumn::N;
@@ -58,6 +57,32 @@ pub struct NtfsFileName {
 }
 
 impl NtfsFileName {
+    fn new<T>(r: &mut T, position: u64, value_length: u64) -> Result<Self>
+    where
+        T: Read + Seek,
+    {
+        if value_length < FILE_NAME_MIN_SIZE as u64 {
+            return Err(NtfsError::InvalidStructuredValueSize {
+                position,
+                ty: NtfsAttributeType::FileName,
+                expected: FILE_NAME_MIN_SIZE as u64,
+                actual: value_length,
+            });
+        }
+
+        let header = r.read_le::<FileNameHeader>()?;
+
+        let mut file_name = Self {
+            header,
+            name: ArrayVec::from([0u8; NAME_MAX_SIZE]),
+        };
+        file_name.validate_name_length(value_length, position)?;
+        file_name.validate_namespace(position)?;
+        file_name.read_name(r)?;
+
+        Ok(file_name)
+    }
+
     pub fn access_time(&self) -> NtfsTime {
         self.header.access_time
     }
@@ -112,15 +137,21 @@ impl NtfsFileName {
         self.header.parent_directory_reference
     }
 
-    fn read_name(&mut self, data: &[u8]) {
-        debug_assert!(self.name.is_empty());
-        let start = FILE_NAME_HEADER_SIZE;
-        let end = start + self.name_length();
-        self.name.try_extend_from_slice(&data[start..end]).unwrap();
+    fn read_name<T>(&mut self, r: &mut T) -> Result<()>
+    where
+        T: Read + Seek,
+    {
+        debug_assert_eq!(self.name.len(), NAME_MAX_SIZE);
+
+        let name_length = self.name_length();
+        r.read_exact(&mut self.name[..name_length])?;
+        self.name.truncate(name_length);
+
+        Ok(())
     }
 
-    fn validate_name_length(&self, data_size: usize, position: u64) -> Result<()> {
-        let total_size = FILE_NAME_HEADER_SIZE + self.name_length();
+    fn validate_name_length(&self, data_size: u64, position: u64) -> Result<()> {
+        let total_size = (FILE_NAME_HEADER_SIZE + self.name_length()) as u64;
 
         if total_size > data_size {
             return Err(NtfsError::InvalidStructuredValueSize {
@@ -146,40 +177,28 @@ impl NtfsFileName {
     }
 }
 
-impl NtfsStructuredValue for NtfsFileName {
+impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsFileName {
     const TY: NtfsAttributeType = NtfsAttributeType::FileName;
-}
 
-impl<'s> NtfsStructuredValueFromSlice<'s> for NtfsFileName {
-    fn from_slice(slice: &'s [u8], position: u64) -> Result<Self> {
-        if slice.len() < FILE_NAME_MIN_SIZE {
-            return Err(NtfsError::InvalidStructuredValueSize {
-                position,
-                ty: NtfsAttributeType::FileName,
-                expected: FILE_NAME_MIN_SIZE,
-                actual: slice.len(),
-            });
-        }
+    fn from_value<T>(fs: &mut T, value: NtfsValue<'n, 'f>) -> Result<Self>
+    where
+        T: Read + Seek,
+    {
+        let position = value.data_position().unwrap();
+        let value_length = value.len();
 
-        let mut cursor = Cursor::new(slice);
-        let header = cursor.read_le::<FileNameHeader>()?;
-
-        let mut file_name = Self {
-            header,
-            name: ArrayVec::new(),
-        };
-        file_name.validate_name_length(slice.len(), position)?;
-        file_name.validate_namespace(position)?;
-        file_name.read_name(slice);
-
-        Ok(file_name)
+        let mut value_attached = value.attach(fs);
+        Self::new(&mut value_attached, position, value_length)
     }
 }
 
 // `NtfsFileName` is special in the regard that the index entry key has the same structure as the structured value.
 impl NtfsIndexEntryKey for NtfsFileName {
     fn key_from_slice(slice: &[u8], position: u64) -> Result<Self> {
-        Self::from_slice(slice, position)
+        let value_length = slice.len() as u64;
+
+        let mut cursor = Cursor::new(slice);
+        Self::new(&mut cursor, position, value_length)
     }
 }
 
@@ -209,7 +228,7 @@ mod tests {
 
         // Check the actual "file name" of the MFT.
         let file_name = attribute
-            .resident_structured_value::<NtfsFileName>()
+            .structured_value::<_, NtfsFileName>(&mut testfs1)
             .unwrap();
 
         let creation_time = file_name.creation_time();

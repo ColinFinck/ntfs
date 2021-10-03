@@ -1,9 +1,7 @@
 // Copyright 2021 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use crate::attribute::{
-    NtfsAttribute, NtfsAttributeItem, NtfsAttributeType, NtfsAttributes, NtfsAttributesRaw,
-};
+use crate::attribute::{NtfsAttributeItem, NtfsAttributeType, NtfsAttributes, NtfsAttributesRaw};
 use crate::error::{NtfsError, Result};
 use crate::file_reference::NtfsFileReference;
 use crate::index::NtfsIndex;
@@ -11,7 +9,8 @@ use crate::indexes::NtfsFileNameIndex;
 use crate::ntfs::Ntfs;
 use crate::record::{Record, RecordHeader};
 use crate::structured_values::{
-    NtfsFileName, NtfsIndexAllocation, NtfsIndexRoot, NtfsStandardInformation,
+    NtfsFileName, NtfsIndexRoot, NtfsStandardInformation,
+    NtfsStructuredValueFromResidentAttributeValue,
 };
 use binread::io::{Read, Seek, SeekFrom};
 use bitflags::bitflags;
@@ -94,22 +93,6 @@ impl<'n> NtfsFile<'n> {
         LittleEndian::read_u32(&self.record.data()[start..])
     }
 
-    /// Returns the first attribute of the given type, or `NtfsError::AttributeNotFound`.
-    pub(crate) fn attribute_by_ty<'f>(
-        &'f self,
-        ty: NtfsAttributeType,
-    ) -> Result<NtfsAttribute<'n, 'f>> {
-        self.attributes_raw()
-            .find(|attribute| {
-                // TODO: Replace by attribute.ty().contains() once https://github.com/rust-lang/rust/issues/62358 has landed.
-                attribute.ty().map(|x| x == ty).unwrap_or(false)
-            })
-            .ok_or(NtfsError::AttributeNotFound {
-                position: self.position(),
-                ty,
-            })
-    }
-
     /// This provides a flattened "data-centric" view of the attributes and abstracts away the filesystem details
     /// to deal with many or large attributes (Attribute Lists and split attributes).
     /// Use [`NtfsFile::attributes_raw`] to iterate over the plain attributes on the filesystem.
@@ -179,20 +162,40 @@ impl<'n> NtfsFile<'n> {
             });
         }
 
-        // Get the Index Root attribute that needs to exist.
-        let index_root = self
-            .attribute_by_ty(NtfsAttributeType::IndexRoot)?
-            .resident_structured_value::<NtfsIndexRoot>()?;
+        // A FILE record may contain multiple indexes, so we have to match the name of the directory index.
+        let directory_index_name = "$I30";
 
-        // Get the Index Allocation attribute that is only required for large indexes.
-        let index_allocation_attribute = self.attribute_by_ty(NtfsAttributeType::IndexAllocation);
-        let index_allocation = if let Ok(attribute) = index_allocation_attribute {
-            Some(attribute.non_resident_structured_value::<_, NtfsIndexAllocation>(fs)?)
-        } else {
-            None
-        };
+        // The IndexRoot attribute is always resident and has to exist for every directory.
+        let index_root = self.find_resident_attribute_structured_value::<NtfsIndexRoot>(Some(
+            directory_index_name,
+        ))?;
 
-        NtfsIndex::<NtfsFileNameIndex>::new(index_root, index_allocation)
+        // The IndexAllocation attribute is only required for "large" indexes.
+        // It is always non-resident and may even be in an AttributeList.
+        let mut index_allocation_item = None;
+        if index_root.is_large_index() {
+            let mut iter = self.attributes();
+
+            while let Some(item) = iter.next(fs) {
+                let item = item?;
+                let attribute = item.to_attribute();
+
+                let ty = attribute.ty()?;
+                if ty != NtfsAttributeType::IndexAllocation {
+                    continue;
+                }
+
+                let name = attribute.name()?;
+                if name != directory_index_name {
+                    continue;
+                }
+
+                index_allocation_item = Some(item);
+                break;
+            }
+        }
+
+        NtfsIndex::<NtfsFileNameIndex>::new(index_root, index_allocation_item)
     }
 
     /// Returns the NTFS file record number of this file.
@@ -201,6 +204,39 @@ impl<'n> NtfsFile<'n> {
     /// object via [`Ntfs::file`].
     pub fn file_record_number(&self) -> u64 {
         self.file_record_number
+    }
+
+    /// Finds a resident attribute of a specific type, optionally with a specific name, and returns its structured value.
+    /// Returns `NtfsError::AttributeNotFound` if no such resident attribute could be found.
+    ///
+    /// The attribute type is given through the passed structured value type parameter.
+    pub(crate) fn find_resident_attribute_structured_value<'f, S>(
+        &'f self,
+        match_name: Option<&str>,
+    ) -> Result<S>
+    where
+        S: NtfsStructuredValueFromResidentAttributeValue<'n, 'f>,
+    {
+        // Resident attributes are always stored on the top-level (we don't have to dig into Attribute Lists).
+        let attribute = self
+            .attributes_raw()
+            .find(|attribute| {
+                // TODO: Replace by attribute.ty().contains() once https://github.com/rust-lang/rust/issues/62358 has landed.
+                let ty_matches = attribute.ty().map(|x| x == S::TY).unwrap_or(false);
+
+                let name_matches = if let Some(name) = match_name {
+                    attribute.name().map(|x| x == name).unwrap_or(false)
+                } else {
+                    true
+                };
+
+                ty_matches && name_matches
+            })
+            .ok_or(NtfsError::AttributeNotFound {
+                position: self.position(),
+                ty: S::TY,
+            })?;
+        attribute.resident_structured_value::<S>()
     }
 
     pub(crate) fn first_attribute_offset(&self) -> u16 {
@@ -225,8 +261,7 @@ impl<'n> NtfsFile<'n> {
     /// This internally calls [`NtfsFile::attributes`] to iterate through the file's
     /// attributes and pick up the first $STANDARD_INFORMATION attribute.
     pub fn info(&self) -> Result<NtfsStandardInformation> {
-        let attribute = self.attribute_by_ty(NtfsAttributeType::StandardInformation)?;
-        attribute.resident_structured_value::<NtfsStandardInformation>()
+        self.find_resident_attribute_structured_value::<NtfsStandardInformation>(None)
     }
 
     pub fn is_directory(&self) -> bool {
@@ -237,9 +272,28 @@ impl<'n> NtfsFile<'n> {
     ///
     /// This internally calls [`NtfsFile::attributes`] to iterate through the file's
     /// attributes and pick up the first $FILE_NAME attribute.
-    pub fn name(&self) -> Result<NtfsFileName> {
-        let attribute = self.attribute_by_ty(NtfsAttributeType::FileName)?;
-        attribute.resident_structured_value::<NtfsFileName>()
+    pub fn name<T>(&self, fs: &mut T) -> Result<NtfsFileName>
+    where
+        T: Read + Seek,
+    {
+        let mut iter = self.attributes();
+
+        while let Some(item) = iter.next(fs) {
+            let item = item?;
+            let attribute = item.to_attribute();
+
+            let ty = attribute.ty()?;
+            if ty != NtfsAttributeType::FileName {
+                continue;
+            }
+
+            return attribute.structured_value::<_, NtfsFileName>(fs);
+        }
+
+        Err(NtfsError::AttributeNotFound {
+            position: self.position(),
+            ty: NtfsAttributeType::FileName,
+        })
     }
 
     /// Returns the [`Ntfs`] object associated to this file.

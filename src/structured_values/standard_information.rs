@@ -4,10 +4,12 @@
 use crate::attribute::NtfsAttributeType;
 use crate::error::{NtfsError, Result};
 use crate::structured_values::{
-    NtfsFileAttributeFlags, NtfsStructuredValue, NtfsStructuredValueFromSlice,
+    NtfsFileAttributeFlags, NtfsStructuredValue, NtfsStructuredValueFromResidentAttributeValue,
 };
 use crate::time::NtfsTime;
-use binread::io::Cursor;
+use crate::value::slice::NtfsSliceValue;
+use crate::value::NtfsValue;
+use binread::io::{Cursor, Read, Seek};
 use binread::{BinRead, BinReaderExt};
 
 /// Size of all [`StandardInformationData`] fields plus some reserved bytes.
@@ -43,6 +45,32 @@ pub struct NtfsStandardInformation {
 }
 
 impl NtfsStandardInformation {
+    fn new<T>(r: &mut T, position: u64, value_length: u64) -> Result<Self>
+    where
+        T: Read + Seek,
+    {
+        if value_length < STANDARD_INFORMATION_SIZE_NTFS1 as u64 {
+            return Err(NtfsError::InvalidStructuredValueSize {
+                position,
+                ty: NtfsAttributeType::StandardInformation,
+                expected: STANDARD_INFORMATION_SIZE_NTFS1 as u64,
+                actual: value_length,
+            });
+        }
+
+        let ntfs1_data = r.read_le::<StandardInformationDataNtfs1>()?;
+
+        let mut ntfs3_data = None;
+        if value_length >= STANDARD_INFORMATION_SIZE_NTFS3 as u64 {
+            ntfs3_data = Some(r.read_le::<StandardInformationDataNtfs3>()?);
+        }
+
+        Ok(Self {
+            ntfs1_data,
+            ntfs3_data,
+        })
+    }
+
     pub fn access_time(&self) -> NtfsTime {
         self.ntfs1_data.access_time
     }
@@ -92,33 +120,28 @@ impl NtfsStandardInformation {
     }
 }
 
-impl NtfsStructuredValue for NtfsStandardInformation {
+impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsStandardInformation {
     const TY: NtfsAttributeType = NtfsAttributeType::StandardInformation;
+
+    fn from_value<T>(fs: &mut T, value: NtfsValue<'n, 'f>) -> Result<Self>
+    where
+        T: Read + Seek,
+    {
+        let position = value.data_position().unwrap();
+        let value_length = value.len();
+
+        let mut value_attached = value.attach(fs);
+        Self::new(&mut value_attached, position, value_length)
+    }
 }
 
-impl<'s> NtfsStructuredValueFromSlice<'s> for NtfsStandardInformation {
-    fn from_slice(slice: &'s [u8], position: u64) -> Result<Self> {
-        if slice.len() < STANDARD_INFORMATION_SIZE_NTFS1 {
-            return Err(NtfsError::InvalidStructuredValueSize {
-                position,
-                ty: NtfsAttributeType::StandardInformation,
-                expected: STANDARD_INFORMATION_SIZE_NTFS1,
-                actual: slice.len(),
-            });
-        }
+impl<'n, 'f> NtfsStructuredValueFromResidentAttributeValue<'n, 'f> for NtfsStandardInformation {
+    fn from_resident_attribute_value(value: NtfsSliceValue<'f>) -> Result<Self> {
+        let position = value.data_position().unwrap();
+        let value_length = value.len();
 
-        let mut cursor = Cursor::new(slice);
-        let ntfs1_data = cursor.read_le::<StandardInformationDataNtfs1>()?;
-
-        let mut ntfs3_data = None;
-        if slice.len() >= STANDARD_INFORMATION_SIZE_NTFS3 {
-            ntfs3_data = Some(cursor.read_le::<StandardInformationDataNtfs3>()?);
-        }
-
-        Ok(Self {
-            ntfs1_data,
-            ntfs3_data,
-        })
+        let mut cursor = Cursor::new(value.data());
+        Self::new(&mut cursor, position, value_length)
     }
 }
 

@@ -6,7 +6,12 @@ use crate::error::{NtfsError, Result};
 use crate::index_entry::{IndexNodeEntryRanges, NtfsIndexNodeEntries};
 use crate::index_record::{IndexNodeHeader, INDEX_NODE_HEADER_SIZE};
 use crate::indexes::NtfsIndexEntryType;
-use crate::structured_values::{NtfsStructuredValue, NtfsStructuredValueFromSlice};
+use crate::structured_values::{
+    NtfsStructuredValue, NtfsStructuredValueFromResidentAttributeValue,
+};
+use crate::value::slice::NtfsSliceValue;
+use crate::value::NtfsValue;
+use binread::io::{Read, Seek};
 use byteorder::{ByteOrder, LittleEndian};
 use core::ops::Range;
 use memoffset::offset_of;
@@ -31,6 +36,22 @@ pub struct NtfsIndexRoot<'f> {
 const LARGE_INDEX_FLAG: u8 = 0x01;
 
 impl<'f> NtfsIndexRoot<'f> {
+    fn new(slice: &'f [u8], position: u64) -> Result<Self> {
+        if slice.len() < INDEX_ROOT_HEADER_SIZE + INDEX_NODE_HEADER_SIZE {
+            return Err(NtfsError::InvalidStructuredValueSize {
+                position,
+                ty: NtfsAttributeType::IndexRoot,
+                expected: INDEX_ROOT_HEADER_SIZE as u64,
+                actual: slice.len() as u64,
+            });
+        }
+
+        let index_root = Self { slice, position };
+        index_root.validate_sizes()?;
+
+        Ok(index_root)
+    }
+
     pub fn entries<E>(&self) -> Result<NtfsIndexNodeEntries<'f, E>>
     where
         E: NtfsIndexEntryType,
@@ -115,24 +136,28 @@ impl<'f> NtfsIndexRoot<'f> {
     }
 }
 
-impl<'f> NtfsStructuredValue for NtfsIndexRoot<'f> {
+impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsIndexRoot<'f> {
     const TY: NtfsAttributeType = NtfsAttributeType::IndexRoot;
+
+    fn from_value<T>(_fs: &mut T, value: NtfsValue<'n, 'f>) -> Result<Self>
+    where
+        T: Read + Seek,
+    {
+        let slice_value = match value {
+            NtfsValue::Slice(slice_value) => slice_value,
+            _ => {
+                let position = value.data_position().unwrap();
+                return Err(NtfsError::UnexpectedNonResidentAttribute { position });
+            }
+        };
+
+        let position = slice_value.data_position().unwrap();
+        Self::new(slice_value.data(), position)
+    }
 }
 
-impl<'f> NtfsStructuredValueFromSlice<'f> for NtfsIndexRoot<'f> {
-    fn from_slice(slice: &'f [u8], position: u64) -> Result<Self> {
-        if slice.len() < INDEX_ROOT_HEADER_SIZE + INDEX_NODE_HEADER_SIZE {
-            return Err(NtfsError::InvalidStructuredValueSize {
-                position,
-                ty: NtfsAttributeType::IndexRoot,
-                expected: INDEX_ROOT_HEADER_SIZE,
-                actual: slice.len(),
-            });
-        }
-
-        let index_root = Self { slice, position };
-        index_root.validate_sizes()?;
-
-        Ok(index_root)
+impl<'n, 'f> NtfsStructuredValueFromResidentAttributeValue<'n, 'f> for NtfsIndexRoot<'f> {
+    fn from_resident_attribute_value(value: NtfsSliceValue<'f>) -> Result<Self> {
+        Self::new(value.data(), value.data_position().unwrap())
     }
 }

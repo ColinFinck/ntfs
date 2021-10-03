@@ -150,6 +150,10 @@ impl<'n, 'f> NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
 
         Ok(true)
     }
+
+    pub fn ntfs(&self) -> &'n Ntfs {
+        self.ntfs
+    }
 }
 
 impl<'n, 'f> NtfsReadSeek for NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
