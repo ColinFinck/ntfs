@@ -11,7 +11,9 @@ use std::io::{BufReader, Read, Seek, Write};
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Utc};
 use ntfs::indexes::NtfsFileNameIndex;
-use ntfs::structured_values::{NtfsAttributeList, NtfsFileName, NtfsStandardInformation};
+use ntfs::structured_values::{
+    NtfsAttributeList, NtfsFileName, NtfsFileNamespace, NtfsStandardInformation,
+};
 use ntfs::value::NtfsValue;
 use ntfs::{Ntfs, NtfsAttribute, NtfsAttributeType, NtfsFile, NtfsReadSeek};
 
@@ -21,9 +23,10 @@ struct CommandInfo<'n, T>
 where
     T: Read + Seek,
 {
-    current_directory: NtfsFile<'n>,
+    current_directory: Vec<NtfsFile<'n>>,
     current_directory_string: String,
     fs: T,
+    ntfs: &'n Ntfs,
 }
 
 fn main() -> Result<()> {
@@ -42,12 +45,13 @@ fn main() -> Result<()> {
     let mut fs = BufReader::new(sr);
     let mut ntfs = Ntfs::new(&mut fs)?;
     ntfs.read_upcase_table(&mut fs)?;
-    let current_directory = ntfs.root_directory(&mut fs)?;
+    let current_directory = vec![ntfs.root_directory(&mut fs)?];
 
     let mut info = CommandInfo {
         current_directory,
         current_directory_string: String::new(),
         fs,
+        ntfs: &ntfs,
     };
 
     println!("**********************************************************************");
@@ -102,7 +106,6 @@ fn attr<T>(with_runs: bool, arg: &str, info: &mut CommandInfo<T>) -> Result<()>
 where
     T: Read + Seek,
 {
-    let ntfs = info.current_directory.ntfs();
     let file = parse_file_arg(arg, info)?;
 
     println!("{:=<110}", "");
@@ -136,7 +139,7 @@ where
                     continue;
                 }
 
-                let entry_file = entry.to_file(ntfs, &mut info.fs)?;
+                let entry_file = entry.to_file(info.ntfs, &mut info.fs)?;
                 let entry_attribute = entry.to_attribute(&entry_file)?;
 
                 attr_print_attribute(
@@ -191,6 +194,38 @@ fn attr_print_attribute<'n>(
     Ok(())
 }
 
+fn best_file_name<T>(
+    info: &mut CommandInfo<T>,
+    file: &NtfsFile,
+    parent_record_number: u64,
+) -> Result<NtfsFileName>
+where
+    T: Read + Seek,
+{
+    // Try to find a long filename (Win32) first.
+    // If we don't find one, the file may only have a single short name (Win32AndDos).
+    // If we don't find one either, go with any namespace. It may still be a Dos or Posix name then.
+    let priority = [
+        Some(NtfsFileNamespace::Win32),
+        Some(NtfsFileNamespace::Win32AndDos),
+        None,
+    ];
+
+    for match_namespace in priority {
+        if let Some(file_name) =
+            file.name(&mut info.fs, match_namespace, Some(parent_record_number))
+        {
+            let file_name = file_name?;
+            return Ok(file_name);
+        }
+    }
+
+    bail!(
+        "Found no FileName attribute for FILE record {:#x}",
+        file.file_record_number()
+    )
+}
+
 fn cd<T>(arg: &str, info: &mut CommandInfo<T>) -> Result<()>
 where
     T: Read + Seek,
@@ -199,23 +234,23 @@ where
         return Ok(());
     }
 
-    let ntfs = info.current_directory.ntfs();
-
     if arg == ".." {
         if info.current_directory_string.is_empty() {
             return Ok(());
         }
 
-        let file_name = info.current_directory.name(&mut info.fs)?;
-        let parent_ref = file_name.parent_directory_reference();
-        info.current_directory = parent_ref.to_file(ntfs, &mut info.fs)?;
+        info.current_directory.pop();
 
         let new_len = info.current_directory_string.rfind('\\').unwrap_or(0);
         info.current_directory_string.truncate(new_len);
     } else {
-        let index = info.current_directory.directory_index(&mut info.fs)?;
+        let index = info
+            .current_directory
+            .last()
+            .unwrap()
+            .directory_index(&mut info.fs)?;
         let mut finder = index.finder();
-        let maybe_entry = NtfsFileNameIndex::find(&mut finder, &ntfs, &mut info.fs, arg);
+        let maybe_entry = NtfsFileNameIndex::find(&mut finder, info.ntfs, &mut info.fs, arg);
 
         if maybe_entry.is_none() {
             println!("Cannot find subdirectory \"{}\".", arg);
@@ -232,13 +267,18 @@ where
             return Ok(());
         }
 
-        info.current_directory = entry.to_file(ntfs, &mut info.fs)?;
-
-        let file_name = info.current_directory.name(&mut info.fs)?;
+        let file = entry.to_file(info.ntfs, &mut info.fs)?;
+        let file_name = best_file_name(
+            info,
+            &file,
+            info.current_directory.last().unwrap().file_record_number(),
+        )?;
         if !info.current_directory_string.is_empty() {
             info.current_directory_string += "\\";
         }
         info.current_directory_string += &file_name.name().to_string_lossy();
+
+        info.current_directory.push(file);
     }
 
     Ok(())
@@ -248,7 +288,11 @@ fn dir<T>(info: &mut CommandInfo<T>) -> Result<()>
 where
     T: Read + Seek,
 {
-    let index = info.current_directory.directory_index(&mut info.fs)?;
+    let index = info
+        .current_directory
+        .last()
+        .unwrap()
+        .directory_index(&mut info.fs)?;
     let mut iter = index.iter();
 
     while let Some(entry) = iter.next(&mut info.fs) {
@@ -303,46 +347,46 @@ fn fileinfo_std(attribute: NtfsAttribute) -> Result<()> {
     println!();
     println!("{:=^72}", " STANDARD INFORMATION ");
 
-    let info = attribute.resident_structured_value::<NtfsStandardInformation>()?;
+    let std_info = attribute.resident_structured_value::<NtfsStandardInformation>()?;
 
-    println!("{:34}{:?}", "Attributes:", info.file_attributes());
+    println!("{:34}{:?}", "Attributes:", std_info.file_attributes());
 
     let format = "%F %T UTC";
-    let atime = DateTime::<Utc>::from(info.access_time()).format(format);
-    let ctime = DateTime::<Utc>::from(info.creation_time()).format(format);
-    let mtime = DateTime::<Utc>::from(info.modification_time()).format(format);
-    let mmtime = DateTime::<Utc>::from(info.mft_record_modification_time()).format(format);
+    let atime = DateTime::<Utc>::from(std_info.access_time()).format(format);
+    let ctime = DateTime::<Utc>::from(std_info.creation_time()).format(format);
+    let mtime = DateTime::<Utc>::from(std_info.modification_time()).format(format);
+    let mmtime = DateTime::<Utc>::from(std_info.mft_record_modification_time()).format(format);
     println!("{:34}{}", "Access Time:", atime);
     println!("{:34}{}", "Creation Time:", ctime);
     println!("{:34}{}", "Modification Time:", mtime);
     println!("{:34}{}", "MFT Record Modification Time:", mmtime);
 
     // NTFS 3.x extended information
-    let class_id = info
+    let class_id = std_info
         .class_id()
         .map(|x| x.to_string())
         .unwrap_or_else(|| "<NONE>".to_string());
-    let maximum_versions = info
+    let maximum_versions = std_info
         .maximum_versions()
         .map(|x| x.to_string())
         .unwrap_or_else(|| "<NONE>".to_string());
-    let owner_id = info
+    let owner_id = std_info
         .owner_id()
         .map(|x| x.to_string())
         .unwrap_or_else(|| "<NONE>".to_string());
-    let quota_charged = info
+    let quota_charged = std_info
         .quota_charged()
         .map(|x| x.to_string())
         .unwrap_or_else(|| "<NONE>".to_string());
-    let security_id = info
+    let security_id = std_info
         .security_id()
         .map(|x| x.to_string())
         .unwrap_or_else(|| "<NONE>".to_string());
-    let usn = info
+    let usn = std_info
         .usn()
         .map(|x| x.to_string())
         .unwrap_or_else(|| "<NONE>".to_string());
-    let version = info
+    let version = std_info
         .version()
         .map(|x| x.to_string())
         .unwrap_or_else(|| "<NONE>".to_string());
@@ -391,13 +435,11 @@ fn fsinfo<T>(info: &mut CommandInfo<T>) -> Result<()>
 where
     T: Read + Seek,
 {
-    let ntfs = info.current_directory.ntfs();
+    println!("{:20}{}", "Cluster Size:", info.ntfs.cluster_size());
+    println!("{:20}{}", "File Record Size:", info.ntfs.file_record_size());
+    println!("{:20}{:#x}", "MFT Byte Position:", info.ntfs.mft_position());
 
-    println!("{:20}{}", "Cluster Size:", ntfs.cluster_size());
-    println!("{:20}{}", "File Record Size:", ntfs.file_record_size());
-    println!("{:20}{:#x}", "MFT Byte Position:", ntfs.mft_position());
-
-    let volume_info = ntfs.volume_info(&mut info.fs)?;
+    let volume_info = info.ntfs.volume_info(&mut info.fs)?;
     let ntfs_version = format!(
         "{}.{}",
         volume_info.major_version(),
@@ -405,11 +447,11 @@ where
     );
     println!("{:20}{}", "NTFS Version:", ntfs_version);
 
-    println!("{:20}{}", "Sector Size:", ntfs.sector_size());
-    println!("{:20}{}", "Serial Number:", ntfs.serial_number());
-    println!("{:20}{}", "Size:", ntfs.size());
+    println!("{:20}{}", "Sector Size:", info.ntfs.sector_size());
+    println!("{:20}{}", "Serial Number:", info.ntfs.serial_number());
+    println!("{:20}{}", "Size:", info.ntfs.size());
 
-    let volume_name = if let Some(Ok(volume_name)) = ntfs.volume_name(&mut info.fs) {
+    let volume_name = if let Some(Ok(volume_name)) = info.ntfs.volume_name(&mut info.fs) {
         volume_name.name().to_string_lossy()
     } else {
         "<NONE>".to_string()
@@ -567,8 +609,6 @@ where
         bail!("Missing argument!");
     }
 
-    let ntfs = info.current_directory.ntfs();
-
     if let Some(record_number_arg) = arg.strip_prefix("/") {
         let record_number = match record_number_arg.strip_prefix("0x") {
             Some(hex_record_number_arg) => u64::from_str_radix(hex_record_number_arg, 16),
@@ -576,7 +616,7 @@ where
         };
 
         if let Ok(record_number) = record_number {
-            let file = ntfs.file(&mut info.fs, record_number)?;
+            let file = info.ntfs.file(&mut info.fs, record_number)?;
             Ok(file)
         } else {
             bail!(
@@ -585,11 +625,16 @@ where
             )
         }
     } else {
-        let index = info.current_directory.directory_index(&mut info.fs)?;
+        let index = info
+            .current_directory
+            .last()
+            .unwrap()
+            .directory_index(&mut info.fs)?;
         let mut finder = index.finder();
-        if let Some(entry) = NtfsFileNameIndex::find(&mut finder, &ntfs, &mut info.fs, arg) {
+
+        if let Some(entry) = NtfsFileNameIndex::find(&mut finder, info.ntfs, &mut info.fs, arg) {
             let entry = entry?;
-            let file = entry.to_file(ntfs, &mut info.fs)?;
+            let file = entry.to_file(info.ntfs, &mut info.fs)?;
             Ok(file)
         } else {
             bail!("No such file or directory \"{}\".", arg)

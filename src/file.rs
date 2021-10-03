@@ -9,7 +9,7 @@ use crate::indexes::NtfsFileNameIndex;
 use crate::ntfs::Ntfs;
 use crate::record::{Record, RecordHeader};
 use crate::structured_values::{
-    NtfsFileName, NtfsIndexRoot, NtfsStandardInformation,
+    NtfsFileName, NtfsFileNamespace, NtfsIndexRoot, NtfsStandardInformation,
     NtfsStructuredValueFromResidentAttributeValue,
 };
 use binread::io::{Read, Seek, SeekFrom};
@@ -207,7 +207,7 @@ impl<'n> NtfsFile<'n> {
     }
 
     /// Finds a resident attribute of a specific type, optionally with a specific name, and returns its structured value.
-    /// Returns `NtfsError::AttributeNotFound` if no such resident attribute could be found.
+    /// Returns [`NtfsError::AttributeNotFound`] if no such resident attribute could be found.
     ///
     /// The attribute type is given through the passed structured value type parameter.
     pub(crate) fn find_resident_attribute_structured_value<'f, S>(
@@ -258,7 +258,7 @@ impl<'n> NtfsFile<'n> {
     /// Convenience function to get the $STANDARD_INFORMATION attribute of this file
     /// (see [`NtfsStandardInformation`]).
     ///
-    /// This internally calls [`NtfsFile::attributes`] to iterate through the file's
+    /// This internally calls [`NtfsFile::attributes_raw`] to iterate through the file's
     /// attributes and pick up the first $STANDARD_INFORMATION attribute.
     pub fn info(&self) -> Result<NtfsStandardInformation> {
         self.find_resident_attribute_structured_value::<NtfsStandardInformation>(None)
@@ -268,32 +268,54 @@ impl<'n> NtfsFile<'n> {
         self.flags().contains(NtfsFileFlags::IS_DIRECTORY)
     }
 
-    /// Convenience function to get the $FILE_NAME attribute of this file (see [`NtfsFileName`]).
+    /// Convenience function to get a $FILE_NAME attribute of this file (see [`NtfsFileName`]).
+    ///
+    /// A file may have multiple $FILE_NAME attributes for each [`NtfsFileNamespace`].
+    /// Files with hard links have further $FILE_NAME attributes for each directory they are in.
+    /// You may optionally filter for a namespace and parent directory via the parameters.
     ///
     /// This internally calls [`NtfsFile::attributes`] to iterate through the file's
-    /// attributes and pick up the first $FILE_NAME attribute.
-    pub fn name<T>(&self, fs: &mut T) -> Result<NtfsFileName>
+    /// attributes and pick up the first matching $FILE_NAME attribute.
+    pub fn name<T>(
+        &self,
+        fs: &mut T,
+        match_namespace: Option<NtfsFileNamespace>,
+        match_parent_record_number: Option<u64>,
+    ) -> Option<Result<NtfsFileName>>
     where
         T: Read + Seek,
     {
         let mut iter = self.attributes();
 
         while let Some(item) = iter.next(fs) {
-            let item = item?;
+            let item = iter_try!(item);
             let attribute = item.to_attribute();
 
-            let ty = attribute.ty()?;
+            let ty = iter_try!(attribute.ty());
             if ty != NtfsAttributeType::FileName {
                 continue;
             }
 
-            return attribute.structured_value::<_, NtfsFileName>(fs);
+            let file_name = iter_try!(attribute.structured_value::<_, NtfsFileName>(fs));
+
+            if let Some(namespace) = match_namespace {
+                if file_name.namespace() != namespace {
+                    continue;
+                }
+            }
+
+            if let Some(parent_record_number) = match_parent_record_number {
+                if file_name.parent_directory_reference().file_record_number()
+                    != parent_record_number
+                {
+                    continue;
+                }
+            }
+
+            return Some(Ok(file_name));
         }
 
-        Err(NtfsError::AttributeNotFound {
-            position: self.position(),
-            ty: NtfsAttributeType::FileName,
-        })
+        None
     }
 
     /// Returns the [`Ntfs`] object associated to this file.
