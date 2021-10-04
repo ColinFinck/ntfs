@@ -68,6 +68,10 @@ impl BiosParameterBlock {
     /// Source: https://en.wikipedia.org/wiki/NTFS#Partition_Boot_Sector_(VBR)
     fn record_size(&self, size_info: i8) -> Result<u32> {
         /// The usual exponent of `BiosParameterBlock::file_record_size_info` is 10 (2^10 = 1024 bytes).
+        /// Exponents < 10 have never been seen and are denied to guarantee that every record header
+        /// fits into a record.
+        const MINIMUM_SIZE_INFO_EXPONENT: u32 = 10;
+
         /// Exponents > 10 would come as a surprise, but our code should still be able to handle those.
         /// Exponents > 31 (2^31 = 2 GiB) would make no sense, exceed a u32, and must be outright denied.
         const MAXIMUM_SIZE_INFO_EXPONENT: u32 = 31;
@@ -85,7 +89,8 @@ impl BiosParameterBlock {
         } else {
             // The size field denotes a binary exponent after negation.
             let exponent = (-size_info) as u32;
-            if exponent >= MAXIMUM_SIZE_INFO_EXPONENT {
+
+            if exponent < MINIMUM_SIZE_INFO_EXPONENT || exponent >= MAXIMUM_SIZE_INFO_EXPONENT {
                 return Err(NtfsError::InvalidRecordSizeInfo {
                     size_info,
                     cluster_size,

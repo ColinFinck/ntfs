@@ -3,6 +3,7 @@
 
 use crate::attribute::NtfsAttributeType;
 use crate::types::{Lcn, Vcn};
+use core::ops::Range;
 use displaydoc::Display;
 
 /// Central result type of ntfs.
@@ -70,6 +71,18 @@ pub enum NtfsError {
         position: u64,
         expected: u32,
         actual: u32,
+    },
+    /// The NTFS index entry at byte position {position:#010x} references a data field in the range {range:?}, but the entry only has a size of {size} bytes
+    InvalidIndexEntryDataRange {
+        position: u64,
+        range: Range<usize>,
+        size: u16,
+    },
+    /// The NTFS index entry at byte position {position:#010x} reports a size of {expected} bytes, but it only has {actual} bytes
+    InvalidIndexEntrySize {
+        position: u64,
+        expected: u16,
+        actual: u16,
     },
     /// The NTFS index root at byte position {position:#010x} indicates that its entries start at offset {expected}, but the index root only has a size of {actual} bytes
     InvalidIndexRootEntriesOffset {

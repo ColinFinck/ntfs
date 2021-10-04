@@ -1,7 +1,7 @@
 // Copyright 2021 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use crate::error::Result;
+use crate::error::{NtfsError, Result};
 use crate::file::NtfsFile;
 use crate::file_reference::NtfsFileReference;
 use crate::indexes::{
@@ -21,7 +21,7 @@ use core::ops::Range;
 use memoffset::offset_of;
 
 /// Size of all [`IndexEntryHeader`] fields plus some reserved bytes.
-const INDEX_ENTRY_HEADER_SIZE: i64 = 16;
+const INDEX_ENTRY_HEADER_SIZE: usize = 16;
 
 #[repr(C, packed)]
 struct IndexEntryHeader {
@@ -70,7 +70,7 @@ where
         }
     }
 
-    pub(crate) fn to_entry<'s>(&self, slice: &'s [u8]) -> NtfsIndexEntry<'s, E> {
+    pub(crate) fn to_entry<'s>(&self, slice: &'s [u8]) -> Result<NtfsIndexEntry<'s, E>> {
         NtfsIndexEntry::new(&slice[self.range.clone()], self.position)
     }
 }
@@ -89,13 +89,18 @@ impl<'s, E> NtfsIndexEntry<'s, E>
 where
     E: NtfsIndexEntryType,
 {
-    pub(crate) fn new(slice: &'s [u8], position: u64) -> Self {
+    pub(crate) fn new(slice: &'s [u8], position: u64) -> Result<Self> {
         let entry_type = PhantomData;
-        Self {
+
+        let mut entry = Self {
             slice,
             position,
             entry_type,
-        }
+        };
+        entry.validate_size()?;
+        entry.slice = &entry.slice[..entry.index_entry_length() as usize];
+
+        Ok(entry)
     }
 
     pub fn data(&self) -> Option<Result<E::DataType>>
@@ -110,10 +115,14 @@ where
         let end = start + self.data_length() as usize;
         let position = self.position + start as u64;
 
-        let data = iter_try!(E::DataType::data_from_slice(
-            &self.slice[start..end],
-            position
-        ));
+        let slice = self.slice.get(start..end);
+        let slice = iter_try!(slice.ok_or(NtfsError::InvalidIndexEntryDataRange {
+            position: self.position,
+            range: start..end,
+            size: self.slice.len() as u16
+        }));
+
+        let data = iter_try!(E::DataType::data_from_slice(slice, position));
         Some(Ok(data))
     }
 
@@ -163,14 +172,18 @@ where
             return None;
         }
 
-        let start = INDEX_ENTRY_HEADER_SIZE as usize;
+        let start = INDEX_ENTRY_HEADER_SIZE;
         let end = start + self.key_length() as usize;
         let position = self.position + start as u64;
 
-        let key = iter_try!(E::KeyType::key_from_slice(
-            &self.slice[start..end],
-            position
-        ));
+        let slice = self.slice.get(start..end);
+        let slice = iter_try!(slice.ok_or(NtfsError::InvalidIndexEntryDataRange {
+            position: self.position,
+            range: start..end,
+            size: self.slice.len() as u16
+        }));
+
+        let key = iter_try!(E::KeyType::key_from_slice(slice, position));
         Some(Ok(key))
     }
 
@@ -181,16 +194,27 @@ where
 
     /// Returns the Virtual Cluster Number (VCN) of the subnode of this Index Entry,
     /// or `None` if this Index Entry has no subnode.
-    pub fn subnode_vcn(&self) -> Option<Vcn> {
+    pub fn subnode_vcn(&self) -> Option<Result<Vcn>> {
         if !self.flags().contains(NtfsIndexEntryFlags::HAS_SUBNODE) {
             return None;
         }
 
-        // Get the subnode VCN from the very end of the Index Entry.
-        let start = self.index_entry_length() as usize - mem::size_of::<Vcn>();
-        let vcn = Vcn::from(LittleEndian::read_i64(&self.slice[start..]));
+        // Get the subnode VCN from the very end of the Index Entry, but at least after the header.
+        let start = usize::max(
+            self.index_entry_length() as usize - mem::size_of::<Vcn>(),
+            INDEX_ENTRY_HEADER_SIZE,
+        );
+        let end = start + mem::size_of::<Vcn>();
 
-        Some(vcn)
+        let slice = self.slice.get(start..end);
+        let slice = iter_try!(slice.ok_or(NtfsError::InvalidIndexEntryDataRange {
+            position: self.position,
+            range: start..end,
+            size: self.slice.len() as u16
+        }));
+
+        let vcn = Vcn::from(LittleEndian::read_i64(slice));
+        Some(Ok(vcn))
     }
 
     /// Returns an [`NtfsFile`] for the file referenced by this index entry.
@@ -200,6 +224,26 @@ where
         T: Read + Seek,
     {
         self.file_reference().to_file(ntfs, fs)
+    }
+
+    fn validate_size(&self) -> Result<()> {
+        if self.slice.len() < INDEX_ENTRY_HEADER_SIZE {
+            return Err(NtfsError::InvalidIndexEntrySize {
+                position: self.position,
+                expected: INDEX_ENTRY_HEADER_SIZE as u16,
+                actual: self.slice.len() as u16,
+            });
+        }
+
+        if self.index_entry_length() as usize > self.slice.len() {
+            return Err(NtfsError::InvalidIndexEntrySize {
+                position: self.position,
+                expected: self.index_entry_length(),
+                actual: self.slice.len() as u16,
+            });
+        }
+
+        Ok(())
     }
 }
 
@@ -239,7 +283,7 @@ impl<E> Iterator for IndexNodeEntryRanges<E>
 where
     E: NtfsIndexEntryType,
 {
-    type Item = IndexEntryRange<E>;
+    type Item = Result<IndexEntryRange<E>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.range.is_empty() {
@@ -249,7 +293,7 @@ where
         // Get the current entry.
         let start = self.range.start;
         let position = self.position;
-        let entry = NtfsIndexEntry::<E>::new(&self.data[start..], position);
+        let entry = iter_try!(NtfsIndexEntry::<E>::new(&self.data[start..], position));
         let end = start + entry.index_entry_length() as usize;
 
         if entry.flags().contains(NtfsIndexEntryFlags::LAST_ENTRY) {
@@ -263,7 +307,7 @@ where
             self.position += entry.index_entry_length() as u64;
         }
 
-        Some(IndexEntryRange::new(start..end, position))
+        Some(Ok(IndexEntryRange::new(start..end, position)))
     }
 }
 
@@ -297,7 +341,7 @@ impl<'s, E> Iterator for NtfsIndexNodeEntries<'s, E>
 where
     E: NtfsIndexEntryType,
 {
-    type Item = NtfsIndexEntry<'s, E>;
+    type Item = Result<NtfsIndexEntry<'s, E>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.slice.is_empty() {
@@ -305,7 +349,7 @@ where
         }
 
         // Get the current entry.
-        let entry = NtfsIndexEntry::new(self.slice, self.position);
+        let entry = iter_try!(NtfsIndexEntry::new(self.slice, self.position));
 
         if entry.flags().contains(NtfsIndexEntryFlags::LAST_ENTRY) {
             // This is the last entry.
@@ -319,7 +363,7 @@ where
             self.position += bytes_to_advance as u64;
         }
 
-        Some(entry)
+        Some(Ok(entry))
     }
 }
 

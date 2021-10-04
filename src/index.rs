@@ -127,12 +127,14 @@ where
 
             // Get the next `IndexEntryRange` from it.
             if let Some(entry_range) = iter.next() {
+                let entry_range = iter_try!(entry_range);
                 // Convert that `IndexEntryRange` to a (lifetime-bound) `NtfsIndexEntry`.
-                let entry = entry_range.to_entry(iter.data());
+                let entry = iter_try!(entry_range.to_entry(iter.data()));
                 let is_last_entry = entry.flags().contains(NtfsIndexEntryFlags::LAST_ENTRY);
 
                 // Does this entry have a subnode that needs to be iterated first?
                 if let Some(subnode_vcn) = entry.subnode_vcn() {
+                    let subnode_vcn = iter_try!(subnode_vcn);
                     // Read the subnode from the filesystem and get an iterator for it.
                     let index_allocation_item =
                         iter_try!(self.index.index_allocation_item.as_ref().ok_or_else(|| {
@@ -181,7 +183,7 @@ where
         };
 
         let iter = self.inner_iterators.last().unwrap();
-        let entry = entry_range.to_entry(iter.data());
+        let entry = iter_try!(entry_range.to_entry(iter.data()));
         Some(Ok(entry))
     }
 }
@@ -227,8 +229,8 @@ where
             //
             // A textbook B-tree search algorithm would get the middle entry and perform binary search.
             // But we can't do that here, as we are dealing with variable-length entries.
-            let entry_range = self.inner_iterator.next()?;
-            let entry = entry_range.to_entry(self.inner_iterator.data());
+            let entry_range = iter_try!(self.inner_iterator.next()?);
+            let entry = iter_try!(entry_range.to_entry(self.inner_iterator.data()));
 
             // Check if this entry has a key.
             if let Some(key) = entry.key() {
@@ -239,7 +241,7 @@ where
                     Ordering::Equal => {
                         // We found what we were looking for!
                         // Recreate `entry` from the last `self.inner_iterator` to please the borrow checker.
-                        let entry = entry_range.to_entry(self.inner_iterator.data());
+                        let entry = iter_try!(entry_range.to_entry(self.inner_iterator.data()));
                         return Some(Ok(entry));
                     }
                     Ordering::Less => {
@@ -257,7 +259,7 @@ where
             // Either this entry has no key (= is the last one on this subnode level) or
             // it comes lexicographically AFTER what we're looking for.
             // In both cases, we have to continue iterating in the subnode of this entry (if there is any).
-            let subnode_vcn = entry.subnode_vcn()?;
+            let subnode_vcn = iter_try!(entry.subnode_vcn()?);
             let index_allocation_item =
                 iter_try!(self.index.index_allocation_item.as_ref().ok_or_else(|| {
                     NtfsError::MissingIndexAllocation {
