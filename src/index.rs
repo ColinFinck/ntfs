@@ -81,7 +81,7 @@ where
 {
     index: &'i NtfsIndex<'n, 'f, E>,
     inner_iterators: Vec<IndexNodeEntryRanges<E>>,
-    following_entries: Vec<IndexEntryRange<E>>,
+    following_entries: Vec<Option<IndexEntryRange<E>>>,
 }
 
 impl<'n, 'f, 'i, E> NtfsIndexEntries<'n, 'f, 'i, E>
@@ -128,6 +128,7 @@ where
             // Get the next `IndexEntryRange` from it.
             if let Some(entry_range) = iter.next() {
                 let entry_range = iter_try!(entry_range);
+
                 // Convert that `IndexEntryRange` to a (lifetime-bound) `NtfsIndexEntry`.
                 let entry = iter_try!(entry_range.to_entry(iter.data()));
                 let is_last_entry = entry.flags().contains(NtfsIndexEntryFlags::LAST_ENTRY);
@@ -135,6 +136,7 @@ where
                 // Does this entry have a subnode that needs to be iterated first?
                 if let Some(subnode_vcn) = entry.subnode_vcn() {
                     let subnode_vcn = iter_try!(subnode_vcn);
+
                     // Read the subnode from the filesystem and get an iterator for it.
                     let index_allocation_item =
                         iter_try!(self.index.index_allocation_item.as_ref().ok_or_else(|| {
@@ -154,18 +156,21 @@ where
                     ));
                     let subnode_iter = subnode.into_entry_ranges();
 
-                    // Save this subnode's iterator.
-                    // We'll pick it up through `self.inner_iterators.last_mut()` in the next loop iteration.
-                    self.inner_iterators.push(subnode_iter);
-
-                    if !is_last_entry {
-                        // This is not the empty "last entry", so save it as well.
+                    let following_entry = if !is_last_entry {
+                        // This entry comes after the subnode lexicographically, so save it.
                         // We'll pick it up again after the subnode iterator has been fully iterated.
-                        self.following_entries.push(entry_range);
-                    }
+                        Some(entry_range)
+                    } else {
+                        None
+                    };
+
+                    // Save this subnode's iterator and any following entry.
+                    // We'll pick up the iterator through `self.inner_iterators.last_mut()` in the next loop iteration.
+                    self.inner_iterators.push(subnode_iter);
+                    self.following_entries.push(following_entry);
                 } else if !is_last_entry {
                     // There is no subnode, and this is not the empty "last entry",
-                    // so our `entry` comes next lexicographically.
+                    // so our entry comes next lexicographically.
                     break entry_range;
                 }
             } else {
@@ -173,17 +178,26 @@ where
                 // Drop it.
                 self.inner_iterators.pop();
 
-                // Return the entry, whose subnode we just iterated and which we saved in `following_entries` above.
-                // If we just finished iterating the top-level node, `following_entries` is empty and we are done.
-                // Otherwise, we can be sure that `inner_iterators` contains the matching iterator for converting
+                // The entry, whose subnode we just fully iterated, may have been saved in `following_entries`.
+                // This depends on its `is_last_entry` flag:
+                //   * If it was not the last entry, it contains an entry that comes next lexicographically,
+                //     and has therefore been saved in `following_entries`.
+                //   * If it was the last entry, it contains no further information.
+                //     `None` has been saved in `following_entries`, so that `following_entries.len()` always
+                //     matches `inner_iterators.len() - 1`.
+                //
+                // If we just finished iterating the root-level node, `following_entries` is empty and we are done.
+                // Otherwise, we can be sure that `inner_iterators.last()` is the matching iterator for converting
                 // `IndexEntryRange` to a (lifetime-bound) `NtfsIndexEntry`.
-                let entry_range = self.following_entries.pop()?;
-                break entry_range;
+                if let Some(entry_range) = self.following_entries.pop()? {
+                    break entry_range;
+                }
             }
         };
 
         let iter = self.inner_iterators.last().unwrap();
         let entry = iter_try!(entry_range.to_entry(iter.data()));
+
         Some(Ok(entry))
     }
 }
