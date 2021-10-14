@@ -466,8 +466,10 @@ where
     T: Read + Seek,
 {
     // Extract any specific $DATA stream name from the file.
-    let mid = arg.find(':').unwrap_or(arg.len());
-    let (file_name, data_stream_name) = arg.split_at(mid);
+    let (file_name, data_stream_name) = match arg.find(':') {
+        Some(mid) => (&arg[..mid], &arg[mid + 1..]),
+        None => (arg, ""),
+    };
 
     // Compose the output file name and try to create it.
     // It must not yet exist, as we don't want to accidentally overwrite things.
