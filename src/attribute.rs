@@ -419,6 +419,13 @@ impl<'n, 'f> NtfsAttributes<'n, 'f> {
         }
     }
 
+    pub fn attach<'a, T>(self, fs: &'a mut T) -> NtfsAttributesAttached<'n, 'f, 'a, T>
+    where
+        T: Read + Seek,
+    {
+        NtfsAttributesAttached::new(fs, self)
+    }
+
     pub fn next<T>(&mut self, fs: &mut T) -> Option<Result<NtfsAttributeItem<'n, 'f>>>
     where
         T: Read + Seek,
@@ -496,6 +503,37 @@ impl<'n, 'f> NtfsAttributes<'n, 'f> {
         }
     }
 }
+
+pub struct NtfsAttributesAttached<'n, 'f, 'a, T: Read + Seek> {
+    fs: &'a mut T,
+    attributes: NtfsAttributes<'n, 'f>,
+}
+
+impl<'n, 'f, 'a, T> NtfsAttributesAttached<'n, 'f, 'a, T>
+where
+    T: Read + Seek,
+{
+    fn new(fs: &'a mut T, attributes: NtfsAttributes<'n, 'f>) -> Self {
+        Self { fs, attributes }
+    }
+
+    pub fn detach(self) -> NtfsAttributes<'n, 'f> {
+        self.attributes
+    }
+}
+
+impl<'n, 'f, 'a, T> Iterator for NtfsAttributesAttached<'n, 'f, 'a, T>
+where
+    T: Read + Seek,
+{
+    type Item = Result<NtfsAttributeItem<'n, 'f>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.attributes.next(self.fs)
+    }
+}
+
+impl<'n, 'f, 'a, T> FusedIterator for NtfsAttributesAttached<'n, 'f, 'a, T> where T: Read + Seek {}
 
 #[derive(Clone, Debug)]
 pub struct NtfsAttributeItem<'n, 'f> {
