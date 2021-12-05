@@ -27,6 +27,8 @@ pub struct NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
     initial_attribute_list_entries: NtfsAttributeListEntries<'n, 'f>,
     /// Iterator through all connected attributes of this attribute in the AttributeList.
     connected_entries: AttributeListConnectedEntries<'n, 'f>,
+    /// Total length of the value data, in bytes.
+    data_size: u64,
     /// File, location, and data runs iteration state of the current attribute.
     attribute_state: Option<AttributeState<'n>>,
     /// Iteration state of the current data run.
@@ -48,6 +50,7 @@ impl<'n, 'f> NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
             ntfs,
             initial_attribute_list_entries: attribute_list_entries,
             connected_entries,
+            data_size,
             attribute_state: None,
             stream_state: StreamState::new(data_size),
         }
@@ -62,7 +65,7 @@ impl<'n, 'f> NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
     }
 
     pub fn len(&self) -> u64 {
-        self.stream_state.data_size()
+        self.data_size
     }
 
     /// Returns whether we got another data run.
