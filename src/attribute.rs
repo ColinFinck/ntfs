@@ -220,7 +220,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
     pub(crate) fn non_resident_value_data_and_position(&self) -> (&'f [u8], u64) {
         debug_assert!(!self.is_resident());
         let start = self.offset + self.non_resident_value_data_runs_offset() as usize;
-        let end = start + self.attribute_length() as usize;
+        let end = self.offset + self.attribute_length() as usize;
         let data = &self.file.record_data()[start..end];
         let position = self.file.position() + start as u64;
 
