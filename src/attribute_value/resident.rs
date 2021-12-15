@@ -1,5 +1,5 @@
 // Copyright 2021 Colin Finck <colin@reactos.org>
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //
 //! This module implements a reader for a value that is already in memory and can therefore be accessed via a slice.
 //! This is the case for all resident attribute values and Index Record values.

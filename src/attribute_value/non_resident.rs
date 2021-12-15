@@ -1,5 +1,5 @@
 // Copyright 2021 Colin Finck <colin@reactos.org>
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //
 //! This module implements a reader for a non-resident attribute value (that is not part of an Attribute List).
 //! Non-resident attribute values are split up into one or more data runs, which are spread across the filesystem.

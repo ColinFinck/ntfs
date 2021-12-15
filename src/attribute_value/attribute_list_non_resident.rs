@@ -1,5 +1,5 @@
 // Copyright 2021 Colin Finck <colin@reactos.org>
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT OR Apache-2.0
 //
 // It is important to note that `NtfsAttributeListNonResidentAttributeValue` can't just encapsulate `NtfsNonResidentAttributeValue` and provide one
 // layer on top to connect the attributes!
