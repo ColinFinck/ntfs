@@ -13,6 +13,15 @@ use binread::io::{Read, Seek};
 use core::cmp::Ordering;
 use core::marker::PhantomData;
 
+/// Helper structure to iterate over all entries of an index or find a specific one.
+///
+/// The `E` type parameter of [`NtfsIndexEntryType`] specifies the type of the index entries.
+/// The most common one is [`NtfsFileNameIndex`] for file name indexes, commonly known as "directories".
+/// Check out [`NtfsFile::directory_index`] to return an [`NtfsIndex`] object for a directory without
+/// any hassles.
+///
+/// [`NtfsFile::directory_index`]: crate::NtfsFile::directory_index
+/// [`NtfsFileNameIndex`]: crate::indexes::NtfsFileNameIndex
 #[derive(Clone, Debug)]
 pub struct NtfsIndex<'n, 'f, E>
 where
@@ -27,6 +36,14 @@ impl<'n, 'f, E> NtfsIndex<'n, 'f, E>
 where
     E: NtfsIndexEntryType,
 {
+    /// Creates a new [`NtfsIndex`] object from a previously looked up [`NtfsIndexRoot`] attribute
+    /// and, in case of a large index, a matching [`NtfsIndexAllocation`] attribute
+    /// (contained in an [`NtfsAttributeItem`]).
+    ///
+    /// If you just want to look up files in a directory, check out [`NtfsFile::directory_index`],
+    /// which looks up the correct [`NtfsIndexRoot`] and [`NtfsIndexAllocation`] attributes for you.
+    ///
+    /// [`NtfsFile::directory_index`]: crate::NtfsFile::directory_index
     pub fn new(
         index_root: NtfsIndexRoot<'f>,
         index_allocation_item: Option<NtfsAttributeItem<'n, 'f>>,
@@ -57,14 +74,14 @@ where
         })
     }
 
+    /// Returns an [`NtfsIndexEntries`] iterator to perform an in-order traversal of this index.
+    pub fn entries<'i>(&'i self) -> NtfsIndexEntries<'n, 'f, 'i, E> {
+        NtfsIndexEntries::new(self)
+    }
+
     /// Returns an [`NtfsIndexFinder`] structure to efficiently find an entry in this index.
     pub fn finder<'i>(&'i self) -> NtfsIndexFinder<'n, 'f, 'i, E> {
         NtfsIndexFinder::new(self)
-    }
-
-    /// Returns an [`NtfsIndexEntries`] iterator to perform an in-order traversal of this index.
-    pub fn iter<'i>(&'i self) -> NtfsIndexEntries<'n, 'f, 'i, E> {
-        NtfsIndexEntries::new(self)
     }
 }
 
@@ -73,7 +90,7 @@ where
 ///   sorted ascending by the index key,
 ///   returning an [`NtfsIndexEntry`] for each entry.
 ///
-/// See [`NtfsIndexEntriesAttached`] for an iterator that implements [`Iterator`] and [`FusedIterator`].
+/// This iterator is returned from the [`NtfsIndex::entries`] function.
 #[derive(Clone, Debug)]
 pub struct NtfsIndexEntries<'n, 'f, 'i, E>
 where
@@ -99,6 +116,7 @@ where
         }
     }
 
+    /// See [`Iterator::next`].
     pub fn next<'a, T>(&'a mut self, fs: &mut T) -> Option<Result<NtfsIndexEntry<'a, E>>>
     where
         T: Read + Seek,
@@ -358,7 +376,7 @@ mod tests {
         dir_names.sort_unstable();
 
         let subdir_index = subdir.directory_index(&mut testfs1).unwrap();
-        let mut subdir_iter = subdir_index.iter();
+        let mut subdir_iter = subdir_index.entries();
 
         for dir_name in dir_names {
             let entry = subdir_iter.next(&mut testfs1).unwrap().unwrap();

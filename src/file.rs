@@ -17,19 +17,57 @@ use bitflags::bitflags;
 use byteorder::{ByteOrder, LittleEndian};
 use memoffset::offset_of;
 
+/// A list of standardized NTFS File Record Numbers.
+///
+/// Most of these files store internal NTFS housekeeping information.
+///
+/// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/files/index.html>
 #[repr(u64)]
 pub enum KnownNtfsFileRecordNumber {
+    /// A back-reference to the Master File Table (MFT).
+    ///
+    /// Leads to the same File Record as [`Ntfs::mft_position`].
     MFT = 0,
+    /// A mirror copy of the Master File Table (MFT).
     MFTMirr = 1,
+    /// The journaling logfile.
+    ///
+    /// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/files/logfile.html>
     LogFile = 2,
+    /// File containing basic filesystem information and the user-defined volume name.
+    ///
+    /// You can easily access that information via [`Ntfs::volume_info`] and [`Ntfs::volume_name`].
     Volume = 3,
+    /// File defining all attributes supported by this NTFS filesystem.
+    ///
+    /// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/files/attrdef.html>
     AttrDef = 4,
+    /// The root directory of the filesystem.
+    ///
+    /// You can easily access it via [`Ntfs::root_directory`].
     RootDirectory = 5,
+    /// Map of used clusters.
+    ///
+    /// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/files/bitmap.html>
     Bitmap = 6,
+    /// A back-reference to the boot sector of the filesystem.
     Boot = 7,
+    /// A file consisting of Data Runs to bad cluster ranges.
+    ///
+    /// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/files/badclus.html>
     BadClus = 8,
+    /// A list of all Security Descriptors used by this filesystem.
+    ///
+    /// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/files/secure.html>
     Secure = 9,
+    /// The $UpCase file that contains a table of all uppercase characters for the
+    /// 65536 characters of the Unicode Basic Multilingual Plane.
+    ///
+    /// NTFS uses this table to perform case-insensitive comparisons.
     UpCase = 10,
+    /// A directory of further files containing housekeeping information.
+    ///
+    /// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/files/extend.html>
     Extend = 11,
 }
 
@@ -40,13 +78,14 @@ struct FileRecordHeader {
     hard_link_count: u16,
     first_attribute_offset: u16,
     flags: u16,
-    used_size: u32,
+    data_size: u32,
     allocated_size: u32,
     base_file_record: NtfsFileReference,
     next_attribute_instance: u16,
 }
 
 bitflags! {
+    /// Flags returned by [`NtfsFile::flags`].
     pub struct NtfsFileFlags: u16 {
         /// Record is in use.
         const IN_USE = 0x0001;
@@ -55,6 +94,17 @@ bitflags! {
     }
 }
 
+/// A single NTFS File Record.
+///
+/// These records are denoted via a `FILE` signature on the filesystem.
+///
+/// NTFS uses File Records to manage all user-facing files and directories, as well as some internal files for housekeeping.
+/// Every File Record consists of [`NtfsAttribute`]s, which may reference additional File Records.
+/// Even the Master File Table (MFT) itself is organized as a File Record.
+///
+/// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/concepts/file_record.html>
+///
+/// [`NtfsAttribute`]: crate::attribute::NtfsAttribute
 #[derive(Clone, Debug)]
 pub struct NtfsFile<'n> {
     record: Record<'n>,
@@ -88,18 +138,35 @@ impl<'n> NtfsFile<'n> {
         Ok(file)
     }
 
+    /// Returns the allocated size of this NTFS File Record, in bytes.
     pub fn allocated_size(&self) -> u32 {
         let start = offset_of!(FileRecordHeader, allocated_size);
         LittleEndian::read_u32(&self.record.data()[start..])
     }
 
+    /// Returns an iterator over all attributes of this file.
+    ///
     /// This provides a flattened "data-centric" view of the attributes and abstracts away the filesystem details
-    /// to deal with many or large attributes (Attribute Lists and split attributes).
+    /// to deal with many or large attributes (Attribute Lists and connected attributes).
     /// Use [`NtfsFile::attributes_raw`] to iterate over the plain attributes on the filesystem.
+    ///
+    /// Due to the abstraction, the iterator returns an [`NtfsAttributeItem`] for each entry.
+    ///
+    /// [`NtfsAttributeItem`]: crate::NtfsAttributeItem
     pub fn attributes<'f>(&'f self) -> NtfsAttributes<'n, 'f> {
         NtfsAttributes::<'n, 'f>::new(self)
     }
 
+    /// Returns an iterator over all top-level attributes of this file.
+    ///
+    /// Contrary to [`NtfsFile::attributes`], it does not traverse $ATTRIBUTE_LIST attributes, but returns
+    /// them as raw attributes.
+    /// Check that function if you want an iterator providing a flattened "data-centric" view over
+    /// the attributes by traversing Attribute Lists automatically.
+    ///
+    /// The iterator returns an [`NtfsAttribute`] for each entry.
+    ///
+    /// [`NtfsAttribute`]: crate::NtfsAttribute
     pub fn attributes_raw<'f>(&'f self) -> NtfsAttributesRaw<'n, 'f> {
         NtfsAttributesRaw::new(self)
     }
@@ -142,7 +209,16 @@ impl<'n> NtfsFile<'n> {
         None
     }
 
+    /// Returns the size actually used by data of this NTFS File Record, in bytes.
+    ///
+    /// This is less or equal than [`NtfsFile::allocated_size`].
+    pub fn data_size(&self) -> u32 {
+        let start = offset_of!(FileRecordHeader, data_size);
+        LittleEndian::read_u32(&self.record.data()[start..])
+    }
+
     /// Convenience function to return an [`NtfsIndex`] if this file is a directory.
+    /// This structure can be used to iterate over all files of this directory or a find a specific one.
     ///
     /// Apart from any propagated error, this function may return [`NtfsError::NotADirectory`]
     /// if this [`NtfsFile`] is not a directory.
@@ -162,7 +238,7 @@ impl<'n> NtfsFile<'n> {
             });
         }
 
-        // A FILE record may contain multiple indexes, so we have to match the name of the directory index.
+        // A File Record may contain multiple indexes, so we have to match the name of the directory index.
         let directory_index_name = "$I30";
 
         // The IndexRoot attribute is always resident and has to exist for every directory.
@@ -171,7 +247,7 @@ impl<'n> NtfsFile<'n> {
         ))?;
 
         // The IndexAllocation attribute is only required for "large" indexes.
-        // It is always non-resident and may even be in an AttributeList.
+        // It is always non-resident and may even be in an Attribute List.
         let mut index_allocation_item = None;
         if index_root.is_large_index() {
             let mut iter = self.attributes();
@@ -198,7 +274,7 @@ impl<'n> NtfsFile<'n> {
         NtfsIndex::<NtfsFileNameIndex>::new(index_root, index_allocation_item)
     }
 
-    /// Returns the NTFS file record number of this file.
+    /// Returns the NTFS File Record Number of this file.
     ///
     /// This number uniquely identifies this file and can be used to recreate this [`NtfsFile`]
     /// object via [`Ntfs::file`].
@@ -244,12 +320,13 @@ impl<'n> NtfsFile<'n> {
         LittleEndian::read_u16(&self.record.data()[start..])
     }
 
-    /// Returns flags set for this NTFS file as specified by [`NtfsFileFlags`].
+    /// Returns flags set for this file as specified by [`NtfsFileFlags`].
     pub fn flags(&self) -> NtfsFileFlags {
         let start = offset_of!(FileRecordHeader, flags);
         NtfsFileFlags::from_bits_truncate(LittleEndian::read_u16(&self.record.data()[start..]))
     }
 
+    /// Returns the number of hard links to this NTFS File Record.
     pub fn hard_link_count(&self) -> u16 {
         let start = offset_of!(FileRecordHeader, hard_link_count);
         LittleEndian::read_u16(&self.record.data()[start..])
@@ -264,6 +341,7 @@ impl<'n> NtfsFile<'n> {
         self.find_resident_attribute_structured_value::<NtfsStandardInformation>(None)
     }
 
+    /// Returns whether this NTFS File Record represents a directory.
     pub fn is_directory(&self) -> bool {
         self.flags().contains(NtfsFileFlags::IS_DIRECTORY)
     }
@@ -318,12 +396,12 @@ impl<'n> NtfsFile<'n> {
         None
     }
 
-    /// Returns the [`Ntfs`] object associated to this file.
+    /// Returns the [`Ntfs`] object reference associated to this file.
     pub fn ntfs(&self) -> &'n Ntfs {
         self.record.ntfs()
     }
 
-    /// Returns the absolute byte position of this file record in the NTFS filesystem.
+    /// Returns the absolute byte position of this File Record in the NTFS filesystem.
     pub fn position(&self) -> u64 {
         self.record.position()
     }
@@ -332,14 +410,14 @@ impl<'n> NtfsFile<'n> {
         self.record.data()
     }
 
+    /// Returns the sequence number of this file.
+    ///
+    /// NTFS reuses records of deleted files when new files are created.
+    /// This number is incremented every time a file is deleted.
+    /// Hence, it gives a count how many time this File Record has been reused.
     pub fn sequence_number(&self) -> u16 {
         let start = offset_of!(FileRecordHeader, sequence_number);
         LittleEndian::read_u16(&self.record.data()[start..])
-    }
-
-    pub fn used_size(&self) -> u32 {
-        let start = offset_of!(FileRecordHeader, used_size);
-        LittleEndian::read_u32(&self.record.data()[start..])
     }
 
     fn validate_signature(record: &Record) -> Result<()> {
@@ -366,10 +444,10 @@ impl<'n> NtfsFile<'n> {
             });
         }
 
-        if self.used_size() > self.allocated_size() {
+        if self.data_size() > self.allocated_size() {
             return Err(NtfsError::InvalidFileUsedSize {
                 position: self.record.position(),
-                expected: self.used_size(),
+                expected: self.data_size(),
                 actual: self.allocated_size(),
             });
         }

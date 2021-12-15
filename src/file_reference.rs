@@ -7,6 +7,9 @@ use crate::ntfs::Ntfs;
 use binread::io::{Read, Seek};
 use binread::BinRead;
 
+/// Absolute reference to a File Record on the filesystem, composed out of a File Record Number and a Sequence Number.
+///
+/// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/concepts/file_reference.html>
 #[derive(BinRead, Clone, Copy, Debug)]
 pub struct NtfsFileReference([u8; 8]);
 
@@ -15,10 +18,17 @@ impl NtfsFileReference {
         Self(file_reference_bytes)
     }
 
+    /// Returns the 48-bit File Record Number.
+    ///
+    /// This can be fed into [`Ntfs::file`] to create an [`NtfsFile`] object for the corresponding File Record
+    /// (if you cannot use [`Self::to_file`] for some reason).
     pub fn file_record_number(&self) -> u64 {
         u64::from_le_bytes(self.0) & 0xffff_ffff_ffff
     }
 
+    /// Returns the 16-bit sequence number of the File Record.
+    ///
+    /// In a consistent file system, this number matches what [`NtfsFile::sequence_number`] returns.
     pub fn sequence_number(&self) -> u16 {
         (u64::from_le_bytes(self.0) >> 48) as u16
     }

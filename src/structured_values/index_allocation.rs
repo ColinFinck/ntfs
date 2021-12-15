@@ -13,6 +13,19 @@ use crate::types::Vcn;
 use binread::io::{Read, Seek, SeekFrom};
 use core::iter::FusedIterator;
 
+/// Structure of an $INDEX_ALLOCATION attribute.
+///
+/// This attribute describes the sub-nodes of a B-tree.
+/// The top-level nodes are managed via [`NtfsIndexRoot`].
+///
+/// NTFS uses B-trees for describing directories (as indexes of [`NtfsFileName`]s), looking up Object IDs,
+/// Reparse Points, and Security Descriptors, to just name a few.
+///
+/// An $INDEX_ALLOCATION attribute can be resident or non-resident.
+///
+/// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/attributes/index_allocation.html>
+///
+/// [`NtfsFileName`]: crate::structured_values::NtfsFileName
 #[derive(Clone, Debug)]
 pub struct NtfsIndexAllocation<'n, 'f> {
     ntfs: &'n Ntfs,
@@ -20,11 +33,14 @@ pub struct NtfsIndexAllocation<'n, 'f> {
 }
 
 impl<'n, 'f> NtfsIndexAllocation<'n, 'f> {
-    pub fn iter(&self, index_root: &NtfsIndexRoot) -> NtfsIndexRecords<'n, 'f> {
-        let index_record_size = index_root.index_record_size();
-        NtfsIndexRecords::new(self.clone(), index_record_size)
-    }
-
+    /// Returns the [`NtfsIndexRecord`] located at the given Virtual Cluster Number (VCN).
+    ///
+    /// The record is fully read, fixed up, and validated.
+    ///
+    /// This function is usually called on the return value of [`NtfsIndexEntry::subnode_vcn`] to move further
+    /// down in the B-tree.
+    ///
+    /// [`NtfsIndexEntry::subnode_vcn`]: crate::NtfsIndexEntry::subnode_vcn
     pub fn record_from_vcn<T>(
         &self,
         fs: &mut T,
@@ -61,6 +77,14 @@ impl<'n, 'f> NtfsIndexAllocation<'n, 'f> {
 
         Ok(record)
     }
+
+    /// Returns an iterator over all Index Records of this $INDEX_ALLOCATION attribute (cf. [`NtfsIndexRecord`]).
+    ///
+    /// Each Index Record is fully read, fixed up, and validated.
+    pub fn records(&self, index_root: &NtfsIndexRoot) -> NtfsIndexRecords<'n, 'f> {
+        let index_record_size = index_root.index_record_size();
+        NtfsIndexRecords::new(self.clone(), index_record_size)
+    }
 }
 
 impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsIndexAllocation<'n, 'f> {
@@ -83,6 +107,13 @@ impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsIndexAllocation<'n, 'f> {
     }
 }
 
+/// Iterator over
+///   all index records of an [`NtfsIndexAllocation`],
+///   returning an [`NtfsIndexRecord`] for each record.
+///
+/// This iterator is returned from the [`NtfsIndexAllocation::records`] function.
+///
+/// See [`NtfsIndexRecordsAttached`] for an iterator that implements [`Iterator`] and [`FusedIterator`].
 #[derive(Clone, Debug)]
 pub struct NtfsIndexRecords<'n, 'f> {
     index_allocation: NtfsIndexAllocation<'n, 'f>,
@@ -97,6 +128,8 @@ impl<'n, 'f> NtfsIndexRecords<'n, 'f> {
         }
     }
 
+    /// Returns a variant of this iterator that implements [`Iterator`] and [`FusedIterator`]
+    /// by mutably borrowing the filesystem reader.
     pub fn attach<'a, T>(self, fs: &'a mut T) -> NtfsIndexRecordsAttached<'n, 'f, 'a, T>
     where
         T: Read + Seek,
@@ -104,6 +137,7 @@ impl<'n, 'f> NtfsIndexRecords<'n, 'f> {
         NtfsIndexRecordsAttached::new(fs, self)
     }
 
+    /// See [`Iterator::next`].
     pub fn next<T>(&mut self, fs: &mut T) -> Option<Result<NtfsIndexRecord<'n>>>
     where
         T: Read + Seek,
@@ -130,6 +164,15 @@ impl<'n, 'f> NtfsIndexRecords<'n, 'f> {
     }
 }
 
+/// Iterator over
+///   all index records of an [`NtfsIndexAllocation`],
+///   returning an [`NtfsIndexRecord`] for each record,
+///   implementing [`Iterator`] and [`FusedIterator`].
+///
+/// This iterator is returned from the [`NtfsIndexRecords::attach`] function.
+/// Conceptually the same as [`NtfsIndexRecords`], but mutably borrows the filesystem
+/// to implement aforementioned traits.
+#[derive(Debug)]
 pub struct NtfsIndexRecordsAttached<'n, 'f, 'a, T>
 where
     T: Read + Seek,
@@ -145,7 +188,7 @@ where
     fn new(fs: &'a mut T, index_records: NtfsIndexRecords<'n, 'f>) -> Self {
         Self { fs, index_records }
     }
-
+    /// Consumes this iterator and returns the inner [`NtfsIndexRecords`].
     pub fn detach(self) -> NtfsIndexRecords<'n, 'f> {
         self.index_records
     }

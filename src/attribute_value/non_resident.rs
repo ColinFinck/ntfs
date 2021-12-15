@@ -1,7 +1,7 @@
 // Copyright 2021 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-//! This module implements a reader for a non-resident attribute value (that is not part of an AttributeList).
+//! This module implements a reader for a non-resident attribute value (that is not part of an Attribute List).
 //! Non-resident attribute values are split up into one or more data runs, which are spread across the filesystem.
 //! This reader provides one contiguous data stream for all data runs.
 
@@ -20,17 +20,18 @@ use crate::ntfs::Ntfs;
 use crate::traits::NtfsReadSeek;
 use crate::types::{Lcn, Vcn};
 
+/// Reader for a non-resident attribute value (whose data is in a cluster range outside the File Record).
 #[derive(Clone, Debug)]
 pub struct NtfsNonResidentAttributeValue<'n, 'f> {
     /// Reference to the base `Ntfs` object of this filesystem.
     ntfs: &'n Ntfs,
-    /// Attribute bytes where the data run information of this non-resident value is stored on the filesystem.
+    /// Attribute bytes where the Data Run information of this non-resident value is stored on the filesystem.
     data: &'f [u8],
-    /// Absolute position of the data run information within the filesystem, in bytes.
+    /// Absolute position of the Data Run information within the filesystem, in bytes.
     position: u64,
     /// Iterator of data runs used for reading/seeking.
     stream_data_runs: NtfsDataRuns<'n, 'f>,
-    /// Iteration state of the current data run.
+    /// Iteration state of the current Data Run.
     stream_state: StreamState,
 }
 
@@ -44,7 +45,7 @@ impl<'n, 'f> NtfsNonResidentAttributeValue<'n, 'f> {
         let mut stream_data_runs = NtfsDataRuns::new(ntfs, data, position);
         let mut stream_state = StreamState::new(data_size);
 
-        // Get the first data run already here to let `data_position` return something meaningful.
+        // Get the first Data Run already here to let `data_position` return something meaningful.
         if let Some(stream_data_run) = stream_data_runs.next() {
             let stream_data_run = stream_data_run?;
             stream_state.set_stream_data_run(stream_data_run);
@@ -59,6 +60,8 @@ impl<'n, 'f> NtfsNonResidentAttributeValue<'n, 'f> {
         })
     }
 
+    /// Returns a variant of this reader that implements [`Read`] and [`Seek`]
+    /// by mutably borrowing the filesystem reader.
     pub fn attach<'a, T>(
         self,
         fs: &'a mut T,
@@ -72,20 +75,22 @@ impl<'n, 'f> NtfsNonResidentAttributeValue<'n, 'f> {
     /// Returns the absolute current data seek position within the filesystem, in bytes.
     /// This may be `None` if:
     ///   * The current seek position is outside the valid range, or
-    ///   * The current data run is a "sparse" data run
+    ///   * The current Data Run is a "sparse" Data Run
     pub fn data_position(&self) -> Option<u64> {
         self.stream_state.data_position()
     }
 
+    /// Returns an iterator over all data runs of this non-resident attribute.
     pub fn data_runs(&self) -> NtfsDataRuns<'n, 'f> {
         NtfsDataRuns::new(self.ntfs, self.data, self.position)
     }
 
+    /// Returns the total length of the non-resident attribute value data, in bytes.
     pub fn len(&self) -> u64 {
         self.stream_state.data_size()
     }
 
-    /// Returns whether we got another data run.
+    /// Returns whether we got another Data Run.
     fn next_data_run(&mut self) -> Result<bool> {
         let stream_data_run = match self.stream_data_runs.next() {
             Some(stream_data_run) => stream_data_run,
@@ -97,11 +102,12 @@ impl<'n, 'f> NtfsNonResidentAttributeValue<'n, 'f> {
         Ok(true)
     }
 
+    /// Returns the [`Ntfs`] object reference associated to this value.
     pub fn ntfs(&self) -> &'n Ntfs {
         self.ntfs
     }
 
-    /// Returns the absolute position of the data run information within the filesystem, in bytes.
+    /// Returns the absolute position of the Data Run information within the filesystem, in bytes.
     pub fn position(&self) -> u64 {
         self.position
     }
@@ -115,15 +121,15 @@ impl<'n, 'f> NtfsReadSeek for NtfsNonResidentAttributeValue<'n, 'f> {
         let mut bytes_read = 0usize;
 
         while bytes_read < buf.len() {
-            // Read from the current data run if there is one.
+            // Read from the current Data Run if there is one.
             if self.stream_state.read_data_run(fs, buf, &mut bytes_read)? {
                 // We read something, so check the loop condition again if we need to read more.
                 continue;
             }
 
-            // Move to the next data run.
+            // Move to the next Data Run.
             if self.next_data_run()? {
-                // We got another data run, so read again.
+                // We got another Data Run, so read again.
                 continue;
             } else {
                 // We read everything we could.
@@ -152,7 +158,7 @@ impl<'n, 'f> NtfsReadSeek for NtfsNonResidentAttributeValue<'n, 'f> {
         };
 
         while bytes_left_to_seek > 0 {
-            // Seek inside the current data run if there is one.
+            // Seek inside the current Data Run if there is one.
             if self
                 .stream_state
                 .seek_data_run(fs, pos, &mut bytes_left_to_seek)?
@@ -161,9 +167,9 @@ impl<'n, 'f> NtfsReadSeek for NtfsNonResidentAttributeValue<'n, 'f> {
                 break;
             }
 
-            // Move to the next data run.
+            // Move to the next Data Run.
             if self.next_data_run()? {
-                // We got another data run, so seek some more.
+                // We got another Data Run, so seek some more.
                 continue;
             } else {
                 // We seeked as far as we could.
@@ -187,6 +193,9 @@ impl<'n, 'f> NtfsReadSeek for NtfsNonResidentAttributeValue<'n, 'f> {
     }
 }
 
+/// A variant of [`NtfsNonResidentAttributeValue`] that implements [`Read`] and [`Seek`]
+/// by mutably borrowing the filesystem reader.
+#[derive(Debug)]
 pub struct NtfsNonResidentAttributeValueAttached<'n, 'f, 'a, T: Read + Seek> {
     fs: &'a mut T,
     value: NtfsNonResidentAttributeValue<'n, 'f>,
@@ -200,14 +209,20 @@ where
         Self { fs, value }
     }
 
+    /// Returns the absolute current data seek position within the filesystem, in bytes.
+    /// This may be `None` if:
+    ///   * The current seek position is outside the valid range, or
+    ///   * The current Data Run is a "sparse" Data Run.
     pub fn data_position(&self) -> Option<u64> {
         self.value.data_position()
     }
 
+    /// Consumes this reader and returns the inner [`NtfsNonResidentAttributeValue`].
     pub fn detach(self) -> NtfsNonResidentAttributeValue<'n, 'f> {
         self.value
     }
 
+    /// Returns the total length of the attribute value, in bytes.
     pub fn len(&self) -> u64 {
         self.value.len()
     }
@@ -231,6 +246,12 @@ where
     }
 }
 
+/// Iterator over
+///   all data runs of a non-resident attribute,
+///   returning an [`NtfsDataRun`] for each entry,
+///   implementing [`Iterator`] and [`FusedIterator`].
+///
+/// This iterator is returned from the [`NtfsNonResidentAttributeValue::data_runs`] function.
 #[derive(Clone, Debug)]
 pub struct NtfsDataRuns<'n, 'f> {
     ntfs: &'n Ntfs,
@@ -272,6 +293,7 @@ impl<'n, 'f> NtfsDataRuns<'n, 'f> {
         self.state
     }
 
+    /// Returns the absolute position of the current Data Run header within the filesystem, in bytes.
     pub fn position(&self) -> u64 {
         self.position + self.state.offset as u64
     }
@@ -383,20 +405,20 @@ pub(crate) struct DataRunsState {
     previous_lcn: Lcn,
 }
 
-/// Describes a single NTFS data run, which is a continuous cluster range of a non-resident value.
+/// A single NTFS Data Run, which is a continuous cluster range of a non-resident value.
 ///
-/// A data run's size is a multiple of the cluster size configured for the filesystem.
-/// However, a data run does not know about the actual size used by data. This information is only available in the corresponding attribute.
+/// A Data Run's size is a multiple of the cluster size configured for the filesystem.
+/// However, a Data Run does not know about the actual size used by data. This information is only available in the corresponding attribute.
 /// Keep this in mind when doing reads and seeks on data runs. You may end up on allocated but unused data.
 #[derive(Clone, Debug)]
 pub struct NtfsDataRun {
-    /// Absolute position of the data run within the filesystem, in bytes.
-    /// This may be zero if this is a "sparse" data run.
+    /// Absolute position of the Data Run within the filesystem, in bytes.
+    /// This may be zero if this is a "sparse" Data Run.
     position: u64,
-    /// Total allocated size of the data run, in bytes.
-    /// The actual size used by data may be lower, but a data run does not know about that.
+    /// Total allocated size of the Data Run, in bytes.
+    /// The actual size used by data may be lower, but a Data Run does not know about that.
     allocated_size: u64,
-    /// Current relative position within the data run value, in bytes.
+    /// Current relative position within the Data Run value, in bytes.
     stream_position: u64,
 }
 
@@ -417,7 +439,7 @@ impl NtfsDataRun {
     /// Returns the absolute current data seek position within the filesystem, in bytes.
     /// This may be `None` if:
     ///   * The current seek position is outside the valid range, or
-    ///   * The data run is a "sparse" data run
+    ///   * The Data Run is a "sparse" Data Run
     pub fn data_position(&self) -> Option<u64> {
         if self.position > 0 && self.stream_position < self.len() {
             Some(self.position + self.stream_position)
@@ -426,6 +448,7 @@ impl NtfsDataRun {
         }
     }
 
+    /// Returns the allocated size of the Data Run, in bytes.
     pub fn len(&self) -> u64 {
         self.allocated_size
     }
@@ -448,10 +471,10 @@ impl NtfsReadSeek for NtfsDataRun {
         let work_slice = &mut buf[..bytes_to_read];
 
         if self.position == 0 {
-            // This is a sparse data run.
+            // This is a sparse Data Run.
             work_slice.fill(0);
         } else {
-            // This data run contains "real" data.
+            // This Data Run contains "real" data.
             // We have already performed all necessary sanity checks above, so we can just unwrap here.
             fs.seek(SeekFrom::Start(self.data_position().unwrap()))?;
             fs.read(work_slice)?;
@@ -476,7 +499,7 @@ impl NtfsReadSeek for NtfsDataRun {
 
 #[derive(Clone, Debug)]
 pub(crate) struct StreamState {
-    /// Current data run we are reading from.
+    /// Current Data Run we are reading from.
     stream_data_run: Option<NtfsDataRun>,
     /// Current relative position within the entire value, in bytes.
     stream_position: u64,
@@ -496,7 +519,7 @@ impl StreamState {
     /// Returns the absolute current data seek position within the filesystem, in bytes.
     /// This may be `None` if:
     ///   * The current seek position is outside the valid range, or
-    ///   * The current data run is a "sparse" data run
+    ///   * The current Data Run is a "sparse" Data Run
     pub(crate) fn data_position(&self) -> Option<u64> {
         let stream_data_run = self.stream_data_run.as_ref()?;
         stream_data_run.data_position()
@@ -524,7 +547,7 @@ impl StreamState {
     }
 
     /// Simplifies any [`SeekFrom`] to the two cases [`SeekFrom::Start(n)`] and [`SeekFrom::Current(n)`], with n >= 0.
-    /// This is necessary, because an NTFS data run has necessary information for the next data run, but not the other way round.
+    /// This is necessary, because an NTFS Data Run has necessary information for the next Data Run, but not the other way round.
     /// Hence, we can't efficiently move backwards.
     fn simplify_seek(&self, pos: SeekFrom, data_size: u64) -> Result<SeekFrom> {
         match pos {
@@ -580,19 +603,19 @@ impl StreamState {
     where
         T: Read + Seek,
     {
-        // Is there a data run to read from?
+        // Is there a Data Run to read from?
         let data_run = match &mut self.stream_data_run {
             Some(data_run) => data_run,
             None => return Ok(false),
         };
 
-        // Have we already seeked past the size of the data run?
+        // Have we already seeked past the size of the Data Run?
         if data_run.stream_position() >= data_run.len() {
             return Ok(false);
         }
 
         // We also must not read past the (used) data size of the entire value.
-        // (remember that a data run only knows about its allocated size, not its used size!)
+        // (remember that a Data Run only knows about its allocated size, not its used size!)
         let remaining_data_size = self.data_size.saturating_sub(self.stream_position);
         if remaining_data_size == 0 {
             return Ok(false);
@@ -611,9 +634,9 @@ impl StreamState {
         Ok(true)
     }
 
-    /// Returns whether we have reached the final seek position within this data run and can therefore stop seeking.
+    /// Returns whether we have reached the final seek position within this Data Run and can therefore stop seeking.
     ///
-    /// In all other cases, the caller should move to the next data run and seek again.
+    /// In all other cases, the caller should move to the next Data Run and seek again.
     pub(crate) fn seek_data_run<T>(
         &mut self,
         fs: &mut T,
@@ -623,17 +646,17 @@ impl StreamState {
     where
         T: Read + Seek,
     {
-        // Is there a data run to seek in?
+        // Is there a Data Run to seek in?
         let data_run = match &mut self.stream_data_run {
             Some(data_run) => data_run,
             None => return Ok(false),
         };
 
         if *bytes_left_to_seek < data_run.remaining_len() {
-            // We have found the right data run, now we have to seek inside the data run.
+            // We have found the right Data Run, now we have to seek inside the Data Run.
             //
             // If we were called to seek from the very beginning, we can be sure that this
-            // data run is also seeked from the beginning.
+            // Data Run is also seeked from the beginning.
             // Hence, we can use SeekFrom::Start and use the full u64 range.
             //
             // If we were called to seek from the current position, we have to use
@@ -649,7 +672,7 @@ impl StreamState {
             data_run.seek(fs, pos)?;
             Ok(true)
         } else {
-            // We can skip the entire data run.
+            // We can skip the entire Data Run.
             *bytes_left_to_seek -= data_run.remaining_len();
             Ok(false)
         }

@@ -39,10 +39,11 @@ struct IndexEntryHeader {
 }
 
 bitflags! {
+    /// Flags returned by [`NtfsIndexEntry::flags`].
     pub struct NtfsIndexEntryFlags: u8 {
-        /// This index entry points to a sub-node.
+        /// This Index Entry points to a sub-node.
         const HAS_SUBNODE = 0x01;
-        /// This is the last index entry in the list.
+        /// This is the last Index Entry in the list.
         const LAST_ENTRY = 0x02;
     }
 }
@@ -75,6 +76,23 @@ where
     }
 }
 
+/// A single entry of an NTFS index.
+///
+/// NTFS uses B-tree indexes to quickly look up directories, Object IDs, Reparse Points, Security Descriptors, etc.
+/// They are described via [`NtfsIndexRoot`] and [`NtfsIndexAllocation`] attributes, which can be comfortably
+/// accessed via [`NtfsIndex`].
+///
+/// The `E` type parameter of [`NtfsIndexEntryType`] specifies the type of the Index Entry.
+/// The most common one is [`NtfsFileNameIndex`] for file name indexes, commonly known as "directories".
+/// Check out [`NtfsFile::directory_index`] to return an [`NtfsIndex`] object for a directory without
+/// any hassles.
+///
+/// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/concepts/index_entry.html>
+///
+/// [`NtfsFileNameIndex`]: crate::indexes::NtfsFileNameIndex
+/// [`NtfsIndex`]: crate::NtfsIndex
+/// [`NtfsIndexAllocation`]: crate::structured_values::NtfsIndexAllocation
+/// [`NtfsIndexRoot`]: crate::structured_values::NtfsIndexRoot
 #[derive(Clone, Debug)]
 pub struct NtfsIndexEntry<'s, E>
 where
@@ -103,6 +121,10 @@ where
         Ok(entry)
     }
 
+    /// Returns the data of this Index Entry, if any and if supported by this Index Entry type.
+    ///
+    /// This function is mutually exclusive with [`NtfsIndexEntry::file_reference`].
+    /// An Index Entry can either have data or a file reference.
     pub fn data(&self) -> Option<Result<E::DataType>>
     where
         E: NtfsIndexEntryHasData,
@@ -134,6 +156,7 @@ where
         LittleEndian::read_u16(&self.slice[start..])
     }
 
+    /// Returns the length of the data of this Index Entry (if supported by this Index Entry type).
     pub fn data_length(&self) -> u16
     where
         E: NtfsIndexEntryHasData,
@@ -142,7 +165,11 @@ where
         LittleEndian::read_u16(&self.slice[start..])
     }
 
-    /// Returns an [`NtfsFileReference`] for the file referenced by this index entry.
+    /// Returns an [`NtfsFileReference`] for the file referenced by this Index Entry
+    /// (if supported by this Index Entry type).
+    ///
+    /// This function is mutually exclusive with [`NtfsIndexEntry::data`].
+    /// An Index Entry can either have data or a file reference.
     pub fn file_reference(&self) -> NtfsFileReference
     where
         E: NtfsIndexEntryHasFileReference,
@@ -152,11 +179,17 @@ where
         NtfsFileReference::new(self.slice[..mem::size_of::<u64>()].try_into().unwrap())
     }
 
+    /// Returns flags set for this attribute as specified by [`NtfsIndexEntryFlags`].
     pub fn flags(&self) -> NtfsIndexEntryFlags {
         let flags = self.slice[offset_of!(IndexEntryHeader, flags)];
         NtfsIndexEntryFlags::from_bits_truncate(flags)
     }
 
+    /// Returns the total length of this Index Entry, in bytes.
+    ///
+    /// The next Index Entry is exactly at [`NtfsIndexEntry::position`] + [`NtfsIndexEntry::index_entry_length`]
+    /// on the filesystem, unless this is the last entry ([`NtfsIndexEntry::flags`] contains
+    /// [`NtfsIndexEntryFlags::LAST_ENTRY`]).
     pub fn index_entry_length(&self) -> u16 {
         let start = offset_of!(IndexEntryHeader, index_entry_length);
         LittleEndian::read_u16(&self.slice[start..])
@@ -164,10 +197,11 @@ where
 
     /// Returns the structured value of the key of this Index Entry,
     /// or `None` if this Index Entry has no key.
+    ///
     /// The last Index Entry never has a key.
     pub fn key(&self) -> Option<Result<E::KeyType>> {
         // The key/stream is only set when the last entry flag is not set.
-        // https://flatcap.org/linux-ntfs/ntfs/concepts/index_entry.html
+        // https://flatcap.github.io/linux-ntfs/ntfs/concepts/index_entry.html
         if self.key_length() == 0 || self.flags().contains(NtfsIndexEntryFlags::LAST_ENTRY) {
             return None;
         }
@@ -187,9 +221,15 @@ where
         Some(Ok(key))
     }
 
+    /// Returns the length of the key of this Index Entry.
     pub fn key_length(&self) -> u16 {
         let start = offset_of!(IndexEntryHeader, key_length);
         LittleEndian::read_u16(&self.slice[start..])
+    }
+
+    /// Returns the absolute position of this NTFS Index Entry within the filesystem, in bytes.
+    pub fn position(&self) -> u64 {
+        self.position
     }
 
     /// Returns the Virtual Cluster Number (VCN) of the subnode of this Index Entry,
@@ -217,7 +257,7 @@ where
         Some(Ok(vcn))
     }
 
-    /// Returns an [`NtfsFile`] for the file referenced by this index entry.
+    /// Returns an [`NtfsFile`] for the file referenced by this Index Entry.
     pub fn to_file<'n, T>(&self, ntfs: &'n Ntfs, fs: &mut T) -> Result<NtfsFile<'n>>
     where
         E: NtfsIndexEntryHasFileReference,
@@ -313,6 +353,22 @@ where
 
 impl<E> FusedIterator for IndexNodeEntryRanges<E> where E: NtfsIndexEntryType {}
 
+/// Iterator over
+///   all index entries of a single index node,
+///   sorted ascending by the index key,
+///   returning an [`NtfsIndexEntry`] for each entry.
+///
+/// An index node can be an [`NtfsIndexRoot`] attribute or an [`NtfsIndexRecord`]
+/// (which comes from an [`NtfsIndexAllocation`] attribute).
+///
+/// As such, this iterator is returned from the [`NtfsIndexRoot::entries`] and
+/// [`NtfsIndexRecord::entries`] functions.
+///
+/// [`NtfsIndexAllocation`]: crate::structured_values::NtfsIndexAllocation
+/// [`NtfsIndexRecord`]: crate::NtfsIndexRecord
+/// [`NtfsIndexRecord::entries`]: crate::NtfsIndexRecord::entries
+/// [`NtfsIndexRoot`]: crate::structured_values::NtfsIndexRoot
+/// [`NtfsIndexRoot::entries`]: crate::structured_values::NtfsIndexRoot::entries
 #[derive(Clone, Debug)]
 pub struct NtfsIndexNodeEntries<'s, E>
 where

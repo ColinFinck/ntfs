@@ -41,15 +41,38 @@ struct FileNameHeader {
     namespace: u8,
 }
 
+/// Character set constraint of the filename, returned by [`NtfsFileName::namespace`].
+///
+/// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/concepts/filename_namespace.html>
 #[derive(Clone, Copy, Debug, Eq, N, PartialEq)]
 #[repr(u8)]
 pub enum NtfsFileNamespace {
+    /// A POSIX-compatible filename, which is case-sensitive and supports all Unicode
+    /// characters except for the forward slash (/) and the NUL character.
     Posix = 0,
+    /// A long filename for Windows, which is case-insensitive and supports all Unicode
+    /// characters except for " * < > ? \ | / : (and doesn't end with a dot or a space).
     Win32 = 1,
+    /// An MS-DOS 8+3 filename (8 uppercase characters with a 3-letter uppercase extension)
+    /// that consists entirely of printable ASCII characters (except for " * < > ? \ | / : ; . , + = [ ]).
     Dos = 2,
+    /// A Windows filename that also fulfills all requirements of an MS-DOS 8+3 filename (minus the
+    /// uppercase requirement), and therefore only got a single $FILE_NAME record with this name.
     Win32AndDos = 3,
 }
 
+/// Structure of a $FILE_NAME attribute.
+///
+/// NTFS creates a $FILE_NAME attribute for every hard link.
+/// Its valuable information is the actual file name and whether this file represents a directory.
+/// Apart from that, it duplicates several fields of $STANDARD_INFORMATION, but these are only updated when the file name changes.
+/// You usually want to use the corresponding fields from [`NtfsStandardInformation`] instead.
+///
+/// A $FILE_NAME attribute can be resident or non-resident.
+///
+/// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/attributes/file_name.html>
+///
+/// [`NtfsStandardInformation`]: crate::structured_values::NtfsStandardInformation
 #[derive(Clone, Debug)]
 pub struct NtfsFileName {
     header: FileNameHeader,
@@ -83,35 +106,99 @@ impl NtfsFileName {
         Ok(file_name)
     }
 
+    /// Returns the last access time stored in this $FILE_NAME record.
+    ///
+    /// **Note that NTFS only updates it when the file name is changed!**
+    /// Check [`NtfsStandardInformation::access_time`] for a last access time that is always up to date.
+    ///
+    /// [`NtfsStandardInformation::access_time`]: crate::structured_values::NtfsStandardInformation::access_time
     pub fn access_time(&self) -> NtfsTime {
         self.header.access_time
     }
 
+    /// Returns the allocated size of the file data, in bytes.
+    /// "Data" refers to the unnamed $DATA attribute only.
+    /// Other $DATA attributes are not considered.
+    ///
+    /// **Note that NTFS only updates it when the file name is changed!**
+    /// If you need an always up-to-date allocated size, use [`NtfsFile::data`] to get the unnamed $DATA attribute,
+    /// fetch the corresponding [`NtfsAttribute`], and use [`NtfsAttribute::value`] to fetch the corresponding
+    /// [`NtfsAttributeValue`].
+    /// For non-resident attribute values, you now need to walk through each Data Run and sum up the return values of
+    /// [`NtfsDataRun::len`].
+    /// For resident attribute values, there is no extra allocated size.
+    ///
+    /// [`NtfsAttribute`]: crate::NtfsAttribute
+    /// [`NtfsAttribute::value`]: crate::NtfsAttribute::value
+    /// [`NtfsDataRun::len`]: crate::attribute_value::NtfsDataRun::len
+    /// [`NtfsFile::data`]: crate::NtfsFile::data
     pub fn allocated_size(&self) -> u64 {
         self.header.allocated_size
     }
 
+    /// Returns the creation time stored in this $FILE_NAME record.
+    ///
+    /// **Note that NTFS only updates it when the file name is changed!**
+    /// Check [`NtfsStandardInformation::creation_time`] for a creation time that is always up to date.
+    ///
+    /// [`NtfsStandardInformation::creation_time`]: crate::structured_values::NtfsStandardInformation::creation_time
     pub fn creation_time(&self) -> NtfsTime {
         self.header.creation_time
     }
 
+    /// Returns the size actually used by the file data, in bytes.
+    ///
+    /// "Data" refers to the unnamed $DATA attribute only.
+    /// Other $DATA attributes are not considered.
+    ///
+    /// This is less or equal than [`NtfsFileName::allocated_size`].
+    ///
+    /// **Note that NTFS only updates it when the file name is changed!**
+    /// If you need an always up-to-date size, use [`NtfsFile::data`] to get the unnamed $DATA attribute,
+    /// fetch the corresponding [`NtfsAttribute`], and use [`NtfsAttribute::value`] to fetch the corresponding
+    /// [`NtfsAttributeValue`].
+    /// Then query [`NtfsAttributeValue::len`].
+    ///
+    /// [`NtfsAttribute`]: crate::attribute::NtfsAttribute
+    /// [`NtfsAttribute::value`]: crate::attribute::NtfsAttribute::value
+    /// [`NtfsFile::data`]: crate::file::NtfsFile::data
     pub fn data_size(&self) -> u64 {
         self.header.data_size
     }
 
+    /// Returns flags that a user can set for a file (Read-Only, Hidden, System, Archive, etc.).
+    /// Commonly called "File Attributes" in Windows Explorer.
+    ///
+    /// **Note that NTFS only updates it when the file name is changed!**
+    /// Check [`NtfsStandardInformation::file_attributes`] for file attributes that are always up to date.
+    ///
+    /// [`NtfsStandardInformation::file_attributes`]: crate::structured_values::NtfsStandardInformation::file_attributes
     pub fn file_attributes(&self) -> NtfsFileAttributeFlags {
         NtfsFileAttributeFlags::from_bits_truncate(self.header.file_attributes)
     }
 
+    /// Returns whether this file is a directory.
     pub fn is_directory(&self) -> bool {
         self.file_attributes()
             .contains(NtfsFileAttributeFlags::IS_DIRECTORY)
     }
 
+    /// Returns the MFT record modification time stored in this $FILE_NAME record.
+    ///
+    /// **Note that NTFS only updates it when the file name is changed!**
+    /// Check [`NtfsStandardInformation::mft_record_modification_time`] for an MFT record modification time that is always up to date.
+    ///
+    /// [`NtfsStandardInformation::mft_record_modification_time`]: crate::structured_values::NtfsStandardInformation::mft_record_modification_time
     pub fn mft_record_modification_time(&self) -> NtfsTime {
         self.header.mft_record_modification_time
     }
 
+    /// Returns the modification time stored in this $FILE_NAME record.
+    ///
+    /// **Note that NTFS only updates it when the file name is changed!**
+    /// Check [`NtfsStandardInformation::modification_time`] for a modification time that is always up to date.
+    ///
+    /// [`NtfsStandardInformation::modification_time`]: crate::structured_values::NtfsStandardInformation::modification_time
     pub fn modification_time(&self) -> NtfsTime {
         self.header.modification_time
     }
@@ -133,6 +220,7 @@ impl NtfsFileName {
         NtfsFileNamespace::n(self.header.namespace).unwrap()
     }
 
+    /// Returns an [`NtfsFileReference`] for the directory where this file is located.
     pub fn parent_directory_reference(&self) -> NtfsFileReference {
         self.header.parent_directory_reference
     }
@@ -192,7 +280,7 @@ impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsFileName {
     }
 }
 
-// `NtfsFileName` is special in the regard that the index entry key has the same structure as the structured value.
+// `NtfsFileName` is special in the regard that the Index Entry key has the same structure as the structured value.
 impl NtfsIndexEntryKey for NtfsFileName {
     fn key_from_slice(slice: &[u8], position: u64) -> Result<Self> {
         let value_length = slice.len() as u64;

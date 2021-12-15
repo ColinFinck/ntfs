@@ -1,14 +1,10 @@
 // Copyright 2021 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-//! This module implements a reader for a non-resident attribute value that is part of an AttributeList.
-//! Such values are not only split up into data runs, but may also be continued by connected attributes which are listed in the same AttributeList.
-//! This reader provides one contiguous data stream for all data runs in all connected attributes.
-//
 // It is important to note that `NtfsAttributeListNonResidentAttributeValue` can't just encapsulate `NtfsNonResidentAttributeValue` and provide one
 // layer on top to connect the attributes!
 // Connected attributes are stored in a way that the first attribute reports the entire data size and all further attributes report a zero value length.
-// We have to go down to the data run level to get trustable lengths again, and this is what `NtfsAttributeListNonResidentAttributeValue` does here.
+// We have to go down to the Data Run level to get trustable lengths again, and this is what `NtfsAttributeListNonResidentAttributeValue` does here.
 
 use super::{DataRunsState, NtfsDataRuns, StreamState};
 use crate::attribute::{NtfsAttribute, NtfsAttributeType};
@@ -19,19 +15,24 @@ use crate::structured_values::{NtfsAttributeListEntries, NtfsAttributeListEntry}
 use crate::traits::NtfsReadSeek;
 use binread::io::{Read, Seek, SeekFrom};
 
+/// Reader for a non-resident attribute value that is part of an Attribute List.
+///
+/// Such values are not only split up into data runs, but may also be continued by connected attributes
+/// which are listed in the same Attribute List.
+/// This reader considers that by providing one contiguous data stream for all data runs in all connected attributes.
 #[derive(Clone, Debug)]
 pub struct NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
     /// Reference to the base `Ntfs` object of this filesystem.
     ntfs: &'n Ntfs,
     /// An untouched copy of the `attribute_list_entries` passed in [`Self::new`] to rewind to the beginning when desired.
     initial_attribute_list_entries: NtfsAttributeListEntries<'n, 'f>,
-    /// Iterator through all connected attributes of this attribute in the AttributeList.
+    /// Iterator through all connected attributes of this attribute in the Attribute List.
     connected_entries: AttributeListConnectedEntries<'n, 'f>,
     /// Total length of the value data, in bytes.
     data_size: u64,
     /// File, location, and data runs iteration state of the current attribute.
     attribute_state: Option<AttributeState<'n>>,
-    /// Iteration state of the current data run.
+    /// Iteration state of the current Data Run.
     stream_state: StreamState,
 }
 
@@ -59,16 +60,17 @@ impl<'n, 'f> NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
     /// Returns the absolute current data seek position within the filesystem, in bytes.
     /// This may be `None` if:
     ///   * The current seek position is outside the valid range, or
-    ///   * The current data run is a "sparse" data run
+    ///   * The current Data Run is a "sparse" Data Run.
     pub fn data_position(&self) -> Option<u64> {
         self.stream_state.data_position()
     }
 
+    /// Returns the total length of the non-resident attribute value data, in bytes.
     pub fn len(&self) -> u64 {
         self.data_size
     }
 
-    /// Returns whether we got another data run.
+    /// Advances to the next Data Run and returns whether we got another Data Run.
     fn next_data_run(&mut self) -> Result<bool> {
         // Do we have a file and a (non-resident) attribute to iterate through its data runs?
         let attribute_state = match &mut self.attribute_state {
@@ -92,7 +94,7 @@ impl<'n, 'f> NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
         let mut stream_data_runs =
             NtfsDataRuns::from_state(self.ntfs, data, position, data_runs_state);
 
-        // Do we have a next data run? Save that.
+        // Do we have a next Data Run? Save that.
         let stream_data_run = match stream_data_runs.next() {
             Some(stream_data_run) => stream_data_run,
             None => return Ok(false),
@@ -100,14 +102,14 @@ impl<'n, 'f> NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
         let stream_data_run = stream_data_run?;
         self.stream_state.set_stream_data_run(stream_data_run);
 
-        // We got another data run, so serialize the updated `NtfsDataRuns` state for the next iteration.
-        // This step is skipped when we got no data run, because it means we have fully iterated this iterator (and hence also the attribute and file).
+        // We got another Data Run, so serialize the updated `NtfsDataRuns` state for the next iteration.
+        // This step is skipped when we got no Data Run, because it means we have fully iterated this iterator (and hence also the attribute and file).
         attribute_state.data_runs_state = Some(stream_data_runs.into_state());
 
         Ok(true)
     }
 
-    /// Returns whether we got another connected attribute.
+    /// Advances to the next attribute and returns whether we got another connected attribute.
     fn next_attribute<T>(&mut self, fs: &mut T) -> Result<bool>
     where
         T: Read + Seek,
@@ -118,7 +120,7 @@ impl<'n, 'f> NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
             None => return Ok(false),
         };
 
-        // Read the correspoding FILE record into an `NtfsFile` and get the corresponding `NtfsAttribute`.
+        // Read the correspoding File Record into an `NtfsFile` and get the corresponding `NtfsAttribute`.
         let entry = entry?;
         let file = entry.to_file(self.ntfs, fs)?;
         let attribute = entry.to_attribute(&file)?;
@@ -135,7 +137,7 @@ impl<'n, 'f> NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
         let (data, position) = attribute.non_resident_value_data_and_position();
         let mut stream_data_runs = NtfsDataRuns::new(self.ntfs, data, position);
 
-        // Get the first data run already here to save time and let `data_position` return something meaningful.
+        // Get the first Data Run already here to save time and let `data_position` return something meaningful.
         let stream_data_run = match stream_data_runs.next() {
             Some(stream_data_run) => stream_data_run,
             None => return Ok(false),
@@ -154,6 +156,7 @@ impl<'n, 'f> NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
         Ok(true)
     }
 
+    /// Returns the [`Ntfs`] object reference associated to this value.
     pub fn ntfs(&self) -> &'n Ntfs {
         self.ntfs
     }
@@ -167,19 +170,19 @@ impl<'n, 'f> NtfsReadSeek for NtfsAttributeListNonResidentAttributeValue<'n, 'f>
         let mut bytes_read = 0usize;
 
         while bytes_read < buf.len() {
-            // Read from the current data run if there is one.
+            // Read from the current Data Run if there is one.
             if self.stream_state.read_data_run(fs, buf, &mut bytes_read)? {
                 // We read something, so check the loop condition again if we need to read more.
                 continue;
             }
 
-            // Move to the next data run of the current attribute.
+            // Move to the next Data Run of the current attribute.
             if self.next_data_run()? {
-                // We got another data run of the current attribute, so read again.
+                // We got another Data Run of the current attribute, so read again.
                 continue;
             }
 
-            // Move to the first data run of the next connected attribute.
+            // Move to the first Data Run of the next connected attribute.
             if self.next_attribute(fs)? {
                 // We got another attribute, so read again.
                 continue;
@@ -212,7 +215,7 @@ impl<'n, 'f> NtfsReadSeek for NtfsAttributeListNonResidentAttributeValue<'n, 'f>
         };
 
         while bytes_left_to_seek > 0 {
-            // Seek inside the current data run if there is one.
+            // Seek inside the current Data Run if there is one.
             if self
                 .stream_state
                 .seek_data_run(fs, pos, &mut bytes_left_to_seek)?
@@ -221,13 +224,13 @@ impl<'n, 'f> NtfsReadSeek for NtfsAttributeListNonResidentAttributeValue<'n, 'f>
                 break;
             }
 
-            // Move to the next data run of the current attribute.
+            // Move to the next Data Run of the current attribute.
             if self.next_data_run()? {
-                // We got another data run of the current attribute, so seek some more.
+                // We got another Data Run of the current attribute, so seek some more.
                 continue;
             }
 
-            // Move to the first data run of the next connected attribute.
+            // Move to the first Data Run of the next connected attribute.
             if self.next_attribute(fs)? {
                 // We got another connected attribute, so seek some more.
                 continue;

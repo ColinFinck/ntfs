@@ -37,6 +37,14 @@ struct StandardInformationDataNtfs3 {
     usn: u64,
 }
 
+/// Structure of a $STANDARD_INFORMATION attribute.
+///
+/// Among other things, this is the place where the file times and "File Attributes"
+/// (Read-Only, Hidden, System, Archive, etc.) are stored.
+///
+/// A $STANDARD_INFORMATION attribute is always resident.
+///
+/// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/attributes/standard_information.html>
 #[derive(Clone, Debug)]
 pub struct NtfsStandardInformation {
     ntfs1_data: StandardInformationDataNtfs1,
@@ -70,50 +78,67 @@ impl NtfsStandardInformation {
         })
     }
 
+    /// Returns the time this file was last accessed.
     pub fn access_time(&self) -> NtfsTime {
         self.ntfs1_data.access_time
     }
 
+    /// Returns the Class ID of the file, if stored via NTFS 3.x file information.
     pub fn class_id(&self) -> Option<u32> {
         self.ntfs3_data.as_ref().map(|x| x.class_id)
     }
 
+    /// Returns the time this file was created.
     pub fn creation_time(&self) -> NtfsTime {
         self.ntfs1_data.creation_time
     }
 
+    /// Returns flags that a user can set for a file (Read-Only, Hidden, System, Archive, etc.).
+    /// Commonly called "File Attributes" in Windows Explorer.
     pub fn file_attributes(&self) -> NtfsFileAttributeFlags {
         NtfsFileAttributeFlags::from_bits_truncate(self.ntfs1_data.file_attributes)
     }
 
+    /// Returns the maximum allowed versions for this file, if stored via NTFS 3.x file information.
+    ///
+    /// A value of zero means that versioning is disabled for this file.
     pub fn maximum_versions(&self) -> Option<u32> {
         self.ntfs3_data.as_ref().map(|x| x.maximum_versions)
     }
 
+    /// Returns the time the MFT record of this file was last modified.
     pub fn mft_record_modification_time(&self) -> NtfsTime {
         self.ntfs1_data.mft_record_modification_time
     }
 
+    /// Returns the time this file was last modified.
     pub fn modification_time(&self) -> NtfsTime {
         self.ntfs1_data.modification_time
     }
 
+    /// Returns the Owner ID of the file, if stored via NTFS 3.x file information.
     pub fn owner_id(&self) -> Option<u32> {
         self.ntfs3_data.as_ref().map(|x| x.owner_id)
     }
 
+    /// Returns the quota charged by this file, if stored via NTFS 3.x file information.
     pub fn quota_charged(&self) -> Option<u64> {
         self.ntfs3_data.as_ref().map(|x| x.quota_charged)
     }
 
+    /// Returns the Security ID of the file, if stored via NTFS 3.x file information.
     pub fn security_id(&self) -> Option<u32> {
         self.ntfs3_data.as_ref().map(|x| x.security_id)
     }
 
+    /// Returns the Update Sequence Number (USN) of the file, if stored via NTFS 3.x file information.
     pub fn usn(&self) -> Option<u64> {
         self.ntfs3_data.as_ref().map(|x| x.usn)
     }
 
+    /// Returns the version of the file, if stored via NTFS 3.x file information.
+    ///
+    /// This will be zero if versioning is disabled for this file.
     pub fn version(&self) -> Option<u32> {
         self.ntfs3_data.as_ref().map(|x| x.version)
     }

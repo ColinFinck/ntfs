@@ -28,3 +28,7 @@ std = ["arrayvec/std", "binread/std", "byteorder/std"]
 [[example]]
 name = "ntfs-shell"
 required-features = ["chrono"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

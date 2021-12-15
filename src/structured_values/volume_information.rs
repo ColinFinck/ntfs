@@ -23,6 +23,7 @@ struct VolumeInformationData {
 }
 
 bitflags! {
+    /// Flags returned by [`NtfsVolumeInformation::flags`].
     pub struct NtfsVolumeFlags: u16 {
         /// The volume needs to be checked by `chkdsk`.
         const IS_DIRTY = 0x0001;
@@ -36,6 +37,16 @@ bitflags! {
     }
 }
 
+/// Structure of a $VOLUME_INFORMATION attribute.
+///
+/// This attribute is only used by the top-level $Volume file and contains general information about the filesystem.
+/// You can easily access it via [`Ntfs::volume_info`].
+///
+/// A $VOLUME_INFORMATION attribute is always resident.
+///
+/// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/attributes/volume_information.html>
+///
+/// [`Ntfs::volume_info`]: crate::Ntfs::volume_info
 #[derive(Clone, Debug)]
 pub struct NtfsVolumeInformation {
     info: VolumeInformationData,
@@ -60,14 +71,17 @@ impl NtfsVolumeInformation {
         Ok(Self { info })
     }
 
+    /// Returns flags set for this NTFS filesystem/volume as specified by [`NtfsVolumeFlags`].
     pub fn flags(&self) -> NtfsVolumeFlags {
         NtfsVolumeFlags::from_bits_truncate(self.info.flags)
     }
 
+    /// Returns the major NTFS version of this filesystem (e.g. `3` for NTFS 3.1).
     pub fn major_version(&self) -> u8 {
         self.info.major_version
     }
 
+    /// Returns the minor NTFS version of this filesystem (e.g. `1` for NTFS 3.1).
     pub fn minor_version(&self) -> u8 {
         self.info.minor_version
     }

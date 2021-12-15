@@ -38,23 +38,38 @@ struct AttributeListEntryHeader {
     /// This becomes relevant when file data is split over multiple attributes.
     /// Otherwise, it's zero.
     lowest_vcn: Vcn,
-    /// Reference to the [`NtfsFile`] record where this attribute is stored.
+    /// Reference to the File Record where this attribute is stored.
     base_file_reference: NtfsFileReference,
     /// Identifier of this attribute that is unique within the [`NtfsFile`].
     instance: u16,
 }
 
+/// Structure of an $ATTRIBUTE_LIST attribute.
+///
+/// When a File Record lacks space to incorporate further attributes, NTFS creates an additional File Record,
+/// moves all or some of the existing attributes there, and references them via a resident $ATTRIBUTE_LIST attribute
+/// in the original File Record.
+/// When you add even more attributes, NTFS may turn the resident $ATTRIBUTE_LIST into a non-resident one to
+/// make up the required space.
+///
+/// An $ATTRIBUTE_LIST attribute can hence be resident or non-resident.
+///
+/// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/attributes/attribute_list.html>
 #[derive(Clone, Debug)]
 pub enum NtfsAttributeList<'n, 'f> {
+    /// A resident $ATTRIBUTE_LIST attribute.
     Resident(&'f [u8], u64),
+    /// A non-resident $ATTRIBUTE_LIST attribute.
     NonResident(NtfsNonResidentAttributeValue<'n, 'f>),
 }
 
 impl<'n, 'f> NtfsAttributeList<'n, 'f> {
-    pub fn iter(&self) -> NtfsAttributeListEntries<'n, 'f> {
+    /// Returns an iterator over all entries of this $ATTRIBUTE_LIST attribute (cf. [`NtfsAttributeListEntry`]).
+    pub fn entries(&self) -> NtfsAttributeListEntries<'n, 'f> {
         NtfsAttributeListEntries::new(self.clone())
     }
 
+    /// Returns the absolute position of this $ATTRIBUTE_LIST attribute value within the filesystem, in bytes.
     pub fn position(&self) -> u64 {
         match self {
             Self::Resident(_slice, position) => *position,
@@ -87,6 +102,11 @@ impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsAttributeList<'n, 'f> {
     }
 }
 
+/// Iterator over
+///   all entries of an [`NtfsAttributeList`] attribute,
+///   returning an [`NtfsAttributeListEntry`] for each entry.
+///
+/// This iterator is returned from the [`NtfsAttributeList::entries`] function.
 #[derive(Clone, Debug)]
 pub struct NtfsAttributeListEntries<'n, 'f> {
     attribute_list: NtfsAttributeList<'n, 'f>,
@@ -97,6 +117,7 @@ impl<'n, 'f> NtfsAttributeListEntries<'n, 'f> {
         Self { attribute_list }
     }
 
+    /// See [`Iterator::next`].
     pub fn next<T>(&mut self, fs: &mut T) -> Option<Result<NtfsAttributeListEntry>>
     where
         T: Read + Seek,
@@ -107,7 +128,7 @@ impl<'n, 'f> NtfsAttributeListEntries<'n, 'f> {
         }
     }
 
-    pub fn next_non_resident<T>(
+    fn next_non_resident<T>(
         fs: &mut T,
         value: &mut NtfsNonResidentAttributeValue<'n, 'f>,
     ) -> Option<Result<NtfsAttributeListEntry>>
@@ -129,7 +150,7 @@ impl<'n, 'f> NtfsAttributeListEntries<'n, 'f> {
         Some(Ok(entry))
     }
 
-    pub fn next_resident(
+    fn next_resident(
         slice: &mut &'f [u8],
         position: &mut u64,
     ) -> Option<Result<NtfsAttributeListEntry>> {
@@ -150,6 +171,7 @@ impl<'n, 'f> NtfsAttributeListEntries<'n, 'f> {
     }
 }
 
+/// A single entry of an [`NtfsAttributeList`] attribute.
 #[derive(Clone, Debug)]
 pub struct NtfsAttributeListEntry {
     header: AttributeListEntryHeader,
@@ -175,18 +197,32 @@ impl NtfsAttributeListEntry {
         Ok(entry)
     }
 
+    /// Returns a reference to the File Record where the attribute is stored.
     pub fn base_file_reference(&self) -> NtfsFileReference {
         self.header.base_file_reference
     }
 
+    /// Returns the instance number of this attribute list entry.
+    ///
+    /// An instance number is unique within a single NTFS File Record.
+    ///
+    /// Multiple entries of the same type and instance number form a connected attribute,
+    /// meaning an attribute whose value is stretched over multiple attributes.
     pub fn instance(&self) -> u16 {
         self.header.instance
     }
 
+    /// Returns the length of this attribute list entry, in bytes.
     pub fn list_entry_length(&self) -> u16 {
         self.header.list_entry_length
     }
 
+    /// Returns the offset of this attribute's value data as a Virtual Cluster Number (VCN).
+    ///
+    /// This is zero for all unconnected attributes and for the first attribute of a connected attribute.
+    /// For subsequent attributes of a connected attribute, this value is nonzero.
+    ///
+    /// The lowest_vcn + data length of one attribute equal the lowest_vcn of its following connected attribute.
     pub fn lowest_vcn(&self) -> Vcn {
         self.header.lowest_vcn
     }
@@ -203,6 +239,7 @@ impl NtfsAttributeListEntry {
         self.header.name_length as usize * mem::size_of::<u16>()
     }
 
+    /// Returns the absolute position of this attribute list entry within the filesystem, in bytes.
     pub fn position(&self) -> u64 {
         self.position
     }
@@ -220,6 +257,13 @@ impl NtfsAttributeListEntry {
         Ok(())
     }
 
+    /// Returns an [`NtfsAttribute`] for the attribute described by this list entry.
+    ///
+    /// Use [`NtfsAttributeListEntry::to_file`] first to get the required File Record.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a wrong File Record has been passed.
     pub fn to_attribute<'n, 'f>(&self, file: &'f NtfsFile<'n>) -> Result<NtfsAttribute<'n, 'f>> {
         let file_record_number = self.base_file_reference().file_record_number();
         assert_eq!(
@@ -243,6 +287,7 @@ impl NtfsAttributeListEntry {
             })
     }
 
+    /// Reads the entire File Record referenced by this attribute and returns it.
     pub fn to_file<'n, T>(&self, ntfs: &'n Ntfs, fs: &mut T) -> Result<NtfsFile<'n>>
     where
         T: Read + Seek,
@@ -251,7 +296,7 @@ impl NtfsAttributeListEntry {
         ntfs.file(fs, file_record_number)
     }
 
-    /// Returns the type of this NTFS attribute, or [`NtfsError::UnsupportedAttributeType`]
+    /// Returns the type of this NTFS Attribute, or [`NtfsError::UnsupportedAttributeType`]
     /// if it's an unknown type.
     pub fn ty(&self) -> Result<NtfsAttributeType> {
         NtfsAttributeType::n(self.header.ty).ok_or(NtfsError::UnsupportedAttributeType {

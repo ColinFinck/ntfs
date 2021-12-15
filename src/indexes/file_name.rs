@@ -10,7 +10,7 @@ use crate::string::UpcaseOrd;
 use crate::structured_values::NtfsFileName;
 use binread::io::{Read, Seek};
 
-/// Defines the [`NtfsIndexEntryType`] for filename indexes (more commonly known as "directories").
+/// Defines the [`NtfsIndexEntryType`] for filename indexes (commonly known as "directories").
 #[derive(Debug)]
 pub struct NtfsFileNameIndex {}
 

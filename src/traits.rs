@@ -2,11 +2,18 @@ use crate::error::{NtfsError, Result};
 use binread::io;
 use binread::io::{Read, Seek, SeekFrom};
 
+/// Trait to read/seek in a source by the help of a temporarily passed mutable reference to the filesystem reader.
+///
+/// By requiring the user to pass the filesystem reader on every read, we circumvent the problems associated with permanently
+/// holding a mutable reference.
+/// If we held one, we could not read from two objects in alternation.
 pub trait NtfsReadSeek {
+    /// See [`std::io::Read::read`].
     fn read<T>(&mut self, fs: &mut T, buf: &mut [u8]) -> Result<usize>
     where
         T: Read + Seek;
 
+    /// See [`std::io::Read::read_exact`].
     fn read_exact<T>(&mut self, fs: &mut T, mut buf: &mut [u8]) -> Result<()>
     where
         T: Read + Seek,
@@ -34,6 +41,7 @@ pub trait NtfsReadSeek {
         }
     }
 
+    /// See [`std::io::Seek::seek`].
     fn seek<T>(&mut self, fs: &mut T, pos: SeekFrom) -> Result<u64>
     where
         T: Read + Seek;

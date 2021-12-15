@@ -11,6 +11,13 @@ use crate::structured_values::{
 use binread::io::{Cursor, Read, Seek};
 use binread::BinReaderExt;
 
+/// Structure of an $OBJECT_ID attribute.
+///
+/// This optional attribute contains a globally unique identifier of the file.
+///
+/// An $OBJECT_ID attribute is always resident.
+///
+/// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/attributes/object_id.html>
 #[derive(Clone, Debug)]
 pub struct NtfsObjectId {
     object_id: NtfsGuid,
@@ -58,18 +65,22 @@ impl NtfsObjectId {
         })
     }
 
+    /// Returns the (optional) first Object ID that has ever been assigned to this file.
     pub fn birth_object_id(&self) -> Option<&NtfsGuid> {
         self.birth_object_id.as_ref()
     }
 
+    /// Returns the (optional) Object ID of the $Volume file of the partition where this file was created.
     pub fn birth_volume_id(&self) -> Option<&NtfsGuid> {
         self.birth_volume_id.as_ref()
     }
 
+    /// Returns the (optional) Domain ID of this file.
     pub fn domain_id(&self) -> Option<&NtfsGuid> {
         self.domain_id.as_ref()
     }
 
+    /// Returns the Object ID, a globally unique identifier of the file.
     pub fn object_id(&self) -> &NtfsGuid {
         &self.object_id
     }

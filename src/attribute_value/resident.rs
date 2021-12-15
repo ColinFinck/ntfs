@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
 //! This module implements a reader for a value that is already in memory and can therefore be accessed via a slice.
-//! This is the case for all resident attribute values and index record values.
+//! This is the case for all resident attribute values and Index Record values.
 //! Such values are part of NTFS records. NTFS records can't be directly read from the filesystem, which is why they
 //! are always read into a buffer first and then fixed up in memory.
 //! Further accesses to the record data can then happen via slices.
@@ -13,6 +13,7 @@ use super::seek_contiguous;
 use crate::error::Result;
 use crate::traits::NtfsReadSeek;
 
+/// Reader for a value of a resident NTFS Attribute (which is entirely contained in the NTFS File Record).
 #[derive(Clone, Debug)]
 pub struct NtfsResidentAttributeValue<'f> {
     data: &'f [u8],
@@ -29,6 +30,12 @@ impl<'f> NtfsResidentAttributeValue<'f> {
         }
     }
 
+    /// Returns a slice of the entire value data.
+    ///
+    /// Remember that a resident attribute fits entirely inside the NTFS File Record
+    /// of the requested file.
+    /// Hence, the fixed up File Record is entirely in memory at this stage and a slice
+    /// to a resident attribute value can be obtained easily.
     pub fn data(&self) -> &'f [u8] {
         self.data
     }
@@ -43,6 +50,7 @@ impl<'f> NtfsResidentAttributeValue<'f> {
         }
     }
 
+    /// Returns the total length of the resident attribute value data, in bytes.
     pub fn len(&self) -> u64 {
         self.data.len() as u64
     }

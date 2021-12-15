@@ -26,6 +26,20 @@ struct IndexRootHeader {
     clusters_per_index_record: i8,
 }
 
+/// Structure of an $INDEX_ROOT attribute.
+///
+/// This attribute describes the top-level nodes of a B-tree.
+/// The sub-nodes are managed via [`NtfsIndexAllocation`].
+///
+/// NTFS uses B-trees for describing directories (as indexes of [`NtfsFileName`]s), looking up Object IDs,
+/// Reparse Points, and Security Descriptors, to just name a few.
+///
+/// An $INDEX_ROOT attribute is always resident.
+///
+/// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/attributes/index_root.html>
+///
+/// [`NtfsFileName`]: crate::structured_values::NtfsFileName
+/// [`NtfsIndexAllocation`]: crate::structured_values::NtfsIndexAllocation
 #[derive(Clone, Debug)]
 pub struct NtfsIndexRoot<'f> {
     slice: &'f [u8],
@@ -51,6 +65,7 @@ impl<'f> NtfsIndexRoot<'f> {
         Ok(index_root)
     }
 
+    /// Returns an iterator over all top-level nodes of the B-tree.
     pub fn entries<E>(&self) -> Result<NtfsIndexNodeEntries<'f, E>>
     where
         E: NtfsIndexEntryType,
@@ -63,7 +78,7 @@ impl<'f> NtfsIndexRoot<'f> {
 
     fn entries_range_and_position(&self) -> (Range<usize>, u64) {
         let start = INDEX_ROOT_HEADER_SIZE as usize + self.index_entries_offset() as usize;
-        let end = INDEX_ROOT_HEADER_SIZE as usize + self.index_used_size() as usize;
+        let end = INDEX_ROOT_HEADER_SIZE as usize + self.index_data_size() as usize;
         let position = self.position + start as u64;
 
         (start..end, position)
@@ -80,8 +95,15 @@ impl<'f> NtfsIndexRoot<'f> {
         IndexNodeEntryRanges::new(entries_data, range, position)
     }
 
+    /// Returns the allocated size of this NTFS Index Root, in bytes.
     pub fn index_allocated_size(&self) -> u32 {
         let start = INDEX_ROOT_HEADER_SIZE + offset_of!(IndexNodeHeader, allocated_size);
+        LittleEndian::read_u32(&self.slice[start..])
+    }
+
+    /// Returns the size actually used by index data within this NTFS Index Root, in bytes.
+    pub fn index_data_size(&self) -> u32 {
+        let start = INDEX_ROOT_HEADER_SIZE + offset_of!(IndexNodeHeader, index_size);
         LittleEndian::read_u32(&self.slice[start..])
     }
 
@@ -90,13 +112,9 @@ impl<'f> NtfsIndexRoot<'f> {
         LittleEndian::read_u32(&self.slice[start..])
     }
 
+    /// Returns the size of a single Index Record, in bytes.
     pub fn index_record_size(&self) -> u32 {
         let start = offset_of!(IndexRootHeader, index_record_size);
-        LittleEndian::read_u32(&self.slice[start..])
-    }
-
-    pub fn index_used_size(&self) -> u32 {
-        let start = INDEX_ROOT_HEADER_SIZE + offset_of!(IndexNodeHeader, index_size);
         LittleEndian::read_u32(&self.slice[start..])
     }
 
@@ -108,6 +126,7 @@ impl<'f> NtfsIndexRoot<'f> {
         (self.slice[start] & LARGE_INDEX_FLAG) != 0
     }
 
+    /// Returns the absolute position of this Index Root within the filesystem, in bytes.
     pub fn position(&self) -> u64 {
         self.position
     }

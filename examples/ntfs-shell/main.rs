@@ -55,7 +55,7 @@ fn main() -> Result<()> {
     };
 
     println!("**********************************************************************");
-    println!("ntfs-shell - Demonstration of rust-ntfs");
+    println!("ntfs-shell - Demonstration of the ntfs Rust crate");
     println!("by Colin Finck <colin@reactos.org>");
     println!("**********************************************************************");
     println!();
@@ -129,7 +129,7 @@ where
 
         if ty == NtfsAttributeType::AttributeList {
             let list = attribute.structured_value::<_, NtfsAttributeList>(&mut info.fs)?;
-            let mut list_iter = list.iter();
+            let mut list_iter = list.entries();
 
             while let Some(entry) = list_iter.next(&mut info.fs) {
                 let entry = entry?;
@@ -221,7 +221,7 @@ where
     }
 
     bail!(
-        "Found no FileName attribute for FILE record {:#x}",
+        "Found no FileName attribute for File Record {:#x}",
         file.file_record_number()
     )
 }
@@ -260,7 +260,7 @@ where
         let entry = maybe_entry.unwrap()?;
         let file_name = entry
             .key()
-            .expect("key must exist for a found index entry")?;
+            .expect("key must exist for a found Index Entry")?;
 
         if !file_name.is_directory() {
             println!("\"{}\" is not a directory.", arg);
@@ -293,13 +293,13 @@ where
         .last()
         .unwrap()
         .directory_index(&mut info.fs)?;
-    let mut iter = index.iter();
+    let mut iter = index.entries();
 
     while let Some(entry) = iter.next(&mut info.fs) {
         let entry = entry?;
         let file_name = entry
             .key()
-            .expect("key must exist for a found index entry")?;
+            .expect("key must exist for a found Index Entry")?;
 
         let prefix = if file_name.is_directory() {
             "<DIR>"
@@ -321,11 +321,11 @@ where
     println!("{:=^72}", " FILE RECORD ");
     println!("{:34}{}", "Allocated Size:", file.allocated_size());
     println!("{:34}{:#x}", "Byte Position:", file.position());
+    println!("{:34}{}", "Data Size:", file.data_size());
     println!("{:34}{}", "Hard-Link Count:", file.hard_link_count());
     println!("{:34}{}", "Is Directory:", file.is_directory());
     println!("{:34}{:#x}", "Record Number:", file.file_record_number());
     println!("{:34}{}", "Sequence Number:", file.sequence_number());
-    println!("{:34}{}", "Used Size:", file.used_size());
 
     let mut attributes = file.attributes();
     while let Some(attribute_item) = attributes.next(&mut info.fs) {
@@ -452,7 +452,7 @@ where
     println!("{:20}{}", "Size:", info.ntfs.size());
 
     let volume_name = if let Some(Ok(volume_name)) = info.ntfs.volume_name(&mut info.fs) {
-        volume_name.name().to_string_lossy()
+        format!("\"{}\"", volume_name.name())
     } else {
         "<NONE>".to_string()
     };
@@ -525,14 +525,14 @@ fn help(arg: &str) -> Result<()> {
             println!("Usage: attr FILE");
             println!();
             println!("Shows the structure of all NTFS attributes of a single file, not including their data runs.");
-            println!("Try \"attr_runs\" if you are also interested in data run information.");
+            println!("Try \"attr_runs\" if you are also interested in Data Run information.");
             help_file("attr");
         }
         "attr_runs" => {
             println!("Usage: attr_runs FILE");
             println!();
             println!("Shows the structure of all NTFS attributes of a single file, including their data runs.");
-            println!("Try \"attr\" if you don't need the data run information.");
+            println!("Try \"attr\" if you don't need the Data Run information.");
             help_file("attr_runs");
         }
         "cd" => {
@@ -596,8 +596,8 @@ fn help_file(command: &str) {
     println!("    Examples:");
     println!("      ○ {} ntoskrnl.exe", command);
     println!("      ○ {} File with spaces.exe", command);
-    println!("  ● A file record number anywhere on the filesystem.");
-    println!("    This is indicated through a leading slash (/). A hexadecimal file record number is indicated via 0x.");
+    println!("  ● A File Record Number anywhere on the filesystem.");
+    println!("    This is indicated through a leading slash (/). A hexadecimal File Record Number is indicated via 0x.");
     println!("    Examples:");
     println!("      ○ {} /5", command);
     println!("      ○ {} /0xa299", command);

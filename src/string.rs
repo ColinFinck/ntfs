@@ -177,8 +177,9 @@ impl<'a> PartialOrd<NtfsString<'a>> for &str {
     }
 }
 
+/// Trait for a case-insensitive ordering with respect to the $UpCase table read from the filesystem.
 pub trait UpcaseOrd<Rhs> {
-    /// Performs a case-insensitive ordering based on the upcase table read from the filesystem.
+    /// Performs a case-insensitive ordering based on the $UpCase table read from the filesystem.
     ///
     /// # Panics
     ///

@@ -11,6 +11,7 @@ use crate::upcase_table::UpcaseTable;
 use binread::io::{Read, Seek, SeekFrom};
 use binread::BinReaderExt;
 
+/// Root structure describing an NTFS filesystem.
 #[derive(Debug)]
 pub struct Ntfs {
     /// The size of a single cluster, in bytes. This is usually 4096.
@@ -21,7 +22,7 @@ pub struct Ntfs {
     size: u64,
     /// Absolute position of the Master File Table (MFT), in bytes.
     mft_position: u64,
-    /// Size of a single file record, in bytes.
+    /// Size of a single File Record, in bytes.
     file_record_size: u32,
     /// Serial number of the NTFS volume.
     serial_number: u64,
@@ -30,6 +31,10 @@ pub struct Ntfs {
 }
 
 impl Ntfs {
+    /// Creates a new [`Ntfs`] object from a reader and validates its boot sector information.
+    ///
+    /// The reader must cover the entire NTFS partition, not more and not less.
+    /// It will be rewinded to the beginning before reading anything.
     pub fn new<T>(fs: &mut T) -> Result<Self>
     where
         T: Read + Seek,
@@ -67,7 +72,7 @@ impl Ntfs {
         self.cluster_size
     }
 
-    /// Returns the [`NtfsFile`] for the given NTFS file record number.
+    /// Returns the [`NtfsFile`] for the given NTFS File Record Number.
     ///
     /// The first few NTFS files have fixed indexes and contain filesystem
     /// management information (see the [`KnownNtfsFileRecordNumber`] enum).
@@ -81,7 +86,7 @@ impl Ntfs {
 
         // The MFT may be split into multiple data runs, referenced by its $DATA attribute.
         // We therefore read it just like any other non-resident attribute value.
-        // However, this code assumes that the MFT does not have an AttributeList!
+        // However, this code assumes that the MFT does not have an Attribute List!
         let mft = NtfsFile::new(&self, fs, self.mft_position, 0)?;
         let mft_data_attribute = mft
             .attributes_raw()
@@ -105,6 +110,7 @@ impl Ntfs {
         NtfsFile::new(&self, fs, position, file_record_number)
     }
 
+    /// Returns the size of a File Record of this NTFS filesystem, in bytes.
     pub fn file_record_size(&self) -> u32 {
         self.file_record_size
     }
@@ -173,6 +179,7 @@ impl Ntfs {
 
     /// Returns an [`NtfsVolumeName`] to read the volume name (also called volume label)
     /// of this NTFS volume.
+    ///
     /// Note that a volume may also have no label, which is why the return value is further
     /// encapsulated in an `Option`.
     pub fn volume_name<T>(&self, fs: &mut T) -> Option<Result<NtfsVolumeName>>

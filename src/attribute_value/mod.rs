@@ -1,5 +1,7 @@
 // Copyright 2021 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: GPL-2.0-or-later
+//
+//! Readers for attribute value types.
 
 mod attribute_list_non_resident;
 mod non_resident;
@@ -15,14 +17,22 @@ use binread::io::{Read, Seek, SeekFrom};
 use crate::error::{NtfsError, Result};
 use crate::traits::NtfsReadSeek;
 
+/// Reader that abstracts over all attribute value types, returned by [`NtfsAttribute::value`].
+///
+/// [`NtfsAttribute::value`]: crate::NtfsAttribute::value
 #[derive(Clone, Debug)]
 pub enum NtfsAttributeValue<'n, 'f> {
+    /// A resident attribute value (which is entirely contained in the NTFS File Record).
     Resident(NtfsResidentAttributeValue<'f>),
+    /// A non-resident attribute value (whose data is in a cluster range outside the File Record).
     NonResident(NtfsNonResidentAttributeValue<'n, 'f>),
+    /// A non-resident attribute value that is part of an Attribute List (and may span multiple connected attributes).
     AttributeListNonResident(NtfsAttributeListNonResidentAttributeValue<'n, 'f>),
 }
 
 impl<'n, 'f> NtfsAttributeValue<'n, 'f> {
+    /// Returns a variant of this reader that implements [`Read`] and [`Seek`]
+    /// by mutably borrowing the filesystem reader.
     pub fn attach<'a, T>(self, fs: &'a mut T) -> NtfsAttributeValueAttached<'n, 'f, 'a, T>
     where
         T: Read + Seek,
@@ -30,6 +40,10 @@ impl<'n, 'f> NtfsAttributeValue<'n, 'f> {
         NtfsAttributeValueAttached::new(fs, self)
     }
 
+    /// Returns the absolute current data seek position within the filesystem, in bytes.
+    /// This may be `None` if:
+    ///   * The current seek position is outside the valid range, or
+    ///   * The current Data Run is a "sparse" Data Run.
     pub fn data_position(&self) -> Option<u64> {
         match self {
             Self::Resident(inner) => inner.data_position(),
@@ -38,6 +52,7 @@ impl<'n, 'f> NtfsAttributeValue<'n, 'f> {
         }
     }
 
+    /// Returns the total length of the attribute value data, in bytes.
     pub fn len(&self) -> u64 {
         match self {
             Self::Resident(inner) => inner.len(),
@@ -79,6 +94,9 @@ impl<'n, 'f> NtfsReadSeek for NtfsAttributeValue<'n, 'f> {
     }
 }
 
+/// A variant of [`NtfsAttributeValue`] that implements [`Read`] and [`Seek`]
+/// by mutably borrowing the filesystem reader.
+#[derive(Debug)]
 pub struct NtfsAttributeValueAttached<'n, 'f, 'a, T: Read + Seek> {
     fs: &'a mut T,
     value: NtfsAttributeValue<'n, 'f>,
@@ -92,14 +110,20 @@ where
         Self { fs, value }
     }
 
+    /// Returns the absolute current data seek position within the filesystem, in bytes.
+    /// This may be `None` if:
+    ///   * The current seek position is outside the valid range, or
+    ///   * The current Data Run is a "sparse" Data Run.
     pub fn data_position(&self) -> Option<u64> {
         self.value.data_position()
     }
 
+    /// Consumes this reader and returns the inner [`NtfsAttributeValue`].
     pub fn detach(self) -> NtfsAttributeValue<'n, 'f> {
         self.value
     }
 
+    /// Returns the total length of the attribute value, in bytes.
     pub fn len(&self) -> u64 {
         self.value.len()
     }

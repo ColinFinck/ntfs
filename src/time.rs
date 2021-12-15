@@ -24,14 +24,18 @@ const DAYS_FROM_0001_TO_1601: i32 = 584389;
 #[cfg(feature = "std")]
 const EPOCH_DIFFERENCE_IN_INTERVALS: i64 = 116_444_736_000_000_000;
 
-/// How many 100-nanosecond intervals we have in a second.
+/// Number of 100-nanosecond intervals in a second.
 #[cfg(any(feature = "chrono", feature = "std"))]
 const INTERVALS_PER_SECOND: u64 = 10_000_000;
 
-/// How many 100-nanosecond intervals we have in a day.
+/// Number of 100-nanosecond intervals in a day.
 #[cfg(feature = "chrono")]
 const INTERVALS_PER_DAY: u64 = 24 * 60 * 60 * INTERVALS_PER_SECOND;
 
+/// An NTFS timestamp, used for expressing file times.
+///
+/// NTFS (and the Windows NT line of operating systems) represent time as an unsigned 64-bit integer
+/// counting the number of 100-nanosecond intervals since January 1, 1601.
 #[derive(BinRead, Clone, Copy, Debug, Eq, From, Ord, PartialEq, PartialOrd)]
 pub struct NtfsTime(u64);
 
@@ -43,6 +47,7 @@ impl NtfsTime {
 }
 
 #[cfg(feature = "chrono")]
+#[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
 impl TryFrom<DateTime<Utc>> for NtfsTime {
     type Error = NtfsError;
 
@@ -78,6 +83,7 @@ impl TryFrom<DateTime<Utc>> for NtfsTime {
 }
 
 #[cfg(feature = "chrono")]
+#[cfg_attr(docsrs, doc(cfg(feature = "chrono")))]
 impl From<NtfsTime> for DateTime<Utc> {
     fn from(nt: NtfsTime) -> DateTime<Utc> {
         let mut remainder = nt.nt_timestamp();
@@ -104,6 +110,7 @@ impl From<NtfsTime> for DateTime<Utc> {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl TryFrom<SystemTime> for NtfsTime {
     type Error = SystemTimeError;
 

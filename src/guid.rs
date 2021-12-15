@@ -7,6 +7,7 @@ use core::fmt;
 /// Size of a single GUID on disk (= size of all GUID fields).
 pub(crate) const GUID_SIZE: usize = 16;
 
+/// A Globally Unique Identifier (GUID), used for Object IDs in NTFS.
 #[derive(BinRead, Clone, Debug, Eq, PartialEq)]
 pub struct NtfsGuid {
     pub data1: u32,

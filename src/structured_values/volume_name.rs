@@ -18,6 +18,16 @@ const VOLUME_NAME_MIN_SIZE: usize = mem::size_of::<u16>();
 /// The largest VolumeName attribute has a name containing 128 UTF-16 code points (256 bytes).
 const VOLUME_NAME_MAX_SIZE: usize = 128 * mem::size_of::<u16>();
 
+/// Structure of a $VOLUME_NAME attribute.
+///
+/// This attribute is only used by the top-level $Volume file and contains the user-defined name of this filesystem.
+/// You can easily access it via [`Ntfs::volume_name`].
+///
+/// A $VOLUME_NAME attribute is always resident.
+///
+/// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/attributes/volume_name.html>
+///
+/// [`Ntfs::volume_name`]: crate::Ntfs::volume_name
 #[derive(Clone, Debug)]
 pub struct NtfsVolumeName {
     name: ArrayVec<u8, VOLUME_NAME_MAX_SIZE>,
@@ -53,7 +63,7 @@ impl NtfsVolumeName {
         Ok(Self { name })
     }
 
-    /// Gets the file name and returns it wrapped in an [`NtfsString`].
+    /// Gets the volume name and returns it wrapped in an [`NtfsString`].
     pub fn name<'s>(&'s self) -> NtfsString<'s> {
         NtfsString(&self.name)
     }

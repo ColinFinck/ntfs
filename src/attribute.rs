@@ -23,7 +23,7 @@ use enumn::N;
 use memoffset::offset_of;
 use strum_macros::Display;
 
-/// On-disk structure of the generic header of an NTFS attribute.
+/// On-disk structure of the generic header of an NTFS Attribute.
 #[repr(C, packed)]
 struct NtfsAttributeHeader {
     /// Type of the attribute, known types are in [`NtfsAttributeType`].
@@ -43,6 +43,7 @@ struct NtfsAttributeHeader {
 }
 
 bitflags! {
+    /// Flags returned by [`NtfsAttribute::flags`].
     pub struct NtfsAttributeFlags: u16 {
         /// The attribute value is compressed.
         const COMPRESSED = 0x0001;
@@ -53,7 +54,7 @@ bitflags! {
     }
 }
 
-/// On-disk structure of the extra header of an NTFS attribute that has a resident value.
+/// On-disk structure of the extra header of an NTFS Attribute that has a resident value.
 #[repr(C, packed)]
 struct NtfsResidentAttributeHeader {
     attribute_header: NtfsAttributeHeader,
@@ -65,7 +66,7 @@ struct NtfsResidentAttributeHeader {
     indexed_flag: u8,
 }
 
-/// On-disk structure of the extra header of an NTFS attribute that has a non-resident value.
+/// On-disk structure of the extra header of an NTFS Attribute that has a non-resident value.
 #[repr(C, packed)]
 struct NtfsNonResidentAttributeHeader {
     attribute_header: NtfsAttributeHeader,
@@ -96,28 +97,73 @@ struct NtfsNonResidentAttributeHeader {
     initialized_size: u64,
 }
 
+/// All known NTFS Attribute types.
+///
+/// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/attributes/index.html>
 #[derive(Clone, Copy, Debug, Display, Eq, N, PartialEq)]
 #[repr(u32)]
 pub enum NtfsAttributeType {
+    /// $STANDARD_INFORMATION, see [`NtfsStandardInformation`].
+    ///
+    /// [`NtfsStandardInformation`]: crate::structured_values::NtfsStandardInformation
     StandardInformation = 0x10,
+    /// $ATTRIBUTE_LIST, see [`NtfsAttributeList`].
+    ///
+    /// [`NtfsAttributeList`]: crate::structured_values::NtfsAttributeList
     AttributeList = 0x20,
+    /// $FILE_NAME, see [`NtfsFileName`].
+    ///
+    /// [`NtfsFileName`]: crate::structured_values::NtfsFileName
     FileName = 0x30,
+    /// $OBJECT_ID, see [`NtfsObjectId`].
+    ///
+    /// [`NtfsObjectId`]: crate::structured_values::NtfsObjectId
     ObjectId = 0x40,
+    /// $SECURITY_DESCRIPTOR
     SecurityDescriptor = 0x50,
+    /// $VOLUME_NAME, see [`NtfsVolumeName`].
+    ///
+    /// [`NtfsVolumeName`]: crate::structured_values::NtfsVolumeName
     VolumeName = 0x60,
+    /// $VOLUME_INFORMATION, see [`NtfsVolumeInformation`].
+    ///
+    /// [`NtfsVolumeInformation`]: crate::structured_values::NtfsVolumeInformation
     VolumeInformation = 0x70,
+    /// $DATA, see [`NtfsFile::data`].
     Data = 0x80,
+    /// $INDEX_ROOT, see [`NtfsIndexRoot`].
+    ///
+    /// [`NtfsIndexRoot`]: crate::structured_values::NtfsIndexRoot
     IndexRoot = 0x90,
+    /// $INDEX_ALLOCATION, see [`NtfsIndexAllocation`].
+    ///
+    /// [`NtfsIndexAllocation`]: crate::structured_values::NtfsIndexAllocation
     IndexAllocation = 0xA0,
+    /// $BITMAP
     Bitmap = 0xB0,
+    /// $REPARSE_POINT
     ReparsePoint = 0xC0,
+    /// $EA_INFORMATION
     EAInformation = 0xD0,
+    /// $EA
     EA = 0xE0,
+    /// $PROPERTY_SET
     PropertySet = 0xF0,
+    /// $LOGGED_UTILITY_STREAM
     LoggedUtilityStream = 0x100,
+    /// Marks the end of the valid attributes.
     End = 0xFFFF_FFFF,
 }
 
+/// A single NTFS Attribute of an [`NtfsFile`].
+///
+/// Not to be confused with [`NtfsFileAttributeFlags`].
+///
+/// This structure is returned by the [`NtfsAttributesRaw`] iterator as well as [`NtfsAttributeItem::to_attribute`].
+///
+/// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/concepts/attribute_header.html>
+///
+/// [`NtfsFileAttributeFlags`]: crate::structured_values::NtfsFileAttributeFlags
 #[derive(Clone, Debug)]
 pub struct NtfsAttribute<'n, 'f> {
     file: &'f NtfsFile<'n>,
@@ -140,7 +186,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         }
     }
 
-    /// Returns the length of this NTFS attribute, in bytes.
+    /// Returns the length of this NTFS Attribute, in bytes.
     ///
     /// This denotes the length of the attribute structure on disk.
     /// Apart from various headers, this structure also includes the name and,
@@ -172,7 +218,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         is_non_resident == 0
     }
 
-    /// Gets the name of this NTFS attribute (if any) and returns it wrapped in an [`NtfsString`].
+    /// Gets the name of this NTFS Attribute (if any) and returns it wrapped in an [`NtfsString`].
     ///
     /// Note that most NTFS attributes have no name and are distinguished by their types.
     /// Use [`NtfsAttribute::ty`] to get the attribute type.
@@ -195,7 +241,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         LittleEndian::read_u16(&self.file.record_data()[start..])
     }
 
-    /// Returns the length of the name of this NTFS attribute, in bytes.
+    /// Returns the length of the name of this NTFS Attribute, in bytes.
     ///
     /// An attribute name has a maximum length of 255 UTF-16 code points (510 bytes).
     /// It is always part of the attribute itself and hence also of the length
@@ -243,11 +289,20 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         self.offset
     }
 
-    /// Returns the absolute position of this NTFS attribute within the filesystem, in bytes.
+    /// Returns the absolute position of this NTFS Attribute within the filesystem, in bytes.
     pub fn position(&self) -> u64 {
         self.file.position() + self.offset as u64
     }
 
+    /// Attempts to parse the value data as the given resident structured value type and returns that.
+    ///
+    /// This is a fast path for attributes that are always resident.
+    /// It doesn't need a reference to the filesystem reader.
+    ///
+    /// This function first checks that the attribute is of the required type for that structured value
+    /// and if it's a resident attribute.
+    /// It returns with an error if that is not the case.
+    /// It also returns an error for any parsing problem.
     pub fn resident_structured_value<S>(&self) -> Result<S>
     where
         S: NtfsStructuredValueFromResidentAttributeValue<'n, 'f>,
@@ -294,6 +349,11 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         LittleEndian::read_u16(&self.file.record_data()[start..])
     }
 
+    /// Attempts to parse the value data as the given structured value type and returns that.
+    ///
+    /// This function first checks that the attribute is of the required type for that structured value.
+    /// It returns with an error if that is not the case.
+    /// It also returns an error for any parsing problem.
     pub fn structured_value<T, S>(&self, fs: &mut T) -> Result<S>
     where
         T: Read + Seek,
@@ -311,7 +371,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         S::from_attribute_value(fs, self.value()?)
     }
 
-    /// Returns the type of this NTFS attribute, or [`NtfsError::UnsupportedAttributeType`]
+    /// Returns the type of this NTFS Attribute, or [`NtfsError::UnsupportedAttributeType`]
     /// if it's an unknown type.
     pub fn ty(&self) -> Result<NtfsAttributeType> {
         let start = self.offset + offset_of!(NtfsAttributeHeader, ty);
@@ -369,7 +429,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         Ok(())
     }
 
-    /// Returns an [`NtfsAttributeValue`] structure to read the value of this NTFS attribute.
+    /// Returns an [`NtfsAttributeValue`] structure to read the value of this NTFS Attribute.
     pub fn value(&self) -> Result<NtfsAttributeValue<'n, 'f>> {
         if let Some(list_entries) = self.list_entries {
             // The first attribute reports the entire data size for all connected attributes
@@ -394,7 +454,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         }
     }
 
-    /// Returns the length of the value of this NTFS attribute, in bytes.
+    /// Returns the length of the value data of this NTFS Attribute, in bytes.
     pub fn value_length(&self) -> u64 {
         if self.is_resident() {
             self.resident_value_length() as u64
@@ -404,6 +464,17 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
     }
 }
 
+/// Iterator over
+///   all attributes of an [`NtfsFile`],
+///   returning an [`NtfsAttributeItem`] for each entry.
+///
+/// This iterator is returned from the [`NtfsFile::attributes`] function.
+/// It provides a flattened "data-centric" view of the attributes and abstracts away the filesystem details
+/// to deal with many or large attributes (Attribute Lists and connected attributes).
+///
+/// Check [`NtfsAttributesRaw`] if you want to iterate over the plain attributes on the filesystem.
+/// See [`NtfsAttributesAttached`] for an iterator that implements [`Iterator`] and [`FusedIterator`].
+#[derive(Clone, Debug)]
 pub struct NtfsAttributes<'n, 'f> {
     raw_iter: NtfsAttributesRaw<'n, 'f>,
     list_entries: Option<NtfsAttributeListEntries<'n, 'f>>,
@@ -419,6 +490,8 @@ impl<'n, 'f> NtfsAttributes<'n, 'f> {
         }
     }
 
+    /// Returns a variant of this iterator that implements [`Iterator`] and [`FusedIterator`]
+    /// by mutably borrowing the filesystem reader.
     pub fn attach<'a, T>(self, fs: &'a mut T) -> NtfsAttributesAttached<'n, 'f, 'a, T>
     where
         T: Read + Seek,
@@ -426,6 +499,7 @@ impl<'n, 'f> NtfsAttributes<'n, 'f> {
         NtfsAttributesAttached::new(fs, self)
     }
 
+    /// See [`Iterator::next`].
     pub fn next<T>(&mut self, fs: &mut T) -> Option<Result<NtfsAttributeItem<'n, 'f>>>
     where
         T: Read + Seek,
@@ -433,7 +507,7 @@ impl<'n, 'f> NtfsAttributes<'n, 'f> {
         loop {
             if let Some(attribute_list_entries) = &mut self.list_entries {
                 loop {
-                    // If the next AttributeList entry turns out to be a non-resident attribute, that attribute's
+                    // If the next Attribute List entry turns out to be a non-resident attribute, that attribute's
                     // value may be split over multiple (adjacent) attributes.
                     // To view this value as a single one, we need an `AttributeListConnectedEntries` iterator
                     // and that iterator needs `NtfsAttributeListEntries` where the next call to `next` yields
@@ -450,12 +524,12 @@ impl<'n, 'f> NtfsAttributes<'n, 'f> {
                     let entry_record_number = entry.base_file_reference().file_record_number();
                     let entry_ty = iter_try!(entry.ty());
 
-                    // Ignore all AttributeList entries that just repeat attributes of the raw iterator.
+                    // Ignore all Attribute List entries that just repeat attributes of the raw iterator.
                     if entry_record_number == self.raw_iter.file.file_record_number() {
                         continue;
                     }
 
-                    // Ignore all AttributeList entries that are connected attributes of a previous one.
+                    // Ignore all Attribute List entries that are connected attributes of a previous one.
                     if let Some((skip_instance, skip_ty)) = self.list_skip_info {
                         if entry_instance == skip_instance && entry_ty == skip_ty {
                             continue;
@@ -490,7 +564,7 @@ impl<'n, 'f> NtfsAttributes<'n, 'f> {
             if let Ok(NtfsAttributeType::AttributeList) = attribute.ty() {
                 let attribute_list =
                     iter_try!(attribute.structured_value::<T, NtfsAttributeList>(fs));
-                self.list_entries = Some(attribute_list.iter());
+                self.list_entries = Some(attribute_list.entries());
             } else {
                 let item = NtfsAttributeItem {
                     attribute_file: self.raw_iter.file,
@@ -504,6 +578,15 @@ impl<'n, 'f> NtfsAttributes<'n, 'f> {
     }
 }
 
+/// Iterator over
+///   all attributes of an [`NtfsFile`],
+///   returning an [`NtfsAttributeItem`] for each entry,
+///   implementing [`Iterator`] and [`FusedIterator`].
+///
+/// This iterator is returned from the [`NtfsAttributes::attach`] function.
+/// Conceptually the same as [`NtfsAttributes`], but mutably borrows the filesystem
+/// to implement aforementioned traits.
+#[derive(Debug)]
 pub struct NtfsAttributesAttached<'n, 'f, 'a, T: Read + Seek> {
     fs: &'a mut T,
     attributes: NtfsAttributes<'n, 'f>,
@@ -517,6 +600,7 @@ where
         Self { fs, attributes }
     }
 
+    /// Consumes this iterator and returns the inner [`NtfsAttributes`].
     pub fn detach(self) -> NtfsAttributes<'n, 'f> {
         self.attributes
     }
@@ -535,6 +619,15 @@ where
 
 impl<'n, 'f, 'a, T> FusedIterator for NtfsAttributesAttached<'n, 'f, 'a, T> where T: Read + Seek {}
 
+/// Item returned by the [`NtfsAttributes`] iterator.
+///
+/// [`NtfsAttributes`] provides a flattened view over the attributes by traversing Attribute Lists.
+/// Attribute Lists may contain entries with references to other [`NtfsFile`]s.
+/// Therefore, the attribute's information may either be stored in the original [`NtfsFile`] or in another
+/// [`NtfsFile`] that has been read just for this attribute.
+///
+/// [`NtfsAttributeItem`] abstracts over both cases by providing a reference to the original [`NtfsFile`],
+/// and optionally holding another [`NtfsFile`] if the attribute is actually stored there.
 #[derive(Clone, Debug)]
 pub struct NtfsAttributeItem<'n, 'f> {
     attribute_file: &'f NtfsFile<'n>,
@@ -544,6 +637,7 @@ pub struct NtfsAttributeItem<'n, 'f> {
 }
 
 impl<'n, 'f> NtfsAttributeItem<'n, 'f> {
+    /// Returns the actual [`NtfsAttribute`] structure for this NTFS Attribute.
     pub fn to_attribute<'i>(&'i self) -> NtfsAttribute<'n, 'i> {
         if let Some(file) = &self.attribute_value_file {
             NtfsAttribute::new(file, self.attribute_offset, self.list_entries.as_ref())
@@ -557,6 +651,17 @@ impl<'n, 'f> NtfsAttributeItem<'n, 'f> {
     }
 }
 
+/// Iterator over
+///   all top-level attributes of an [`NtfsFile`],
+///   returning an [`NtfsAttribute`] for each entry,
+///   implementing [`Iterator`] and [`FusedIterator`].
+///
+/// This iterator is returned from the [`NtfsFile::attributes_raw`] function.
+/// Contrary to [`NtfsAttributes`], it does not traverse $ATTRIBUTE_LIST attributes and returns them
+/// as raw [`NtfsAttribute`]s.
+/// Check that structure if you want an iterator providing a flattened "data-centric" view over
+/// the attributes by traversing Attribute Lists automatically.
+#[derive(Clone, Debug)]
 pub struct NtfsAttributesRaw<'n, 'f> {
     file: &'f NtfsFile<'n>,
     items_range: Range<usize>,
@@ -565,7 +670,7 @@ pub struct NtfsAttributesRaw<'n, 'f> {
 impl<'n, 'f> NtfsAttributesRaw<'n, 'f> {
     pub(crate) fn new(file: &'f NtfsFile<'n>) -> Self {
         let start = file.first_attribute_offset() as usize;
-        let end = file.used_size() as usize;
+        let end = file.data_size() as usize;
         let items_range = start..end;
 
         Self { file, items_range }
