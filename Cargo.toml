@@ -2,9 +2,15 @@
 name = "ntfs"
 version = "0.1.0"
 authors = ["Colin Finck <colin@reactos.org>"]
+description = "A low-level NTFS filesystem library"
+homepage = "https://github.com/ColinFinck/ntfs"
+repository = "https://github.com/ColinFinck/ntfs"
+documentation = "https://docs.rs/ntfs"
+readme = "README.md"
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "MIT OR Apache-2.0"
+keywords = ["filesystem", "nt", "ntfs", "windows"]
+categories = ["filesystem", "no-std", "os::windows-apis", "parser-implementations"]
 
 [dependencies]
 arrayvec = { version = "0.7.1", default-features = false }
