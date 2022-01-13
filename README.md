@@ -14,14 +14,14 @@ A low-level NTFS filesystem library implemented in Rust.
 This crate is geared towards the NTFS 3.x versions used in Windows 2000 up to the current Windows 11.
 However, the basics are expected to be compatible to even earlier versions.
 
-The crate is `no_std`-compatible and therefore usable from firmware level code up to user-mode applications.
+The crate is `no_std`-compatible and therefore usable from firmware-level code up to user-mode applications.
 
 ## ntfs-shell
 ![ntfs-shell demo](img/ntfs-shell.gif)
 
 The `ntfs-shell` example comes with this crate to demonstrate all library features.
 Use it to explore the internal structures of an NTFS filesystem at any detail level, even of your running Windows partition.
-No artificial security restrictions will block you from accessing a file or folder, extract their data, as well as Alternate Data Streams.
+No artificial security restrictions will block you from accessing files and folders, extracting their data or Alternate Data Streams.
 The filesystem is opened read-only, so you can safely browse even a mounted filesystem without worrying about data corruption.
 That is also helpful to get an idea of the Windows NTFS driver, e.g. to find out when its lazy writer actually updates the data on disk.
 

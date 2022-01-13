@@ -16,7 +16,7 @@ use {
 #[cfg(feature = "std")]
 use std::time::{SystemTime, SystemTimeError};
 
-/// How many days we have between 0001-01-01 and 1601-01-01.
+/// Number of days between 0001-01-01 and 1601-01-01.
 #[cfg(feature = "chrono")]
 const DAYS_FROM_0001_TO_1601: i32 = 584389;
 

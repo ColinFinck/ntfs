@@ -6,7 +6,7 @@
 //! Thanks to Rust's typesystem, the traits make using the various types of NTFS indexes (and their distinct key
 //! and data types) possible in a typesafe way.
 //!
-//! NTFS uses B-tree indexes to quickly look up directories, Object IDs, Reparse Points, Security Descriptors, etc.
+//! NTFS uses B-tree indexes to quickly look up files, Object IDs, Reparse Points, Security Descriptors, etc.
 //! They are described via [`NtfsIndexRoot`] and [`NtfsIndexAllocation`] attributes, which can be comfortably
 //! accessed via [`NtfsIndex`].
 //!

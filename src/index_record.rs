@@ -39,7 +39,7 @@ pub(crate) struct IndexNodeHeader {
 ///
 /// These records are denoted via an `INDX` signature on the filesystem.
 ///
-/// NTFS uses B-tree indexes to quickly look up directories, Object IDs, Reparse Points, Security Descriptors, etc.
+/// NTFS uses B-tree indexes to quickly look up files, Object IDs, Reparse Points, Security Descriptors, etc.
 /// An Index Record is further comprised of Index Entries, which contain the actual key/data (see [`NtfsIndexEntry`],
 /// iterated via [`NtfsIndexNodeEntries`]).
 ///

@@ -123,7 +123,7 @@ where
     {
         // NTFS B-tree indexes are composed out of nodes, with multiple entries per node.
         // Each entry may have a reference to a subnode.
-        // If that is the case, the subnode comes before the parent node lexicographically.
+        // If that is the case, the subnode entries comes before the parent entry lexicographically.
         //
         // An example for an unbalanced, but otherwise valid and sorted tree:
         //
