@@ -125,12 +125,12 @@ impl NtfsFileName {
     /// fetch the corresponding [`NtfsAttribute`], and use [`NtfsAttribute::value`] to fetch the corresponding
     /// [`NtfsAttributeValue`].
     /// For non-resident attribute values, you now need to walk through each Data Run and sum up the return values of
-    /// [`NtfsDataRun::len`].
-    /// For resident attribute values, there is no extra allocated size.
+    /// [`NtfsDataRun::allocated_size`].
+    /// For resident attribute values, the length equals the allocated size.
     ///
     /// [`NtfsAttribute`]: crate::NtfsAttribute
     /// [`NtfsAttribute::value`]: crate::NtfsAttribute::value
-    /// [`NtfsDataRun::len`]: crate::attribute_value::NtfsDataRun::len
+    /// [`NtfsDataRun::allocated_size`]: crate::attribute_value::NtfsDataRun::allocated_size
     /// [`NtfsFile::data`]: crate::NtfsFile::data
     pub fn allocated_size(&self) -> u64 {
         self.header.allocated_size

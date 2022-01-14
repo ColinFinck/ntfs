@@ -18,7 +18,7 @@
 //! The following example dumps the names of all files and folders in the root directory of a given NTFS filesystem.  
 //! The list is directly taken from the NTFS index, hence it's sorted in ascending order with respect to NTFS's understanding of case-insensitive string comparison.
 //!
-//! ```rust,no_run
+//! ```ignore
 //! let mut ntfs = Ntfs::new(&mut fs).unwrap();
 //! let root_dir = ntfs.root_directory(&mut fs).unwrap();
 //! let index = root_dir.directory_index(&mut fs).unwrap();
