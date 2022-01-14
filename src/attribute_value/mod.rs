@@ -20,6 +20,7 @@ use crate::traits::NtfsReadSeek;
 /// Reader that abstracts over all attribute value types, returned by [`NtfsAttribute::value`].
 ///
 /// [`NtfsAttribute::value`]: crate::NtfsAttribute::value
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
 pub enum NtfsAttributeValue<'n, 'f> {
     /// A resident attribute value (which is entirely contained in the NTFS File Record).
@@ -50,6 +51,11 @@ impl<'n, 'f> NtfsAttributeValue<'n, 'f> {
             Self::NonResident(inner) => inner.data_position(),
             Self::AttributeListNonResident(inner) => inner.data_position(),
         }
+    }
+
+    /// Returns `true` if the attribute value contains no data.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     /// Returns the total length of the attribute value data, in bytes.
@@ -121,6 +127,11 @@ where
     /// Consumes this reader and returns the inner [`NtfsAttributeValue`].
     pub fn detach(self) -> NtfsAttributeValue<'n, 'f> {
         self.value
+    }
+
+    /// Returns `true` if the attribute value contains no data.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     /// Returns the total length of the attribute value, in bytes.

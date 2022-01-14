@@ -50,6 +50,11 @@ impl<'f> NtfsResidentAttributeValue<'f> {
         }
     }
 
+    /// Returns `true` if the resident attribute value contains no data.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Returns the total length of the resident attribute value data, in bytes.
     pub fn len(&self) -> u64 {
         self.data.len() as u64

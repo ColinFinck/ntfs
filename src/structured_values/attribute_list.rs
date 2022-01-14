@@ -228,7 +228,7 @@ impl NtfsAttributeListEntry {
     }
 
     /// Gets the attribute name and returns it wrapped in an [`NtfsString`].
-    pub fn name<'s>(&'s self) -> NtfsString<'s> {
+    pub fn name(&self) -> NtfsString {
         NtfsString(&self.name)
     }
 

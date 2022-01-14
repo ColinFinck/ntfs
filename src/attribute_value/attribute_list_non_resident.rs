@@ -65,6 +65,11 @@ impl<'n, 'f> NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
         self.stream_state.data_position()
     }
 
+    /// Returns `true` if the non-resident attribute value contains no data.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Returns the total length of the non-resident attribute value data, in bytes.
     pub fn len(&self) -> u64 {
         self.data_size

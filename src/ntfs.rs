@@ -87,7 +87,7 @@ impl Ntfs {
         // The MFT may be split into multiple data runs, referenced by its $DATA attribute.
         // We therefore read it just like any other non-resident attribute value.
         // However, this code assumes that the MFT does not have an Attribute List!
-        let mft = NtfsFile::new(&self, fs, self.mft_position, 0)?;
+        let mft = NtfsFile::new(self, fs, self.mft_position, 0)?;
         let mft_data_attribute = mft
             .attributes_raw()
             .find(|attribute| {
@@ -107,7 +107,7 @@ impl Ntfs {
             .data_position()
             .ok_or(NtfsError::InvalidFileRecordNumber { file_record_number })?;
 
-        NtfsFile::new(&self, fs, position, file_record_number)
+        NtfsFile::new(self, fs, position, file_record_number)
     }
 
     /// Returns the size of a File Record of this NTFS filesystem, in bytes.

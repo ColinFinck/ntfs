@@ -204,7 +204,7 @@ impl NtfsFileName {
     }
 
     /// Gets the file name and returns it wrapped in an [`NtfsString`].
-    pub fn name<'s>(&'s self) -> NtfsString<'s> {
+    pub fn name(&self) -> NtfsString {
         NtfsString(&self.name)
     }
 
@@ -243,7 +243,7 @@ impl NtfsFileName {
 
         if total_size > data_size {
             return Err(NtfsError::InvalidStructuredValueSize {
-                position: position,
+                position,
                 ty: NtfsAttributeType::FileName,
                 expected: data_size,
                 actual: total_size,

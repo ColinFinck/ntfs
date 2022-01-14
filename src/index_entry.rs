@@ -314,7 +314,7 @@ where
         }
     }
 
-    pub(crate) fn data<'d>(&'d self) -> &'d [u8] {
+    pub(crate) fn data(&self) -> &[u8] {
         &self.data
     }
 }

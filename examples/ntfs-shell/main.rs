@@ -181,7 +181,7 @@ fn attr_print_attribute<'n>(
                 let data_run = data_run?;
                 let instance = format!("{}{}", data_run_prefix, i);
                 let start = data_run.data_position().unwrap_or(0);
-                let length = data_run.len();
+                let length = data_run.allocated_size();
 
                 println!(
                     "{:<10} | {:<20} | {:<8} | {:>13} | {:#18x} | {:>13} |",

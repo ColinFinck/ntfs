@@ -83,7 +83,7 @@ impl<'n> NtfsIndexRecord<'n> {
     /// Returns an iterator over all entries of this Index Record (cf. [`NtfsIndexEntry`]).
     ///
     /// [`NtfsIndexEntry`]: crate::NtfsIndexEntry
-    pub fn entries<'r, E>(&'r self) -> Result<NtfsIndexNodeEntries<'r, E>>
+    pub fn entries<E>(&self) -> Result<NtfsIndexNodeEntries<E>>
     where
         E: NtfsIndexEntryType,
     {

@@ -4,6 +4,7 @@
 use crate::error::{NtfsError, Result};
 use crate::types::Lcn;
 use binread::BinRead;
+use core::ops::Range;
 use memoffset::offset_of;
 
 // Sources:
@@ -76,6 +77,8 @@ impl BiosParameterBlock {
         /// Exponents > 31 (2^31 = 2 GiB) would make no sense, exceed a u32, and must be outright denied.
         const MAXIMUM_SIZE_INFO_EXPONENT: u32 = 31;
 
+        const SIZE_INFO_RANGE: Range<u32> = MINIMUM_SIZE_INFO_EXPONENT..MAXIMUM_SIZE_INFO_EXPONENT;
+
         let cluster_size = self.cluster_size()?;
 
         if size_info > 0 {
@@ -90,7 +93,7 @@ impl BiosParameterBlock {
             // The size field denotes a binary exponent after negation.
             let exponent = (-size_info) as u32;
 
-            if exponent < MINIMUM_SIZE_INFO_EXPONENT || exponent >= MAXIMUM_SIZE_INFO_EXPONENT {
+            if !SIZE_INFO_RANGE.contains(&exponent) {
                 return Err(NtfsError::InvalidRecordSizeInfo {
                     size_info,
                     cluster_size,

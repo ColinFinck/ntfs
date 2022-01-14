@@ -85,6 +85,11 @@ impl<'n, 'f> NtfsNonResidentAttributeValue<'n, 'f> {
         NtfsDataRuns::new(self.ntfs, self.data, self.position)
     }
 
+    /// Returns `true` if the non-resident attribute value contains no data.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Returns the total length of the non-resident attribute value data, in bytes.
     pub fn len(&self) -> u64 {
         self.stream_state.data_size()
@@ -222,7 +227,12 @@ where
         self.value
     }
 
-    /// Returns the total length of the attribute value, in bytes.
+    /// Returns `true` if the non-resident attribute value contains no data.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Returns the total length of the non-resident attribute value, in bytes.
     pub fn len(&self) -> u64 {
         self.value.len()
     }
@@ -436,25 +446,25 @@ impl NtfsDataRun {
         })
     }
 
+    /// Returns the allocated size of the Data Run, in bytes.
+    pub fn allocated_size(&self) -> u64 {
+        self.allocated_size
+    }
+
     /// Returns the absolute current data seek position within the filesystem, in bytes.
     /// This may be `None` if:
     ///   * The current seek position is outside the valid range, or
     ///   * The Data Run is a "sparse" Data Run
     pub fn data_position(&self) -> Option<u64> {
-        if self.position > 0 && self.stream_position < self.len() {
+        if self.position > 0 && self.stream_position < self.allocated_size() {
             Some(self.position + self.stream_position)
         } else {
             None
         }
     }
 
-    /// Returns the allocated size of the Data Run, in bytes.
-    pub fn len(&self) -> u64 {
-        self.allocated_size
-    }
-
     pub(crate) fn remaining_len(&self) -> u64 {
-        self.len().saturating_sub(self.stream_position)
+        self.allocated_size().saturating_sub(self.stream_position)
     }
 }
 
@@ -470,25 +480,26 @@ impl NtfsReadSeek for NtfsDataRun {
         let bytes_to_read = usize::min(buf.len(), self.remaining_len() as usize);
         let work_slice = &mut buf[..bytes_to_read];
 
-        if self.position == 0 {
+        let bytes_read = if self.position == 0 {
             // This is a sparse Data Run.
             work_slice.fill(0);
+            work_slice.len()
         } else {
             // This Data Run contains "real" data.
             // We have already performed all necessary sanity checks above, so we can just unwrap here.
             fs.seek(SeekFrom::Start(self.data_position().unwrap()))?;
-            fs.read(work_slice)?;
-        }
+            fs.read(work_slice)?
+        };
 
-        self.stream_position += bytes_to_read as u64;
-        Ok(bytes_to_read)
+        self.stream_position += bytes_read as u64;
+        Ok(bytes_read)
     }
 
     fn seek<T>(&mut self, _fs: &mut T, pos: SeekFrom) -> Result<u64>
     where
         T: Read + Seek,
     {
-        let length = self.len();
+        let length = self.allocated_size();
         seek_contiguous(&mut self.stream_position, length, pos)
     }
 
@@ -561,11 +572,9 @@ impl StreamState {
                         // Seek data_size + n bytes from the very beginning.
                         return Ok(SeekFrom::Start(bytes_to_seek));
                     }
-                } else {
-                    if let Some(bytes_to_seek) = data_size.checked_sub(n.wrapping_neg() as u64) {
-                        // Seek data_size + n bytes (with n being negative) from the very beginning.
-                        return Ok(SeekFrom::Start(bytes_to_seek));
-                    }
+                } else if let Some(bytes_to_seek) = data_size.checked_sub(n.wrapping_neg() as u64) {
+                    // Seek data_size + n bytes (with n being negative) from the very beginning.
+                    return Ok(SeekFrom::Start(bytes_to_seek));
                 }
             }
             SeekFrom::Current(n) => {
@@ -576,13 +585,11 @@ impl StreamState {
                         // data runs from the very beginning.
                         return Ok(SeekFrom::Current(n));
                     }
-                } else {
-                    if let Some(bytes_to_seek) =
-                        self.stream_position().checked_sub(n.wrapping_neg() as u64)
-                    {
-                        // Seek stream_position + n bytes (with n being negative) from the very beginning.
-                        return Ok(SeekFrom::Start(bytes_to_seek));
-                    }
+                } else if let Some(bytes_to_seek) =
+                    self.stream_position().checked_sub(n.wrapping_neg() as u64)
+                {
+                    // Seek stream_position + n bytes (with n being negative) from the very beginning.
+                    return Ok(SeekFrom::Start(bytes_to_seek));
                 }
             }
         }
@@ -610,7 +617,7 @@ impl StreamState {
         };
 
         // Have we already seeked past the size of the Data Run?
-        if data_run.stream_position() >= data_run.len() {
+        if data_run.stream_position() >= data_run.allocated_size() {
             return Ok(false);
         }
 
