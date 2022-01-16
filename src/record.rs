@@ -25,7 +25,10 @@ pub(crate) struct Record<'n> {
 }
 
 impl<'n> Record<'n> {
+    pub(crate) const REQUIRED_LENGTH: usize = std::mem::size_of::<RecordHeader>();
     pub(crate) fn new(ntfs: &'n Ntfs, data: Vec<u8>, position: u64) -> Self {
+        assert!(data.len() >= std::mem::size_of::<RecordHeader>(), "Record too short");
+
         Self {
             ntfs,
             data,

@@ -121,9 +121,15 @@ impl<'n> NtfsFile<'n> {
     where
         T: Read + Seek,
     {
-        let mut data = vec![0; ntfs.file_record_size() as usize];
+        let record_size = ntfs.file_record_size() as usize;
+
+        if record_size < Record::REQUIRED_LENGTH {
+            return Err(NtfsError::BufferTooSmall { expected: Record::REQUIRED_LENGTH, actual: record_size });
+        }
+
+        let mut data = vec![0; record_size];
         fs.seek(SeekFrom::Start(position))?;
-        fs.read_exact(&mut data)?;
+        fs.take(record_size as u64).read_exact(&mut data)?;
 
         let mut record = Record::new(ntfs, data, position);
         Self::validate_signature(&record)?;
