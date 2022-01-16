@@ -129,7 +129,7 @@ impl<'n> NtfsFile<'n> {
 
         let mut data = vec![0; record_size];
         fs.seek(SeekFrom::Start(position))?;
-        fs.take(record_size as u64).read_exact(&mut data)?;
+        fs.read_exact(&mut data)?;
 
         let mut record = Record::new(ntfs, data, position);
         Self::validate_signature(&record)?;
