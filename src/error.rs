@@ -188,6 +188,8 @@ pub enum NtfsError {
     VcnOutOfBoundsInIndexAllocation { position: u64, vcn: Vcn },
     /// The Virtual Cluster Number (VCN) {vcn} is too big to be processed
     VcnTooBig { vcn: Vcn },
+    /// The number of total sectors {total_sectors} multiplied by the sector size {sector_size} was too large for a u64
+    TooLarge { total_sectors: u64, sector_size: u16 },
 }
 
 impl From<binread::error::Error> for NtfsError {
