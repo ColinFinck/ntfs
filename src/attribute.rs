@@ -409,7 +409,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         debug_assert!(self.is_resident());
 
         let start = self.resident_value_offset();
-        if start as u32 >= self.attribute_length() {
+        if start as u32 > self.attribute_length() {
             return Err(NtfsError::InvalidResidentAttributeValueOffset {
                 position: self.position(),
                 expected: start,
