@@ -409,7 +409,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         debug_assert!(self.is_resident());
 
         let start = self.resident_value_offset();
-        if start as u32 >= self.attribute_length() {
+        if start as u32 > self.attribute_length() {
             return Err(NtfsError::InvalidResidentAttributeValueOffset {
                 position: self.position(),
                 expected: start,
@@ -701,3 +701,38 @@ impl<'n, 'f> Iterator for NtfsAttributesRaw<'n, 'f> {
 }
 
 impl<'n, 'f> FusedIterator for NtfsAttributesRaw<'n, 'f> {}
+
+#[cfg(test)]
+mod tests {
+    use crate::indexes::NtfsFileNameIndex;
+    use crate::ntfs::Ntfs;
+    use crate::traits::NtfsReadSeek;
+
+    #[test]
+    fn test_empty_data_attribute() {
+        let mut testfs1 = crate::helpers::tests::testfs1();
+        let mut ntfs = Ntfs::new(&mut testfs1).unwrap();
+        ntfs.read_upcase_table(&mut testfs1).unwrap();
+        let root_dir = ntfs.root_directory(&mut testfs1).unwrap();
+
+        // Find the "empty-file".
+        let root_dir_index = root_dir.directory_index(&mut testfs1).unwrap();
+        let mut root_dir_finder = root_dir_index.finder();
+        let entry =
+            NtfsFileNameIndex::find(&mut root_dir_finder, &ntfs, &mut testfs1, "empty-file")
+                .unwrap()
+                .unwrap();
+        let empty_file = entry.to_file(&ntfs, &mut testfs1).unwrap();
+
+        let data_attribute_item = empty_file.data(&mut testfs1, "").unwrap().unwrap();
+        let data_attribute = data_attribute_item.to_attribute();
+        assert_eq!(data_attribute.value_length(), 0);
+
+        let mut data_attribute_value = data_attribute.value().unwrap();
+        assert!(data_attribute_value.is_empty());
+
+        let mut buf = [0u8; 5];
+        let bytes_read = data_attribute_value.read(&mut testfs1, &mut buf).unwrap();
+        assert_eq!(bytes_read, 0);
+    }
+}
