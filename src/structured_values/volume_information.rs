@@ -16,7 +16,7 @@ const VOLUME_INFORMATION_SIZE: usize = 12;
 
 #[derive(BinRead, Clone, Debug)]
 struct VolumeInformationData {
-    reserved: u64,
+    _reserved: u64,
     major_version: u8,
     minor_version: u8,
     flags: u16,
