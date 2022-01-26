@@ -46,8 +46,11 @@ impl Ntfs {
 
         let bpb = boot_sector.bpb();
         let cluster_size = bpb.cluster_size()?;
-        let sector_size = bpb.sector_size();
-        let size = bpb.total_sectors() * sector_size as u64;
+        let sector_size = bpb.sector_size()?;
+        let total_sectors = bpb.total_sectors();
+        let size = total_sectors
+            .checked_mul(sector_size as u64)
+            .ok_or(NtfsError::TotalSectorsTooBig { total_sectors })?;
         let mft_position = 0;
         let file_record_size = bpb.file_record_size()?;
         let serial_number = bpb.serial_number();

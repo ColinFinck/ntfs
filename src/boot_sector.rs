@@ -47,7 +47,7 @@ impl BiosParameterBlock {
         const MAXIMUM_CLUSTER_SIZE: u32 = 2097152;
 
         let cluster_size = self.sectors_per_cluster as u32 * self.sector_size as u32;
-        if cluster_size > MAXIMUM_CLUSTER_SIZE {
+        if cluster_size > MAXIMUM_CLUSTER_SIZE || !cluster_size.is_power_of_two() {
             return Err(NtfsError::UnsupportedClusterSize {
                 expected: MAXIMUM_CLUSTER_SIZE,
                 actual: cluster_size,
@@ -104,8 +104,21 @@ impl BiosParameterBlock {
         }
     }
 
-    pub(crate) fn sector_size(&self) -> u16 {
-        self.sector_size
+    pub(crate) fn sector_size(&self) -> Result<u16> {
+        // NTFS-3G supports more sector sizes, but I haven't got Windows to accept an NTFS partition
+        // with a sector size other than 512 bytes.
+        // This restriction is arbitrary and can be lifted once you show me a Windows NTFS partition
+        // with a different sector size.
+        const SUPPORTED_SECTOR_SIZE: u16 = 512;
+
+        if self.sector_size != SUPPORTED_SECTOR_SIZE {
+            return Err(NtfsError::UnsupportedSectorSize {
+                expected: SUPPORTED_SECTOR_SIZE,
+                actual: self.sector_size,
+            });
+        }
+
+        Ok(self.sector_size)
     }
 
     pub(crate) fn serial_number(&self) -> u64 {

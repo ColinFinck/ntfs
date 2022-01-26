@@ -44,7 +44,7 @@ pub enum NtfsError {
         expected: u8,
         actual: u8,
     },
-    /// The cluster count {cluster_count} is too big
+    /// The NTFS Data Run cluster count {cluster_count} is too big to be multiplied by the cluster size
     InvalidClusterCount { cluster_count: u64 },
     /// The NTFS File Record at byte position {position:#010x} indicates an allocated size of {expected} bytes, but the record only has a size of {actual} bytes
     InvalidFileAllocatedSize {
@@ -147,12 +147,14 @@ pub enum NtfsError {
     },
     /// I/O error: {0:?}
     Io(binread::io::Error),
-    /// The Logical Cluster Number (LCN) {lcn} is too big to be processed
+    /// The Logical Cluster Number (LCN) {lcn} is too big to be multiplied by the cluster size
     LcnTooBig { lcn: Lcn },
     /// The index root at byte position {position:#010x} is a large index, but no matching index allocation attribute was provided
     MissingIndexAllocation { position: u64 },
-    /// The NTFS file at byte position {position:#010x} is not a directory.
+    /// The NTFS file at byte position {position:#010x} is not a directory
     NotADirectory { position: u64 },
+    /// The total sector count is too big to be multiplied by the sector size
+    TotalSectorsTooBig { total_sectors: u64 },
     /// The NTFS Attribute at byte position {position:#010x} should not belong to an Attribute List, but it does
     UnexpectedAttributeListAttribute { position: u64 },
     /// The NTFS Attribute at byte position {position:#010x} should be resident, but it is non-resident
@@ -165,6 +167,8 @@ pub enum NtfsError {
     UnsupportedClusterSize { expected: u32, actual: u32 },
     /// The namespace of the NTFS file name starting at byte position {position:#010x} is {actual}, which is not supported
     UnsupportedFileNamespace { position: u64, actual: u8 },
+    /// The sector size is {actual} bytes, but the only supported one is {expected}
+    UnsupportedSectorSize { expected: u16, actual: u16 },
     /// The Update Sequence Array (USA) of the record at byte position {position:#010x} has entries for {array_count} sectors of {sector_size} bytes, but the record is only {record_size} bytes long
     UpdateSequenceArrayExceedsRecordSize {
         position: u64,
@@ -184,9 +188,9 @@ pub enum NtfsError {
         expected: Vcn,
         actual: Vcn,
     },
-    /// The index allocation at byte position {position:#010x} references a Virtual Cluster Number (VCN) {vcn}, but this VCN exceeds the boundaries of the filesystem.
+    /// The index allocation at byte position {position:#010x} references a Virtual Cluster Number (VCN) {vcn}, but this VCN exceeds the boundaries of the filesystem
     VcnOutOfBoundsInIndexAllocation { position: u64, vcn: Vcn },
-    /// The Virtual Cluster Number (VCN) {vcn} is too big to be processed
+    /// The Virtual Cluster Number (VCN) {vcn} is too big to be multiplied by the cluster size
     VcnTooBig { vcn: Vcn },
 }
 
