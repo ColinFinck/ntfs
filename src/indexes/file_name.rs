@@ -1,4 +1,4 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use crate::error::Result;
@@ -11,8 +11,8 @@ use crate::structured_values::NtfsFileName;
 use binread::io::{Read, Seek};
 
 /// Defines the [`NtfsIndexEntryType`] for filename indexes (commonly known as "directories").
-#[derive(Debug)]
-pub struct NtfsFileNameIndex {}
+#[derive(Clone, Copy, Debug)]
+pub struct NtfsFileNameIndex;
 
 impl NtfsFileNameIndex {
     /// Finds a file in a filename index by name and returns the [`NtfsIndexEntry`] (if any).

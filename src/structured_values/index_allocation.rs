@@ -1,4 +1,4 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use crate::attribute::NtfsAttributeType;
@@ -6,7 +6,6 @@ use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
 use crate::index_record::NtfsIndexRecord;
 use crate::ntfs::Ntfs;
-use crate::structured_values::index_root::NtfsIndexRoot;
 use crate::structured_values::NtfsStructuredValue;
 use crate::traits::NtfsReadSeek;
 use crate::types::Vcn;
@@ -44,7 +43,7 @@ impl<'n, 'f> NtfsIndexAllocation<'n, 'f> {
     pub fn record_from_vcn<T>(
         &self,
         fs: &mut T,
-        index_root: &NtfsIndexRoot,
+        index_record_size: u32,
         vcn: Vcn,
     ) -> Result<NtfsIndexRecord<'n>>
     where
@@ -63,7 +62,6 @@ impl<'n, 'f> NtfsIndexAllocation<'n, 'f> {
         }
 
         // Get the record.
-        let index_record_size = index_root.index_record_size();
         let record = NtfsIndexRecord::new(self.ntfs, fs, value, index_record_size)?;
 
         // Validate that the VCN in the record is the requested one.
@@ -81,8 +79,7 @@ impl<'n, 'f> NtfsIndexAllocation<'n, 'f> {
     /// Returns an iterator over all Index Records of this $INDEX_ALLOCATION attribute (cf. [`NtfsIndexRecord`]).
     ///
     /// Each Index Record is fully read, fixed up, and validated.
-    pub fn records(&self, index_root: &NtfsIndexRoot) -> NtfsIndexRecords<'n, 'f> {
-        let index_record_size = index_root.index_record_size();
+    pub fn records(&self, index_record_size: u32) -> NtfsIndexRecords<'n, 'f> {
         NtfsIndexRecords::new(self.clone(), index_record_size)
     }
 }

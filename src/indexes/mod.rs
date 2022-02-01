@@ -1,4 +1,4 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 //! Various types of NTFS indexes and traits to work with them.
@@ -28,7 +28,7 @@ use core::fmt;
 /// [`NtfsFileNameIndex`]: crate::indexes::NtfsFileNameIndex
 /// [`NtfsIndex`]: crate::NtfsIndex
 /// [`NtfsIndexEntry`]: crate::NtfsIndexEntry
-pub trait NtfsIndexEntryType: fmt::Debug {
+pub trait NtfsIndexEntryType: Clone + fmt::Debug {
     type KeyType: NtfsIndexEntryKey;
 }
 

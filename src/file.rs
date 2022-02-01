@@ -1,4 +1,4 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use crate::attribute::{NtfsAttributeItem, NtfsAttributeType, NtfsAttributes, NtfsAttributesRaw};
@@ -242,36 +242,23 @@ impl<'n> NtfsFile<'n> {
         let directory_index_name = "$I30";
 
         // The IndexRoot attribute is always resident and has to exist for every directory.
-        let index_root = self.find_resident_attribute_structured_value::<NtfsIndexRoot>(Some(
-            directory_index_name,
-        ))?;
+        let index_root_item =
+            self.find_attribute(fs, NtfsAttributeType::IndexRoot, Some(directory_index_name))?;
+        let index_root_attribute = index_root_item.to_attribute();
+        let index_root = index_root_attribute.resident_structured_value::<NtfsIndexRoot>()?;
 
         // The IndexAllocation attribute is only required for "large" indexes.
         // It is always non-resident and may even be in an Attribute List.
         let mut index_allocation_item = None;
         if index_root.is_large_index() {
-            let mut iter = self.attributes();
-
-            while let Some(item) = iter.next(fs) {
-                let item = item?;
-                let attribute = item.to_attribute();
-
-                let ty = attribute.ty()?;
-                if ty != NtfsAttributeType::IndexAllocation {
-                    continue;
-                }
-
-                let name = attribute.name()?;
-                if name != directory_index_name {
-                    continue;
-                }
-
-                index_allocation_item = Some(item);
-                break;
-            }
+            index_allocation_item = Some(self.find_attribute(
+                fs,
+                NtfsAttributeType::IndexAllocation,
+                Some(directory_index_name),
+            )?);
         }
 
-        NtfsIndex::<NtfsFileNameIndex>::new(index_root, index_allocation_item)
+        NtfsIndex::<NtfsFileNameIndex>::new(index_root_item, index_allocation_item)
     }
 
     /// Returns the NTFS File Record Number of this file.
@@ -282,10 +269,50 @@ impl<'n> NtfsFile<'n> {
         self.file_record_number
     }
 
+    /// Finds an attribute of a specific type, optionally with a specific name, and returns its [`NtfsAttributeItem`].
+    /// Returns [`NtfsError::AttributeNotFound`] if no such attribute could be found.
+    ///
+    /// This function also traverses Attribute Lists to find the attribute.
+    fn find_attribute<'f, T>(
+        &'f self,
+        fs: &mut T,
+        ty: NtfsAttributeType,
+        match_name: Option<&str>,
+    ) -> Result<NtfsAttributeItem<'n, 'f>>
+    where
+        T: Read + Seek,
+    {
+        let mut iter = self.attributes();
+
+        while let Some(item) = iter.next(fs) {
+            let item = item?;
+            let attribute = item.to_attribute();
+
+            if attribute.ty()? != ty {
+                continue;
+            }
+
+            if let Some(name) = match_name {
+                if attribute.name()? != name {
+                    continue;
+                }
+            }
+
+            return Ok(item);
+        }
+
+        Err(NtfsError::AttributeNotFound {
+            position: self.position(),
+            ty,
+        })
+    }
+
     /// Finds a resident attribute of a specific type, optionally with a specific name, and returns its structured value.
     /// Returns [`NtfsError::AttributeNotFound`] if no such resident attribute could be found.
     ///
     /// The attribute type is given through the passed structured value type parameter.
+    ///
+    /// Note that this function DOES NOT traverse Attribute Lists!
     pub(crate) fn find_resident_attribute_structured_value<'f, S>(
         &'f self,
         match_name: Option<&str>,

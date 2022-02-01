@@ -27,7 +27,9 @@ pub struct NtfsIndex<'n, 'f, E>
 where
     E: NtfsIndexEntryType,
 {
-    index_root: NtfsIndexRoot<'f>,
+    index_record_size: u32,
+    index_root_entry_ranges: IndexNodeEntryRanges<E>,
+    index_root_position: u64,
     index_allocation_item: Option<NtfsAttributeItem<'n, 'f>>,
     entry_type: PhantomData<E>,
 }
@@ -37,17 +39,21 @@ where
     E: NtfsIndexEntryType,
 {
     /// Creates a new [`NtfsIndex`] object from a previously looked up [`NtfsIndexRoot`] attribute
-    /// and, in case of a large index, a matching [`NtfsIndexAllocation`] attribute
-    /// (contained in an [`NtfsAttributeItem`]).
+    /// (contained in an [`NtfsAttributeItem`]) and, in case of a large index, a matching
+    /// [`NtfsIndexAllocation`] attribute (also contained in an [`NtfsAttributeItem`]).
     ///
     /// If you just want to look up files in a directory, check out [`NtfsFile::directory_index`],
     /// which looks up the correct [`NtfsIndexRoot`] and [`NtfsIndexAllocation`] attributes for you.
     ///
     /// [`NtfsFile::directory_index`]: crate::NtfsFile::directory_index
     pub fn new(
-        index_root: NtfsIndexRoot<'f>,
+        index_root_item: NtfsAttributeItem<'n, 'f>,
         index_allocation_item: Option<NtfsAttributeItem<'n, 'f>>,
     ) -> Result<Self> {
+        let index_root_attribute = index_root_item.to_attribute();
+        index_root_attribute.ensure_ty(NtfsAttributeType::IndexRoot)?;
+        let index_root = index_root_attribute.resident_structured_value::<NtfsIndexRoot>()?;
+
         if let Some(item) = &index_allocation_item {
             let attribute = item.to_attribute();
             attribute.ensure_ty(NtfsAttributeType::IndexAllocation)?;
@@ -57,10 +63,15 @@ where
             });
         }
 
+        let index_record_size = index_root.index_record_size();
+        let index_root_entry_ranges = index_root.entry_ranges();
+        let index_root_position = index_root.position();
         let entry_type = PhantomData;
 
         Ok(Self {
-            index_root,
+            index_record_size,
+            index_root_entry_ranges,
+            index_root_position,
             index_allocation_item,
             entry_type,
         })
@@ -98,7 +109,7 @@ where
     E: NtfsIndexEntryType,
 {
     fn new(index: &'i NtfsIndex<'n, 'f, E>) -> Self {
-        let inner_iterators = vec![index.index_root.entry_ranges()];
+        let inner_iterators = vec![index.index_root_entry_ranges.clone()];
         let following_entries = Vec::new();
 
         Self {
@@ -151,7 +162,7 @@ where
                     let index_allocation_item =
                         iter_try!(self.index.index_allocation_item.as_ref().ok_or_else(|| {
                             NtfsError::MissingIndexAllocation {
-                                position: self.index.index_root.position(),
+                                position: self.index.index_root_position,
                             }
                         }));
                     let index_allocation_attribute = index_allocation_item.to_attribute();
@@ -161,7 +172,7 @@ where
 
                     let subnode = iter_try!(index_allocation.record_from_vcn(
                         fs,
-                        &self.index.index_root,
+                        self.index.index_record_size,
                         subnode_vcn
                     ));
                     let subnode_iter = subnode.into_entry_ranges();
@@ -230,7 +241,7 @@ where
 {
     fn new(index: &'i NtfsIndex<'n, 'f, E>) -> Self {
         // This is superfluous and done again in `find`, but doesn't justify using an `Option` here.
-        let inner_iterator = index.index_root.entry_ranges();
+        let inner_iterator = index.index_root_entry_ranges.clone();
 
         Self {
             index,
@@ -246,7 +257,7 @@ where
         F: Fn(&E::KeyType) -> Ordering,
     {
         // Always (re)start by iterating through the Index Root entry ranges.
-        self.inner_iterator = self.index.index_root.entry_ranges();
+        self.inner_iterator = self.index.index_root_entry_ranges.clone();
 
         loop {
             // Get the next entry.
@@ -287,7 +298,7 @@ where
             let index_allocation_item =
                 iter_try!(self.index.index_allocation_item.as_ref().ok_or_else(|| {
                     NtfsError::MissingIndexAllocation {
-                        position: self.index.index_root.position(),
+                        position: self.index.index_root_position,
                     }
                 }));
             let index_allocation_attribute = index_allocation_item.to_attribute();
@@ -297,7 +308,7 @@ where
 
             let subnode = iter_try!(index_allocation.record_from_vcn(
                 fs,
-                &self.index.index_root,
+                self.index.index_record_size,
                 subnode_vcn
             ));
             self.inner_iterator = subnode.into_entry_ranges();
