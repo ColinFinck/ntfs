@@ -1,4 +1,4 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use crate::attribute::{NtfsAttributeItem, NtfsAttributeType};
@@ -50,15 +50,7 @@ where
     ) -> Result<Self> {
         if let Some(item) = &index_allocation_item {
             let attribute = item.to_attribute();
-            let ty = attribute.ty()?;
-
-            if ty != NtfsAttributeType::IndexAllocation {
-                return Err(NtfsError::AttributeOfDifferentType {
-                    position: attribute.position(),
-                    expected: NtfsAttributeType::IndexAllocation,
-                    actual: ty,
-                });
-            }
+            attribute.ensure_ty(NtfsAttributeType::IndexAllocation)?;
         } else if index_root.is_large_index() {
             return Err(NtfsError::MissingIndexAllocation {
                 position: index_root.position(),

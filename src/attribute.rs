@@ -1,4 +1,4 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use crate::attribute_value::{
@@ -196,6 +196,19 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         LittleEndian::read_u32(&self.file.record_data()[start..])
     }
 
+    pub(crate) fn ensure_ty(&self, expected: NtfsAttributeType) -> Result<()> {
+        let ty = self.ty()?;
+        if ty != expected {
+            return Err(NtfsError::AttributeOfDifferentType {
+                position: self.position(),
+                expected,
+                actual: ty,
+            });
+        }
+
+        Ok(())
+    }
+
     /// Returns flags set for this attribute as specified by [`NtfsAttributeFlags`].
     pub fn flags(&self) -> NtfsAttributeFlags {
         let start = self.offset + offset_of!(NtfsAttributeHeader, flags);
@@ -307,14 +320,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
     where
         S: NtfsStructuredValueFromResidentAttributeValue<'n, 'f>,
     {
-        let ty = self.ty()?;
-        if ty != S::TY {
-            return Err(NtfsError::AttributeOfDifferentType {
-                position: self.position(),
-                expected: S::TY,
-                actual: ty,
-            });
-        }
+        self.ensure_ty(S::TY)?;
 
         if !self.is_resident() {
             return Err(NtfsError::UnexpectedNonResidentAttribute {
@@ -359,15 +365,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         T: Read + Seek,
         S: NtfsStructuredValue<'n, 'f>,
     {
-        let ty = self.ty()?;
-        if ty != S::TY {
-            return Err(NtfsError::AttributeOfDifferentType {
-                position: self.position(),
-                expected: S::TY,
-                actual: ty,
-            });
-        }
-
+        self.ensure_ty(S::TY)?;
         S::from_attribute_value(fs, self.value()?)
     }
 
