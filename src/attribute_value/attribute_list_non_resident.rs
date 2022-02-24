@@ -219,7 +219,7 @@ impl<'n, 'f> NtfsReadSeek for NtfsAttributeListNonResidentAttributeValue<'n, 'f>
             _ => unreachable!(),
         };
 
-        while bytes_left_to_seek > 0 {
+        loop {
             // Seek inside the current Data Run if there is one.
             if self
                 .stream_state
