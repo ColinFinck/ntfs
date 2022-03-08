@@ -1,4 +1,4 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 //! This module implements a reader for a non-resident attribute value (that is not part of an Attribute List).
@@ -456,7 +456,7 @@ impl NtfsDataRun {
     ///   * The current seek position is outside the valid range, or
     ///   * The Data Run is a "sparse" Data Run
     pub fn data_position(&self) -> Option<u64> {
-        if self.position > 0 && self.stream_position < self.allocated_size() {
+        if self.position > 0 && self.stream_position <= self.allocated_size() {
             Some(self.position + self.stream_position)
         } else {
             None

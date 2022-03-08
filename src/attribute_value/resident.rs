@@ -1,4 +1,4 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 //! This module implements a reader for a value that is already in memory and can therefore be accessed via a slice.
@@ -43,7 +43,7 @@ impl<'f> NtfsResidentAttributeValue<'f> {
     /// Returns the absolute current data seek position within the filesystem, in bytes.
     /// This may be `None` if the current seek position is outside the valid range.
     pub fn data_position(&self) -> Option<u64> {
-        if self.stream_position < self.len() {
+        if self.stream_position <= self.len() {
             Some(self.position + self.stream_position)
         } else {
             None
