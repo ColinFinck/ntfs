@@ -1,4 +1,4 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use crate::attribute::NtfsAttributeType;
@@ -11,9 +11,6 @@ use crate::structured_values::{
 use arrayvec::ArrayVec;
 use binread::io::{Cursor, Read, Seek};
 use core::mem;
-
-/// The smallest VolumeName attribute has a name containing just a single character.
-const VOLUME_NAME_MIN_SIZE: usize = mem::size_of::<u16>();
 
 /// The largest VolumeName attribute has a name containing 128 UTF-16 code points (256 bytes).
 const VOLUME_NAME_MAX_SIZE: usize = 128 * mem::size_of::<u16>();
@@ -38,14 +35,7 @@ impl NtfsVolumeName {
     where
         T: Read + Seek,
     {
-        if value_length < VOLUME_NAME_MIN_SIZE as u64 {
-            return Err(NtfsError::InvalidStructuredValueSize {
-                position,
-                ty: NtfsAttributeType::VolumeName,
-                expected: VOLUME_NAME_MIN_SIZE as u64,
-                actual: value_length,
-            });
-        } else if value_length > VOLUME_NAME_MAX_SIZE as u64 {
+        if value_length > VOLUME_NAME_MAX_SIZE as u64 {
             return Err(NtfsError::InvalidStructuredValueSize {
                 position,
                 ty: NtfsAttributeType::VolumeName,
