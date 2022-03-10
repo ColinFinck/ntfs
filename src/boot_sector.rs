@@ -44,9 +44,9 @@ impl BiosParameterBlock {
     pub(crate) fn cluster_size(&self) -> Result<u32> {
         /// The maximum cluster size supported by Windows is 2 MiB.
         /// Source: https://en.wikipedia.org/wiki/NTFS
-        const MAXIMUM_CLUSTER_SIZE: u32 = 2097152;
+        const MAXIMUM_CLUSTER_SIZE: u64 = 2097152;
 
-        let cluster_size = self.sectors_per_cluster() * self.sector_size as u32;
+        let cluster_size = self.sectors_per_cluster()? as u64 * self.sector_size as u64;
         if cluster_size > MAXIMUM_CLUSTER_SIZE || !cluster_size.is_power_of_two() {
             return Err(NtfsError::UnsupportedClusterSize {
                 expected: MAXIMUM_CLUSTER_SIZE,
@@ -54,14 +54,31 @@ impl BiosParameterBlock {
             });
         }
 
-        Ok(cluster_size)
+        Ok(cluster_size as u32)
     }
 
-    fn sectors_per_cluster(&self) -> u32 {
+    fn sectors_per_cluster(&self) -> Result<u32> {
+        /// We can be liberal here, simply preventing overflow of the u32 return type
+        /// in practice exponents don't exceed 12 because of the limits of
+        /// cluster_size() and sector_size()
+        const MAXIMUM_SECTORS_PER_CLUSTER_EXPONENT: u32 = 31;
+
         if self.sectors_per_cluster > 128 {
-            1 << (256 - self.sectors_per_cluster as u32)
+            // number denotes binary exponent after negation, had the field been signed
+            // note that 128u8 (-128i8) doesn't hit this case
+            let exponent = 256 - self.sectors_per_cluster as u32;
+
+            if exponent > MAXIMUM_SECTORS_PER_CLUSTER_EXPONENT {
+                return Err(NtfsError::UnsupportedSectorsPerClusterExponent {
+                    expected: MAXIMUM_SECTORS_PER_CLUSTER_EXPONENT,
+                    actual: exponent,
+                });
+            }
+
+            Ok(1 << exponent)
         } else {
-            self.sectors_per_cluster as u32
+            // use numer directly
+            Ok(self.sectors_per_cluster as u32)
         }
     }
 

@@ -164,9 +164,11 @@ pub enum NtfsError {
     /// The type of the NTFS Attribute at byte position {position:#010x} is {actual:#010x}, which is not supported
     UnsupportedAttributeType { position: u64, actual: u32 },
     /// The cluster size is {actual} bytes, but the maximum supported one is {expected}
-    UnsupportedClusterSize { expected: u32, actual: u32 },
+    UnsupportedClusterSize { expected: u64, actual: u64 },
     /// The namespace of the NTFS file name starting at byte position {position:#010x} is {actual}, which is not supported
     UnsupportedFileNamespace { position: u64, actual: u8 },
+    /// The cluster size is 2^{actual} bytes, but the maximum supported is 2^{expected}
+    UnsupportedSectorsPerClusterExponent { expected: u32, actual: u32 },
     /// The sector size is {actual} bytes, but the only supported one is {expected}
     UnsupportedSectorSize { expected: u16, actual: u16 },
     /// The Update Sequence Array (USA) of the record at byte position {position:#010x} has entries for {array_count} sectors of {sector_size} bytes, but the record is only {record_size} bytes long
