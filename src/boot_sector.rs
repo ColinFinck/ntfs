@@ -46,7 +46,7 @@ impl BiosParameterBlock {
         /// Source: https://en.wikipedia.org/wiki/NTFS
         const MAXIMUM_CLUSTER_SIZE: u32 = 2097152;
 
-        let cluster_size = self.sectors_per_cluster as u32 * self.sector_size as u32;
+        let cluster_size = self.sectors_per_cluster() * self.sector_size as u32;
         if cluster_size > MAXIMUM_CLUSTER_SIZE || !cluster_size.is_power_of_two() {
             return Err(NtfsError::UnsupportedClusterSize {
                 expected: MAXIMUM_CLUSTER_SIZE,
@@ -55,6 +55,14 @@ impl BiosParameterBlock {
         }
 
         Ok(cluster_size)
+    }
+
+    fn sectors_per_cluster(&self) -> u32 {
+        if self.sectors_per_cluster > 128 {
+            1 << (256 - self.sectors_per_cluster as u32)
+        } else {
+            self.sectors_per_cluster as u32
+        }
     }
 
     pub(crate) fn file_record_size(&self) -> Result<u32> {
