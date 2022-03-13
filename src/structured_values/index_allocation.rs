@@ -56,7 +56,7 @@ impl<'n, 'f> NtfsIndexAllocation<'n, 'f> {
 
         if value.stream_position() >= value.len() {
             return Err(NtfsError::VcnOutOfBoundsInIndexAllocation {
-                position: self.value.data_position().unwrap(),
+                position: self.value.data_position(),
                 vcn,
             });
         }
@@ -67,7 +67,7 @@ impl<'n, 'f> NtfsIndexAllocation<'n, 'f> {
         // Validate that the VCN in the record is the requested one.
         if record.vcn() != vcn {
             return Err(NtfsError::VcnMismatchInIndexAllocation {
-                position: self.value.data_position().unwrap(),
+                position: self.value.data_position(),
                 expected: vcn,
                 actual: record.vcn(),
             });
@@ -95,7 +95,7 @@ impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsIndexAllocation<'n, 'f> {
             NtfsAttributeValue::AttributeListNonResident(value) => value.ntfs(),
             NtfsAttributeValue::NonResident(value) => value.ntfs(),
             NtfsAttributeValue::Resident(_) => {
-                let position = value.data_position().unwrap();
+                let position = value.data_position();
                 return Err(NtfsError::UnexpectedResidentAttribute { position });
             }
         };

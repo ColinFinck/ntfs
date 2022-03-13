@@ -1,5 +1,12 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
+
+use core::mem;
+
+use arrayvec::ArrayVec;
+use binread::io::{Cursor, Read, Seek};
+use binread::{BinRead, BinReaderExt};
+use enumn::N;
 
 use crate::attribute::NtfsAttributeType;
 use crate::attribute_value::NtfsAttributeValue;
@@ -9,11 +16,7 @@ use crate::indexes::NtfsIndexEntryKey;
 use crate::string::NtfsString;
 use crate::structured_values::{NtfsFileAttributeFlags, NtfsStructuredValue};
 use crate::time::NtfsTime;
-use arrayvec::ArrayVec;
-use binread::io::{Cursor, Read, Seek};
-use binread::{BinRead, BinReaderExt};
-use core::mem;
-use enumn::N;
+use crate::types::NtfsPosition;
 
 /// Size of all [`FileNameHeader`] fields.
 const FILE_NAME_HEADER_SIZE: usize = 66;
@@ -80,7 +83,7 @@ pub struct NtfsFileName {
 }
 
 impl NtfsFileName {
-    fn new<T>(r: &mut T, position: u64, value_length: u64) -> Result<Self>
+    fn new<T>(r: &mut T, position: NtfsPosition, value_length: u64) -> Result<Self>
     where
         T: Read + Seek,
     {
@@ -238,7 +241,7 @@ impl NtfsFileName {
         Ok(())
     }
 
-    fn validate_name_length(&self, data_size: u64, position: u64) -> Result<()> {
+    fn validate_name_length(&self, data_size: u64, position: NtfsPosition) -> Result<()> {
         let total_size = (FILE_NAME_HEADER_SIZE + self.name_length()) as u64;
 
         if total_size > data_size {
@@ -253,7 +256,7 @@ impl NtfsFileName {
         Ok(())
     }
 
-    fn validate_namespace(&self, position: u64) -> Result<()> {
+    fn validate_namespace(&self, position: NtfsPosition) -> Result<()> {
         if NtfsFileNamespace::n(self.header.namespace).is_none() {
             return Err(NtfsError::UnsupportedFileNamespace {
                 position,
@@ -272,7 +275,7 @@ impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsFileName {
     where
         T: Read + Seek,
     {
-        let position = value.data_position().unwrap();
+        let position = value.data_position();
         let value_length = value.len();
 
         let mut value_attached = value.attach(fs);
@@ -282,7 +285,7 @@ impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsFileName {
 
 // `NtfsFileName` is special in the regard that the Index Entry key has the same structure as the structured value.
 impl NtfsIndexEntryKey for NtfsFileName {
-    fn key_from_slice(slice: &[u8], position: u64) -> Result<Self> {
+    fn key_from_slice(slice: &[u8], position: NtfsPosition) -> Result<Self> {
         let value_length = slice.len() as u64;
 
         let mut cursor = Cursor::new(slice);

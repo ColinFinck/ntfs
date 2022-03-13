@@ -1,5 +1,10 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
+
+use binread::io::{Read, Seek};
+use byteorder::{ByteOrder, LittleEndian};
+use core::ops::Range;
+use memoffset::offset_of;
 
 use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
@@ -9,11 +14,7 @@ use crate::ntfs::Ntfs;
 use crate::record::Record;
 use crate::record::RecordHeader;
 use crate::traits::NtfsReadSeek;
-use crate::types::Vcn;
-use binread::io::{Read, Seek};
-use byteorder::{ByteOrder, LittleEndian};
-use core::ops::Range;
-use memoffset::offset_of;
+use crate::types::{NtfsPosition, Vcn};
 
 /// Size of all [`IndexRecordHeader`] fields.
 const INDEX_RECORD_HEADER_SIZE: u32 = 24;
@@ -63,9 +64,7 @@ impl<'n> NtfsIndexRecord<'n> {
     where
         T: Read + Seek,
     {
-        // The caller must have checked that value.stream_position() < value.len(),
-        // so that value.data_position() returns a value.
-        let data_position = value.data_position().unwrap();
+        let data_position = value.data_position();
 
         let mut data = vec![0; index_record_size as usize];
         value.read_exact(fs, &mut data)?;
@@ -93,10 +92,10 @@ impl<'n> NtfsIndexRecord<'n> {
         Ok(NtfsIndexNodeEntries::new(data, position))
     }
 
-    fn entries_range_and_position(&self) -> (Range<usize>, u64) {
+    fn entries_range_and_position(&self) -> (Range<usize>, NtfsPosition) {
         let start = INDEX_RECORD_HEADER_SIZE as usize + self.index_entries_offset() as usize;
         let end = INDEX_RECORD_HEADER_SIZE as usize + self.index_data_size() as usize;
-        let position = self.record.position() + start as u64;
+        let position = self.record.position() + start;
 
         (start..end, position)
     }

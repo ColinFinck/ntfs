@@ -18,7 +18,7 @@ use super::seek_contiguous;
 use crate::error::{NtfsError, Result};
 use crate::ntfs::Ntfs;
 use crate::traits::NtfsReadSeek;
-use crate::types::{Lcn, Vcn};
+use crate::types::{Lcn, NtfsPosition, Vcn};
 
 /// Reader for a non-resident attribute value (whose data is in a cluster range outside the File Record).
 #[derive(Clone, Debug)]
@@ -28,7 +28,7 @@ pub struct NtfsNonResidentAttributeValue<'n, 'f> {
     /// Attribute bytes where the Data Run information of this non-resident value is stored on the filesystem.
     data: &'f [u8],
     /// Absolute position of the Data Run information within the filesystem, in bytes.
-    position: u64,
+    position: NtfsPosition,
     /// Iterator of data runs used for reading/seeking.
     stream_data_runs: NtfsDataRuns<'n, 'f>,
     /// Iteration state of the current Data Run.
@@ -39,7 +39,7 @@ impl<'n, 'f> NtfsNonResidentAttributeValue<'n, 'f> {
     pub(crate) fn new(
         ntfs: &'n Ntfs,
         data: &'f [u8],
-        position: u64,
+        position: NtfsPosition,
         data_size: u64,
     ) -> Result<Self> {
         let stream_data_runs = NtfsDataRuns::new(ntfs, data, position);
@@ -74,7 +74,7 @@ impl<'n, 'f> NtfsNonResidentAttributeValue<'n, 'f> {
     ///   * The current seek position is outside the valid range, or
     ///   * The attribute does not have a Data Run, or
     ///   * The current Data Run is a "sparse" Data Run
-    pub fn data_position(&self) -> Option<u64> {
+    pub fn data_position(&self) -> NtfsPosition {
         self.stream_state.data_position()
     }
 
@@ -219,7 +219,7 @@ where
     ///   * The current seek position is outside the valid range, or
     ///   * The attribute does not have a Data Run, or
     ///   * The current Data Run is a "sparse" Data Run.
-    pub fn data_position(&self) -> Option<u64> {
+    pub fn data_position(&self) -> NtfsPosition {
         self.value.data_position()
     }
 
@@ -267,12 +267,12 @@ where
 pub struct NtfsDataRuns<'n, 'f> {
     ntfs: &'n Ntfs,
     data: &'f [u8],
-    position: u64,
+    position: NtfsPosition,
     state: DataRunsState,
 }
 
 impl<'n, 'f> NtfsDataRuns<'n, 'f> {
-    pub(crate) fn new(ntfs: &'n Ntfs, data: &'f [u8], position: u64) -> Self {
+    pub(crate) fn new(ntfs: &'n Ntfs, data: &'f [u8], position: NtfsPosition) -> Self {
         let state = DataRunsState {
             offset: 0,
             previous_lcn: Lcn::from(0),
@@ -289,7 +289,7 @@ impl<'n, 'f> NtfsDataRuns<'n, 'f> {
     pub(crate) fn from_state(
         ntfs: &'n Ntfs,
         data: &'f [u8],
-        position: u64,
+        position: NtfsPosition,
         state: DataRunsState,
     ) -> Self {
         Self {
@@ -305,8 +305,8 @@ impl<'n, 'f> NtfsDataRuns<'n, 'f> {
     }
 
     /// Returns the absolute position of the current Data Run header within the filesystem, in bytes.
-    pub fn position(&self) -> u64 {
-        self.position + self.state.offset as u64
+    pub fn position(&self) -> NtfsPosition {
+        self.position + self.state.offset
     }
 
     fn read_variable_length_bytes(
@@ -425,7 +425,7 @@ pub(crate) struct DataRunsState {
 pub struct NtfsDataRun {
     /// Absolute position of the Data Run within the filesystem, in bytes.
     /// This may be zero if this is a "sparse" Data Run.
-    position: u64,
+    position: NtfsPosition,
     /// Total allocated size of the Data Run, in bytes.
     /// The actual size used by data may be lower, but a Data Run does not know about that.
     allocated_size: u64,
@@ -456,11 +456,11 @@ impl NtfsDataRun {
     /// This may be `None` if:
     ///   * The current seek position is outside the valid range, or
     ///   * The Data Run is a "sparse" Data Run
-    pub fn data_position(&self) -> Option<u64> {
-        if self.position > 0 && self.stream_position <= self.allocated_size() {
-            Some(self.position + self.stream_position)
+    pub fn data_position(&self) -> NtfsPosition {
+        if self.stream_position <= self.allocated_size() {
+            self.position + self.stream_position
         } else {
-            None
+            NtfsPosition::none()
         }
     }
 
@@ -481,15 +481,14 @@ impl NtfsReadSeek for NtfsDataRun {
         let bytes_to_read = usize::min(buf.len(), self.remaining_len() as usize);
         let work_slice = &mut buf[..bytes_to_read];
 
-        let bytes_read = if self.position == 0 {
+        let bytes_read = if let Some(position) = self.position.value() {
+            // This Data Run contains "real" data.
+            fs.seek(SeekFrom::Start(position.get() + self.stream_position))?;
+            fs.read(work_slice)?
+        } else {
             // This is a sparse Data Run.
             work_slice.fill(0);
             work_slice.len()
-        } else {
-            // This Data Run contains "real" data.
-            // We have already performed all necessary sanity checks above, so we can just unwrap here.
-            fs.seek(SeekFrom::Start(self.data_position().unwrap()))?;
-            fs.read(work_slice)?
         };
 
         self.stream_position += bytes_read as u64;
@@ -533,9 +532,12 @@ impl StreamState {
     ///   * The current seek position is outside the valid range, or
     ///   * The attribute does not have a Data Run, or
     ///   * The current Data Run is a "sparse" Data Run
-    pub(crate) fn data_position(&self) -> Option<u64> {
-        let stream_data_run = self.stream_data_run.as_ref()?;
-        stream_data_run.data_position()
+    pub(crate) fn data_position(&self) -> NtfsPosition {
+        if let Some(stream_data_run) = self.stream_data_run.as_ref() {
+            stream_data_run.data_position()
+        } else {
+            NtfsPosition::none()
+        }
     }
 
     /// Returns the total (used) data size of the value, in bytes.

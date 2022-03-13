@@ -1,13 +1,16 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
+
+use core::convert::TryInto;
+use core::mem;
+
+use alloc::vec::Vec;
+use byteorder::{ByteOrder, LittleEndian};
+use memoffset::{offset_of, span_of};
 
 use crate::error::{NtfsError, Result};
 use crate::ntfs::Ntfs;
-use alloc::vec::Vec;
-use byteorder::{ByteOrder, LittleEndian};
-use core::convert::TryInto;
-use core::mem;
-use memoffset::{offset_of, span_of};
+use crate::types::NtfsPosition;
 
 #[repr(C, packed)]
 pub(crate) struct RecordHeader {
@@ -21,11 +24,11 @@ pub(crate) struct RecordHeader {
 pub(crate) struct Record<'n> {
     ntfs: &'n Ntfs,
     data: Vec<u8>,
-    position: u64,
+    position: NtfsPosition,
 }
 
 impl<'n> Record<'n> {
-    pub(crate) fn new(ntfs: &'n Ntfs, data: Vec<u8>, position: u64) -> Self {
+    pub(crate) fn new(ntfs: &'n Ntfs, data: Vec<u8>, position: NtfsPosition) -> Self {
         Self {
             ntfs,
             data,
@@ -69,7 +72,7 @@ impl<'n> Record<'n> {
             let bytes_to_update = &mut self.data[sector_position..sector_position_end];
             if bytes_to_update != update_sequence_number {
                 return Err(NtfsError::UpdateSequenceNumberMismatch {
-                    position: self.position + array_position as u64,
+                    position: self.position + array_position,
                     expected: update_sequence_number,
                     actual: (&*bytes_to_update).try_into().unwrap(),
                 });
@@ -100,7 +103,7 @@ impl<'n> Record<'n> {
         self.ntfs
     }
 
-    pub(crate) fn position(&self) -> u64 {
+    pub(crate) fn position(&self) -> NtfsPosition {
         self.position
     }
 

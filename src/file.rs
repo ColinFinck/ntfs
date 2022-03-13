@@ -1,6 +1,13 @@
 // Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+use core::num::NonZeroU64;
+
+use binread::io::{Read, Seek, SeekFrom};
+use bitflags::bitflags;
+use byteorder::{ByteOrder, LittleEndian};
+use memoffset::offset_of;
+
 use crate::attribute::{NtfsAttributeItem, NtfsAttributeType, NtfsAttributes, NtfsAttributesRaw};
 use crate::error::{NtfsError, Result};
 use crate::file_reference::NtfsFileReference;
@@ -12,10 +19,7 @@ use crate::structured_values::{
     NtfsFileName, NtfsFileNamespace, NtfsIndexRoot, NtfsStandardInformation,
     NtfsStructuredValueFromResidentAttributeValue,
 };
-use binread::io::{Read, Seek, SeekFrom};
-use bitflags::bitflags;
-use byteorder::{ByteOrder, LittleEndian};
-use memoffset::offset_of;
+use crate::types::NtfsPosition;
 
 /// A list of standardized NTFS File Record Numbers.
 ///
@@ -115,17 +119,17 @@ impl<'n> NtfsFile<'n> {
     pub(crate) fn new<T>(
         ntfs: &'n Ntfs,
         fs: &mut T,
-        position: u64,
+        position: NonZeroU64,
         file_record_number: u64,
     ) -> Result<Self>
     where
         T: Read + Seek,
     {
         let mut data = vec![0; ntfs.file_record_size() as usize];
-        fs.seek(SeekFrom::Start(position))?;
+        fs.seek(SeekFrom::Start(position.get()))?;
         fs.read_exact(&mut data)?;
 
-        let mut record = Record::new(ntfs, data, position);
+        let mut record = Record::new(ntfs, data, position.into());
         Self::validate_signature(&record)?;
         record.fixup()?;
 
@@ -429,7 +433,7 @@ impl<'n> NtfsFile<'n> {
     }
 
     /// Returns the absolute byte position of this File Record in the NTFS filesystem.
-    pub fn position(&self) -> u64 {
+    pub fn position(&self) -> NtfsPosition {
         self.record.position()
     }
 

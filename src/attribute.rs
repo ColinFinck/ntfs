@@ -1,6 +1,17 @@
 // Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+use core::iter::FusedIterator;
+use core::mem;
+use core::ops::Range;
+
+use binread::io::{Read, Seek};
+use bitflags::bitflags;
+use byteorder::{ByteOrder, LittleEndian};
+use enumn::N;
+use memoffset::offset_of;
+use strum_macros::Display;
+
 use crate::attribute_value::{
     NtfsAttributeListNonResidentAttributeValue, NtfsAttributeValue, NtfsNonResidentAttributeValue,
     NtfsResidentAttributeValue,
@@ -12,16 +23,7 @@ use crate::structured_values::{
     NtfsAttributeList, NtfsAttributeListEntries, NtfsStructuredValue,
     NtfsStructuredValueFromResidentAttributeValue,
 };
-use crate::types::Vcn;
-use binread::io::{Read, Seek};
-use bitflags::bitflags;
-use byteorder::{ByteOrder, LittleEndian};
-use core::iter::FusedIterator;
-use core::mem;
-use core::ops::Range;
-use enumn::N;
-use memoffset::offset_of;
-use strum_macros::Display;
+use crate::types::{NtfsPosition, Vcn};
 
 /// On-disk structure of the generic header of an NTFS Attribute.
 #[repr(C, packed)]
@@ -276,12 +278,12 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         )
     }
 
-    pub(crate) fn non_resident_value_data_and_position(&self) -> (&'f [u8], u64) {
+    pub(crate) fn non_resident_value_data_and_position(&self) -> (&'f [u8], NtfsPosition) {
         debug_assert!(!self.is_resident());
         let start = self.offset + self.non_resident_value_data_runs_offset() as usize;
         let end = self.offset + self.attribute_length() as usize;
         let data = &self.file.record_data()[start..end];
-        let position = self.file.position() + start as u64;
+        let position = self.file.position() + start;
 
         (data, position)
     }
@@ -303,8 +305,8 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
     }
 
     /// Returns the absolute position of this NTFS Attribute within the filesystem, in bytes.
-    pub fn position(&self) -> u64 {
-        self.file.position() + self.offset as u64
+    pub fn position(&self) -> NtfsPosition {
+        self.file.position() + self.offset
     }
 
     /// Attempts to parse the value data as the given resident structured value type and returns that.

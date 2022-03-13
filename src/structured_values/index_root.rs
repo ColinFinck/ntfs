@@ -1,5 +1,11 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
+
+use core::ops::Range;
+
+use binread::io::{Read, Seek};
+use byteorder::{ByteOrder, LittleEndian};
+use memoffset::offset_of;
 
 use crate::attribute::NtfsAttributeType;
 use crate::attribute_value::{NtfsAttributeValue, NtfsResidentAttributeValue};
@@ -10,10 +16,7 @@ use crate::indexes::NtfsIndexEntryType;
 use crate::structured_values::{
     NtfsStructuredValue, NtfsStructuredValueFromResidentAttributeValue,
 };
-use binread::io::{Read, Seek};
-use byteorder::{ByteOrder, LittleEndian};
-use core::ops::Range;
-use memoffset::offset_of;
+use crate::types::NtfsPosition;
 
 /// Size of all [`IndexRootHeader`] fields plus some reserved bytes.
 const INDEX_ROOT_HEADER_SIZE: usize = 16;
@@ -43,13 +46,13 @@ struct IndexRootHeader {
 #[derive(Clone, Debug)]
 pub struct NtfsIndexRoot<'f> {
     slice: &'f [u8],
-    position: u64,
+    position: NtfsPosition,
 }
 
 const LARGE_INDEX_FLAG: u8 = 0x01;
 
 impl<'f> NtfsIndexRoot<'f> {
-    fn new(slice: &'f [u8], position: u64) -> Result<Self> {
+    fn new(slice: &'f [u8], position: NtfsPosition) -> Result<Self> {
         if slice.len() < INDEX_ROOT_HEADER_SIZE + INDEX_NODE_HEADER_SIZE {
             return Err(NtfsError::InvalidStructuredValueSize {
                 position,
@@ -76,10 +79,10 @@ impl<'f> NtfsIndexRoot<'f> {
         Ok(NtfsIndexNodeEntries::new(slice, position))
     }
 
-    fn entries_range_and_position(&self) -> (Range<usize>, u64) {
+    fn entries_range_and_position(&self) -> (Range<usize>, NtfsPosition) {
         let start = INDEX_ROOT_HEADER_SIZE as usize + self.index_entries_offset() as usize;
         let end = INDEX_ROOT_HEADER_SIZE as usize + self.index_data_size() as usize;
-        let position = self.position + start as u64;
+        let position = self.position + start;
 
         (start..end, position)
     }
@@ -127,7 +130,7 @@ impl<'f> NtfsIndexRoot<'f> {
     }
 
     /// Returns the absolute position of this Index Root within the filesystem, in bytes.
-    pub fn position(&self) -> u64 {
+    pub fn position(&self) -> NtfsPosition {
         self.position
     }
 
@@ -161,21 +164,19 @@ impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsIndexRoot<'f> {
     where
         T: Read + Seek,
     {
+        let position = value.data_position();
+
         let resident_value = match value {
             NtfsAttributeValue::Resident(resident_value) => resident_value,
-            _ => {
-                let position = value.data_position().unwrap();
-                return Err(NtfsError::UnexpectedNonResidentAttribute { position });
-            }
+            _ => return Err(NtfsError::UnexpectedNonResidentAttribute { position }),
         };
 
-        let position = resident_value.data_position().unwrap();
         Self::new(resident_value.data(), position)
     }
 }
 
 impl<'n, 'f> NtfsStructuredValueFromResidentAttributeValue<'n, 'f> for NtfsIndexRoot<'f> {
     fn from_resident_attribute_value(value: NtfsResidentAttributeValue<'f>) -> Result<Self> {
-        Self::new(value.data(), value.data_position().unwrap())
+        Self::new(value.data(), value.data_position())
     }
 }

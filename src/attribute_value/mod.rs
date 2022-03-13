@@ -1,4 +1,4 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 //! Readers for attribute value types.
@@ -16,6 +16,7 @@ use binread::io::{Read, Seek, SeekFrom};
 
 use crate::error::{NtfsError, Result};
 use crate::traits::NtfsReadSeek;
+use crate::types::NtfsPosition;
 
 /// Reader that abstracts over all attribute value types, returned by [`NtfsAttribute::value`].
 ///
@@ -46,7 +47,7 @@ impl<'n, 'f> NtfsAttributeValue<'n, 'f> {
     ///   * The current seek position is outside the valid range, or
     ///   * The attribute does not have a Data Run, or
     ///   * The current Data Run is a "sparse" Data Run.
-    pub fn data_position(&self) -> Option<u64> {
+    pub fn data_position(&self) -> NtfsPosition {
         match self {
             Self::Resident(inner) => inner.data_position(),
             Self::NonResident(inner) => inner.data_position(),
@@ -122,7 +123,7 @@ where
     ///   * The current seek position is outside the valid range, or
     ///   * The attribute does not have a Data Run, or
     ///   * The current Data Run is a "sparse" Data Run.
-    pub fn data_position(&self) -> Option<u64> {
+    pub fn data_position(&self) -> NtfsPosition {
         self.value.data_position()
     }
 

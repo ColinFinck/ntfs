@@ -1,5 +1,16 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
+
+use core::convert::TryInto;
+use core::iter::FusedIterator;
+use core::marker::PhantomData;
+use core::mem;
+use core::ops::Range;
+
+use binread::io::{Read, Seek};
+use bitflags::bitflags;
+use byteorder::{ByteOrder, LittleEndian};
+use memoffset::offset_of;
 
 use crate::error::{NtfsError, Result};
 use crate::file::NtfsFile;
@@ -9,16 +20,8 @@ use crate::indexes::{
     NtfsIndexEntryType,
 };
 use crate::ntfs::Ntfs;
+use crate::types::NtfsPosition;
 use crate::types::Vcn;
-use binread::io::{Read, Seek};
-use bitflags::bitflags;
-use byteorder::{ByteOrder, LittleEndian};
-use core::convert::TryInto;
-use core::iter::FusedIterator;
-use core::marker::PhantomData;
-use core::mem;
-use core::ops::Range;
-use memoffset::offset_of;
 
 /// Size of all [`IndexEntryHeader`] fields plus some reserved bytes.
 const INDEX_ENTRY_HEADER_SIZE: usize = 16;
@@ -54,7 +57,7 @@ where
     E: NtfsIndexEntryType,
 {
     range: Range<usize>,
-    position: u64,
+    position: NtfsPosition,
     entry_type: PhantomData<E>,
 }
 
@@ -62,7 +65,7 @@ impl<E> IndexEntryRange<E>
 where
     E: NtfsIndexEntryType,
 {
-    pub(crate) fn new(range: Range<usize>, position: u64) -> Self {
+    pub(crate) fn new(range: Range<usize>, position: NtfsPosition) -> Self {
         let entry_type = PhantomData;
         Self {
             range,
@@ -99,7 +102,7 @@ where
     E: NtfsIndexEntryType,
 {
     slice: &'s [u8],
-    position: u64,
+    position: NtfsPosition,
     entry_type: PhantomData<E>,
 }
 
@@ -107,7 +110,7 @@ impl<'s, E> NtfsIndexEntry<'s, E>
 where
     E: NtfsIndexEntryType,
 {
-    pub(crate) fn new(slice: &'s [u8], position: u64) -> Result<Self> {
+    pub(crate) fn new(slice: &'s [u8], position: NtfsPosition) -> Result<Self> {
         let entry_type = PhantomData;
 
         let mut entry = Self {
@@ -135,7 +138,7 @@ where
 
         let start = self.data_offset() as usize;
         let end = start + self.data_length() as usize;
-        let position = self.position + start as u64;
+        let position = self.position + start;
 
         let slice = self.slice.get(start..end);
         let slice = iter_try!(slice.ok_or(NtfsError::InvalidIndexEntryDataRange {
@@ -208,7 +211,7 @@ where
 
         let start = INDEX_ENTRY_HEADER_SIZE;
         let end = start + self.key_length() as usize;
-        let position = self.position + start as u64;
+        let position = self.position + start;
 
         let slice = self.slice.get(start..end);
         let slice = iter_try!(slice.ok_or(NtfsError::InvalidIndexEntryDataRange {
@@ -228,7 +231,7 @@ where
     }
 
     /// Returns the absolute position of this NTFS Index Entry within the filesystem, in bytes.
-    pub fn position(&self) -> u64 {
+    pub fn position(&self) -> NtfsPosition {
         self.position
     }
 
@@ -294,7 +297,7 @@ where
 {
     data: Vec<u8>,
     range: Range<usize>,
-    position: u64,
+    position: NtfsPosition,
     entry_type: PhantomData<E>,
 }
 
@@ -302,7 +305,7 @@ impl<E> IndexNodeEntryRanges<E>
 where
     E: NtfsIndexEntryType,
 {
-    pub(crate) fn new(data: Vec<u8>, range: Range<usize>, position: u64) -> Self {
+    pub(crate) fn new(data: Vec<u8>, range: Range<usize>, position: NtfsPosition) -> Self {
         debug_assert!(range.end <= data.len());
         let entry_type = PhantomData;
 
@@ -344,7 +347,7 @@ where
             // This is not the last entry.
             // Advance our iterator to the next entry.
             self.range.start = end;
-            self.position += entry.index_entry_length() as u64;
+            self.position += entry.index_entry_length();
         }
 
         Some(Ok(IndexEntryRange::new(start..end, position)))
@@ -375,7 +378,7 @@ where
     E: NtfsIndexEntryType,
 {
     slice: &'s [u8],
-    position: u64,
+    position: NtfsPosition,
     entry_type: PhantomData<E>,
 }
 
@@ -383,7 +386,7 @@ impl<'s, E> NtfsIndexNodeEntries<'s, E>
 where
     E: NtfsIndexEntryType,
 {
-    pub(crate) fn new(slice: &'s [u8], position: u64) -> Self {
+    pub(crate) fn new(slice: &'s [u8], position: NtfsPosition) -> Self {
         let entry_type = PhantomData;
         Self {
             slice,
@@ -416,7 +419,7 @@ where
             // Advance our iterator to the next entry.
             let bytes_to_advance = entry.index_entry_length() as usize;
             self.slice = &self.slice[bytes_to_advance..];
-            self.position += bytes_to_advance as u64;
+            self.position += bytes_to_advance;
         }
 
         Some(Ok(entry))

@@ -188,7 +188,7 @@ where
             for (i, data_run) in non_resident_value.data_runs().enumerate() {
                 let data_run = data_run?;
                 let instance = format!("{}{}", data_run_prefix, i);
-                let start = data_run.data_position().unwrap_or(0);
+                let start = data_run.data_position();
                 let length = data_run.allocated_size();
 
                 println!(

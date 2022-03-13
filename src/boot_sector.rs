@@ -1,11 +1,13 @@
 // Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use crate::error::{NtfsError, Result};
-use crate::types::Lcn;
+use core::ops::RangeInclusive;
+
 use binread::BinRead;
-use core::ops::Range;
 use memoffset::offset_of;
+
+use crate::error::{NtfsError, Result};
+use crate::types::{Lcn, NtfsPosition};
 
 // Sources:
 // - https://en.wikipedia.org/wiki/NTFS#Partition_Boot_Sector_(VBR)
@@ -68,8 +70,12 @@ impl BiosParameterBlock {
     }
 
     /// Returns the Logical Cluster Number (LCN) to the beginning of the Master File Table (MFT).
-    pub(crate) fn mft_lcn(&self) -> Lcn {
-        self.mft_lcn
+    pub(crate) fn mft_lcn(&self) -> Result<Lcn> {
+        if self.mft_lcn.value() > 0 {
+            Ok(self.mft_lcn)
+        } else {
+            Err(NtfsError::InvalidMftLcn)
+        }
     }
 
     /// Source: https://en.wikipedia.org/wiki/NTFS#Partition_Boot_Sector_(VBR)
@@ -157,7 +163,7 @@ impl BootSector {
         let expected_signature = &[0x55, 0xAA];
         if &self.signature != expected_signature {
             return Err(NtfsError::InvalidTwoByteSignature {
-                position: offset_of!(BootSector, signature) as u64,
+                position: NtfsPosition::new(offset_of!(BootSector, signature) as u64),
                 expected: expected_signature,
                 actual: self.signature,
             });

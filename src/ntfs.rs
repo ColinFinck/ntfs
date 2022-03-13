@@ -1,5 +1,8 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
+
+use binread::io::{Read, Seek, SeekFrom};
+use binread::BinReaderExt;
 
 use crate::attribute::NtfsAttributeType;
 use crate::boot_sector::BootSector;
@@ -7,9 +10,8 @@ use crate::error::{NtfsError, Result};
 use crate::file::{KnownNtfsFileRecordNumber, NtfsFile};
 use crate::structured_values::{NtfsVolumeInformation, NtfsVolumeName};
 use crate::traits::NtfsReadSeek;
+use crate::types::NtfsPosition;
 use crate::upcase_table::UpcaseTable;
-use binread::io::{Read, Seek, SeekFrom};
-use binread::BinReaderExt;
 
 /// Root structure describing an NTFS filesystem.
 #[derive(Debug)]
@@ -21,7 +23,7 @@ pub struct Ntfs {
     /// Size of the filesystem, in bytes.
     size: u64,
     /// Absolute position of the Master File Table (MFT), in bytes.
-    mft_position: u64,
+    mft_position: NtfsPosition,
     /// Size of a single File Record, in bytes.
     file_record_size: u32,
     /// Serial number of the NTFS volume.
@@ -51,7 +53,7 @@ impl Ntfs {
         let size = total_sectors
             .checked_mul(sector_size as u64)
             .ok_or(NtfsError::TotalSectorsTooBig { total_sectors })?;
-        let mft_position = 0;
+        let mft_position = NtfsPosition::none();
         let file_record_size = bpb.file_record_size()?;
         let serial_number = bpb.serial_number();
         let upcase_table = None;
@@ -65,7 +67,7 @@ impl Ntfs {
             serial_number,
             upcase_table,
         };
-        ntfs.mft_position = bpb.mft_lcn().position(&ntfs)?;
+        ntfs.mft_position = bpb.mft_lcn()?.position(&ntfs)?;
 
         Ok(ntfs)
     }
@@ -90,7 +92,9 @@ impl Ntfs {
         // The MFT may be split into multiple data runs, referenced by its $DATA attribute.
         // We therefore read it just like any other non-resident attribute value.
         // However, this code assumes that the MFT does not have an Attribute List!
-        let mft = NtfsFile::new(self, fs, self.mft_position, 0)?;
+        //
+        // This unwrap is safe, because `self.mft_position` has been checked in `Ntfs::new`.
+        let mft = NtfsFile::new(self, fs, self.mft_position.value().unwrap(), 0)?;
         let mft_data_attribute = mft
             .attributes_raw()
             .find(|attribute| {
@@ -108,6 +112,7 @@ impl Ntfs {
         mft_data_value.seek(fs, SeekFrom::Start(offset))?;
         let position = mft_data_value
             .data_position()
+            .value()
             .ok_or(NtfsError::InvalidFileRecordNumber { file_record_number })?;
 
         NtfsFile::new(self, fs, position, file_record_number)
@@ -119,7 +124,9 @@ impl Ntfs {
     }
 
     /// Returns the absolute byte position of the Master File Table (MFT).
-    pub fn mft_position(&self) -> u64 {
+    ///
+    /// This [`NtfsPosition`] is guaranteed to be nonzero.
+    pub fn mft_position(&self) -> NtfsPosition {
         self.mft_position
     }
 

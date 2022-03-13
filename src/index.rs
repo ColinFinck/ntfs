@@ -1,6 +1,12 @@
 // Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+use core::cmp::Ordering;
+use core::marker::PhantomData;
+
+use alloc::vec::Vec;
+use binread::io::{Read, Seek};
+
 use crate::attribute::{NtfsAttributeItem, NtfsAttributeType};
 use crate::error::{NtfsError, Result};
 use crate::index_entry::{
@@ -8,10 +14,7 @@ use crate::index_entry::{
 };
 use crate::indexes::NtfsIndexEntryType;
 use crate::structured_values::{NtfsIndexAllocation, NtfsIndexRoot};
-use alloc::vec::Vec;
-use binread::io::{Read, Seek};
-use core::cmp::Ordering;
-use core::marker::PhantomData;
+use crate::types::NtfsPosition;
 
 /// Helper structure to iterate over all entries of an index or find a specific one.
 ///
@@ -29,7 +32,7 @@ where
 {
     index_record_size: u32,
     index_root_entry_ranges: IndexNodeEntryRanges<E>,
-    index_root_position: u64,
+    index_root_position: NtfsPosition,
     index_allocation_item: Option<NtfsAttributeItem<'n, 'f>>,
     entry_type: PhantomData<E>,
 }

@@ -18,8 +18,10 @@ mod file_name;
 
 pub use file_name::*;
 
-use crate::error::Result;
 use core::fmt;
+
+use crate::error::Result;
+use crate::types::NtfsPosition;
 
 /// Trait implemented by structures that describe Index Entry types.
 ///
@@ -34,7 +36,7 @@ pub trait NtfsIndexEntryType: Clone + fmt::Debug {
 
 /// Trait implemented by a structure that describes an Index Entry key.
 pub trait NtfsIndexEntryKey: fmt::Debug + Sized {
-    fn key_from_slice(slice: &[u8], position: u64) -> Result<Self>;
+    fn key_from_slice(slice: &[u8], position: NtfsPosition) -> Result<Self>;
 }
 
 /// Indicates that the Index Entry type has additional data (of [`NtfsIndexEntryData`] datatype).
@@ -47,7 +49,7 @@ pub trait NtfsIndexEntryHasData: NtfsIndexEntryType {
 
 /// Trait implemented by a structure that describes Index Entry data.
 pub trait NtfsIndexEntryData: fmt::Debug + Sized {
-    fn data_from_slice(slice: &[u8], position: u64) -> Result<Self>;
+    fn data_from_slice(slice: &[u8], position: NtfsPosition) -> Result<Self>;
 }
 
 /// Indicates that the Index Entry type has a file reference.

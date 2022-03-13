@@ -1,6 +1,11 @@
 // Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+use core::mem;
+
+use arrayvec::ArrayVec;
+use binread::io::{Cursor, Read, Seek};
+
 use crate::attribute::NtfsAttributeType;
 use crate::attribute_value::{NtfsAttributeValue, NtfsResidentAttributeValue};
 use crate::error::{NtfsError, Result};
@@ -8,9 +13,7 @@ use crate::string::NtfsString;
 use crate::structured_values::{
     NtfsStructuredValue, NtfsStructuredValueFromResidentAttributeValue,
 };
-use arrayvec::ArrayVec;
-use binread::io::{Cursor, Read, Seek};
-use core::mem;
+use crate::types::NtfsPosition;
 
 /// The largest VolumeName attribute has a name containing 128 UTF-16 code points (256 bytes).
 const VOLUME_NAME_MAX_SIZE: usize = 128 * mem::size_of::<u16>();
@@ -31,7 +34,7 @@ pub struct NtfsVolumeName {
 }
 
 impl NtfsVolumeName {
-    fn new<T>(r: &mut T, position: u64, value_length: u64) -> Result<Self>
+    fn new<T>(r: &mut T, position: NtfsPosition, value_length: u64) -> Result<Self>
     where
         T: Read + Seek,
     {
@@ -73,7 +76,7 @@ impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsVolumeName {
     where
         T: Read + Seek,
     {
-        let position = value.data_position().unwrap();
+        let position = value.data_position();
         let value_length = value.len();
 
         let mut value_attached = value.attach(fs);
@@ -83,7 +86,7 @@ impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsVolumeName {
 
 impl<'n, 'f> NtfsStructuredValueFromResidentAttributeValue<'n, 'f> for NtfsVolumeName {
     fn from_resident_attribute_value(value: NtfsResidentAttributeValue<'f>) -> Result<Self> {
-        let position = value.data_position().unwrap();
+        let position = value.data_position();
         let value_length = value.len();
 
         let mut cursor = Cursor::new(value.data());

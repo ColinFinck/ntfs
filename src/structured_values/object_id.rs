@@ -1,5 +1,8 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
+
+use binread::io::{Cursor, Read, Seek};
+use binread::BinReaderExt;
 
 use crate::attribute::NtfsAttributeType;
 use crate::attribute_value::{NtfsAttributeValue, NtfsResidentAttributeValue};
@@ -8,8 +11,7 @@ use crate::guid::{NtfsGuid, GUID_SIZE};
 use crate::structured_values::{
     NtfsStructuredValue, NtfsStructuredValueFromResidentAttributeValue,
 };
-use binread::io::{Cursor, Read, Seek};
-use binread::BinReaderExt;
+use crate::types::NtfsPosition;
 
 /// Structure of an $OBJECT_ID attribute.
 ///
@@ -27,7 +29,7 @@ pub struct NtfsObjectId {
 }
 
 impl NtfsObjectId {
-    fn new<T>(r: &mut T, position: u64, value_length: u64) -> Result<Self>
+    fn new<T>(r: &mut T, position: NtfsPosition, value_length: u64) -> Result<Self>
     where
         T: Read + Seek,
     {
@@ -93,7 +95,7 @@ impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsObjectId {
     where
         T: Read + Seek,
     {
-        let position = value.data_position().unwrap();
+        let position = value.data_position();
         let value_length = value.len();
 
         let mut value_attached = value.attach(fs);
@@ -103,7 +105,7 @@ impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsObjectId {
 
 impl<'n, 'f> NtfsStructuredValueFromResidentAttributeValue<'n, 'f> for NtfsObjectId {
     fn from_resident_attribute_value(value: NtfsResidentAttributeValue<'f>) -> Result<Self> {
-        let position = value.data_position().unwrap();
+        let position = value.data_position();
         let value_length = value.len();
 
         let mut cursor = Cursor::new(value.data());

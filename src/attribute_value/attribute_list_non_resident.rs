@@ -1,10 +1,12 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 // It is important to note that `NtfsAttributeListNonResidentAttributeValue` can't just encapsulate `NtfsNonResidentAttributeValue` and provide one
 // layer on top to connect the attributes!
 // Connected attributes are stored in a way that the first attribute reports the entire data size and all further attributes report a zero value length.
 // We have to go down to the Data Run level to get trustable lengths again, and this is what `NtfsAttributeListNonResidentAttributeValue` does here.
+
+use binread::io::{Read, Seek, SeekFrom};
 
 use super::{DataRunsState, NtfsDataRuns, StreamState};
 use crate::attribute::{NtfsAttribute, NtfsAttributeType};
@@ -13,7 +15,7 @@ use crate::file::NtfsFile;
 use crate::ntfs::Ntfs;
 use crate::structured_values::{NtfsAttributeListEntries, NtfsAttributeListEntry};
 use crate::traits::NtfsReadSeek;
-use binread::io::{Read, Seek, SeekFrom};
+use crate::types::NtfsPosition;
 
 /// Reader for a non-resident attribute value that is part of an Attribute List.
 ///
@@ -69,7 +71,7 @@ impl<'n, 'f> NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
     /// This may be `None` if:
     ///   * The current seek position is outside the valid range, or
     ///   * The current Data Run is a "sparse" Data Run.
-    pub fn data_position(&self) -> Option<u64> {
+    pub fn data_position(&self) -> NtfsPosition {
         self.stream_state.data_position()
     }
 

@@ -1,5 +1,11 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
+
+use core::mem;
+
+use arrayvec::ArrayVec;
+use binread::io::{Cursor, Read, Seek, SeekFrom};
+use binread::{BinRead, BinReaderExt};
 
 use crate::attribute::{NtfsAttribute, NtfsAttributeType};
 use crate::attribute_value::{NtfsAttributeValue, NtfsNonResidentAttributeValue};
@@ -10,11 +16,7 @@ use crate::ntfs::Ntfs;
 use crate::string::NtfsString;
 use crate::structured_values::NtfsStructuredValue;
 use crate::traits::NtfsReadSeek;
-use crate::types::Vcn;
-use arrayvec::ArrayVec;
-use binread::io::{Cursor, Read, Seek, SeekFrom};
-use binread::{BinRead, BinReaderExt};
-use core::mem;
+use crate::types::{NtfsPosition, Vcn};
 
 /// Size of all [`AttributeListEntryHeader`] fields.
 const ATTRIBUTE_LIST_ENTRY_HEADER_SIZE: usize = 26;
@@ -58,7 +60,7 @@ struct AttributeListEntryHeader {
 #[derive(Clone, Debug)]
 pub enum NtfsAttributeList<'n, 'f> {
     /// A resident $ATTRIBUTE_LIST attribute.
-    Resident(&'f [u8], u64),
+    Resident(&'f [u8], NtfsPosition),
     /// A non-resident $ATTRIBUTE_LIST attribute.
     NonResident(NtfsNonResidentAttributeValue<'n, 'f>),
 }
@@ -70,10 +72,10 @@ impl<'n, 'f> NtfsAttributeList<'n, 'f> {
     }
 
     /// Returns the absolute position of this $ATTRIBUTE_LIST attribute value within the filesystem, in bytes.
-    pub fn position(&self) -> u64 {
+    pub fn position(&self) -> NtfsPosition {
         match self {
             Self::Resident(_slice, position) => *position,
-            Self::NonResident(value) => value.data_position().unwrap(),
+            Self::NonResident(value) => value.data_position(),
         }
     }
 }
@@ -88,14 +90,14 @@ impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsAttributeList<'n, 'f> {
         match value {
             NtfsAttributeValue::Resident(value) => {
                 let slice = value.data();
-                let position = value.data_position().unwrap();
+                let position = value.data_position();
                 Ok(Self::Resident(slice, position))
             }
             NtfsAttributeValue::NonResident(value) => Ok(Self::NonResident(value)),
             NtfsAttributeValue::AttributeListNonResident(value) => {
                 // Attribute Lists are never nested.
                 // Hence, we must not create this attribute from an attribute that is already part of Attribute List.
-                let position = value.data_position().unwrap();
+                let position = value.data_position();
                 Err(NtfsError::UnexpectedAttributeListAttribute { position })
             }
         }
@@ -141,7 +143,7 @@ impl<'n, 'f> NtfsAttributeListEntries<'n, 'f> {
 
         // Get the current entry.
         let mut value_attached = value.clone().attach(fs);
-        let position = value.data_position().unwrap();
+        let position = value.data_position();
         let entry = iter_try!(NtfsAttributeListEntry::new(&mut value_attached, position));
 
         // Advance our iterator to the next entry.
@@ -152,7 +154,7 @@ impl<'n, 'f> NtfsAttributeListEntries<'n, 'f> {
 
     fn next_resident(
         slice: &mut &'f [u8],
-        position: &mut u64,
+        position: &mut NtfsPosition,
     ) -> Option<Result<NtfsAttributeListEntry>> {
         if slice.is_empty() {
             return None;
@@ -165,7 +167,7 @@ impl<'n, 'f> NtfsAttributeListEntries<'n, 'f> {
         // Advance our iterator to the next entry.
         let bytes_to_advance = entry.list_entry_length() as usize;
         *slice = &slice[bytes_to_advance..];
-        *position += bytes_to_advance as u64;
+        *position += bytes_to_advance;
 
         Some(Ok(entry))
     }
@@ -176,11 +178,11 @@ impl<'n, 'f> NtfsAttributeListEntries<'n, 'f> {
 pub struct NtfsAttributeListEntry {
     header: AttributeListEntryHeader,
     name: ArrayVec<u8, NAME_MAX_SIZE>,
-    position: u64,
+    position: NtfsPosition,
 }
 
 impl NtfsAttributeListEntry {
-    fn new<T>(r: &mut T, position: u64) -> Result<Self>
+    fn new<T>(r: &mut T, position: NtfsPosition) -> Result<Self>
     where
         T: Read + Seek,
     {
@@ -240,7 +242,7 @@ impl NtfsAttributeListEntry {
     }
 
     /// Returns the absolute position of this attribute list entry within the filesystem, in bytes.
-    pub fn position(&self) -> u64 {
+    pub fn position(&self) -> NtfsPosition {
         self.position
     }
 

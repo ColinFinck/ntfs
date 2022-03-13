@@ -12,17 +12,18 @@ use binread::io::{Read, Seek, SeekFrom};
 use super::seek_contiguous;
 use crate::error::Result;
 use crate::traits::NtfsReadSeek;
+use crate::types::NtfsPosition;
 
 /// Reader for a value of a resident NTFS Attribute (which is entirely contained in the NTFS File Record).
 #[derive(Clone, Debug)]
 pub struct NtfsResidentAttributeValue<'f> {
     data: &'f [u8],
-    position: u64,
+    position: NtfsPosition,
     stream_position: u64,
 }
 
 impl<'f> NtfsResidentAttributeValue<'f> {
-    pub(crate) fn new(data: &'f [u8], position: u64) -> Self {
+    pub(crate) fn new(data: &'f [u8], position: NtfsPosition) -> Self {
         Self {
             data,
             position,
@@ -42,11 +43,11 @@ impl<'f> NtfsResidentAttributeValue<'f> {
 
     /// Returns the absolute current data seek position within the filesystem, in bytes.
     /// This may be `None` if the current seek position is outside the valid range.
-    pub fn data_position(&self) -> Option<u64> {
+    pub fn data_position(&self) -> NtfsPosition {
         if self.stream_position <= self.len() {
-            Some(self.position + self.stream_position)
+            self.position + self.stream_position
         } else {
-            None
+            NtfsPosition::none()
         }
     }
 
