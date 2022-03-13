@@ -1,4 +1,4 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 mod sector_reader;
@@ -120,6 +120,7 @@ where
         let ty = attribute.ty()?;
 
         attr_print_attribute(
+            info,
             with_runs,
             &attribute,
             file.file_record_number(),
@@ -143,6 +144,7 @@ where
                 let entry_attribute = entry.to_attribute(&entry_file)?;
 
                 attr_print_attribute(
+                    info,
                     with_runs,
                     &entry_attribute,
                     entry_record_number,
@@ -156,13 +158,17 @@ where
     Ok(())
 }
 
-fn attr_print_attribute<'n>(
+fn attr_print_attribute<'n, T>(
+    info: &mut CommandInfo<T>,
     with_runs: bool,
     attribute: &NtfsAttribute<'n, '_>,
     record_number: u64,
     attribute_prefix: &str,
     data_run_prefix: &str,
-) -> Result<()> {
+) -> Result<()>
+where
+    T: Read + Seek,
+{
     let instance = format!("{}{}", attribute_prefix, attribute.instance());
     let ty = attribute.ty()?;
     let resident = attribute.is_resident();
@@ -176,7 +182,9 @@ fn attr_print_attribute<'n>(
     );
 
     if with_runs {
-        if let NtfsAttributeValue::NonResident(non_resident_value) = attribute.value()? {
+        let value = attribute.value(&mut info.fs)?;
+
+        if let NtfsAttributeValue::NonResident(non_resident_value) = value {
             for (i, data_run) in non_resident_value.data_runs().enumerate() {
                 let data_run = data_run?;
                 let instance = format!("{}{}", data_run_prefix, i);
@@ -498,7 +506,7 @@ where
     };
     let data_item = data_item?;
     let data_attribute = data_item.to_attribute();
-    let mut data_value = data_attribute.value()?;
+    let mut data_value = data_attribute.value(&mut info.fs)?;
 
     println!(
         "Saving {} bytes of data in \"{}\"...",

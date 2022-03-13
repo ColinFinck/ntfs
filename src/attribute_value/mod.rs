@@ -44,6 +44,7 @@ impl<'n, 'f> NtfsAttributeValue<'n, 'f> {
     /// Returns the absolute current data seek position within the filesystem, in bytes.
     /// This may be `None` if:
     ///   * The current seek position is outside the valid range, or
+    ///   * The attribute does not have a Data Run, or
     ///   * The current Data Run is a "sparse" Data Run.
     pub fn data_position(&self) -> Option<u64> {
         match self {
@@ -119,6 +120,7 @@ where
     /// Returns the absolute current data seek position within the filesystem, in bytes.
     /// This may be `None` if:
     ///   * The current seek position is outside the valid range, or
+    ///   * The attribute does not have a Data Run, or
     ///   * The current Data Run is a "sparse" Data Run.
     pub fn data_position(&self) -> Option<u64> {
         self.value.data_position()

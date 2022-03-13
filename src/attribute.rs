@@ -366,7 +366,8 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         S: NtfsStructuredValue<'n, 'f>,
     {
         self.ensure_ty(S::TY)?;
-        S::from_attribute_value(fs, self.value()?)
+        let value = self.value(fs)?;
+        S::from_attribute_value(fs, value)
     }
 
     /// Returns the type of this NTFS Attribute, or [`NtfsError::UnsupportedAttributeType`]
@@ -428,7 +429,10 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
     }
 
     /// Returns an [`NtfsAttributeValue`] structure to read the value of this NTFS Attribute.
-    pub fn value(&self) -> Result<NtfsAttributeValue<'n, 'f>> {
+    pub fn value<T>(&self, fs: &mut T) -> Result<NtfsAttributeValue<'n, 'f>>
+    where
+        T: Read + Seek,
+    {
         if let Some(list_entries) = self.list_entries {
             // The first attribute reports the entire data size for all connected attributes
             // (remaining ones are set to zero).
@@ -437,11 +441,12 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
 
             let value = NtfsAttributeListNonResidentAttributeValue::new(
                 self.file.ntfs(),
+                fs,
                 list_entries.clone(),
                 self.instance(),
                 self.ty()?,
                 data_size,
-            );
+            )?;
             Ok(NtfsAttributeValue::AttributeListNonResident(value))
         } else if self.is_resident() {
             let value = self.resident_value()?;
@@ -726,7 +731,7 @@ mod tests {
         let data_attribute = data_attribute_item.to_attribute();
         assert_eq!(data_attribute.value_length(), 0);
 
-        let mut data_attribute_value = data_attribute.value().unwrap();
+        let mut data_attribute_value = data_attribute.value(&mut testfs1).unwrap();
         assert!(data_attribute_value.is_empty());
 
         let mut buf = [0u8; 5];

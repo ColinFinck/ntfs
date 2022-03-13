@@ -42,22 +42,19 @@ impl<'n, 'f> NtfsNonResidentAttributeValue<'n, 'f> {
         position: u64,
         data_size: u64,
     ) -> Result<Self> {
-        let mut stream_data_runs = NtfsDataRuns::new(ntfs, data, position);
-        let mut stream_state = StreamState::new(data_size);
+        let stream_data_runs = NtfsDataRuns::new(ntfs, data, position);
+        let stream_state = StreamState::new(data_size);
 
-        // Get the first Data Run already here to let `data_position` return something meaningful.
-        if let Some(stream_data_run) = stream_data_runs.next() {
-            let stream_data_run = stream_data_run?;
-            stream_state.set_stream_data_run(stream_data_run);
-        }
-
-        Ok(Self {
+        let mut value = Self {
             ntfs,
             data,
             position,
             stream_data_runs,
             stream_state,
-        })
+        };
+        value.next_data_run()?;
+
+        Ok(value)
     }
 
     /// Returns a variant of this reader that implements [`Read`] and [`Seek`]
@@ -75,6 +72,7 @@ impl<'n, 'f> NtfsNonResidentAttributeValue<'n, 'f> {
     /// Returns the absolute current data seek position within the filesystem, in bytes.
     /// This may be `None` if:
     ///   * The current seek position is outside the valid range, or
+    ///   * The attribute does not have a Data Run, or
     ///   * The current Data Run is a "sparse" Data Run
     pub fn data_position(&self) -> Option<u64> {
         self.stream_state.data_position()
@@ -112,9 +110,13 @@ impl<'n, 'f> NtfsNonResidentAttributeValue<'n, 'f> {
         self.ntfs
     }
 
-    /// Returns the absolute position of the Data Run information within the filesystem, in bytes.
-    pub fn position(&self) -> u64 {
-        self.position
+    /// Rewinds this value reader to the very beginning.
+    fn rewind(&mut self) -> Result<()> {
+        self.stream_data_runs = self.data_runs();
+        self.stream_state = StreamState::new(self.len());
+        self.next_data_run()?;
+
+        Ok(())
     }
 }
 
@@ -153,9 +155,7 @@ impl<'n, 'f> NtfsReadSeek for NtfsNonResidentAttributeValue<'n, 'f> {
 
         let mut bytes_left_to_seek = match pos {
             SeekFrom::Start(n) => {
-                // Rewind to the very beginning.
-                self.stream_data_runs = self.data_runs();
-                self.stream_state = StreamState::new(self.len());
+                self.rewind()?;
                 n
             }
             SeekFrom::Current(n) if n >= 0 => n as u64,
@@ -217,6 +217,7 @@ where
     /// Returns the absolute current data seek position within the filesystem, in bytes.
     /// This may be `None` if:
     ///   * The current seek position is outside the valid range, or
+    ///   * The attribute does not have a Data Run, or
     ///   * The current Data Run is a "sparse" Data Run.
     pub fn data_position(&self) -> Option<u64> {
         self.value.data_position()
@@ -530,6 +531,7 @@ impl StreamState {
     /// Returns the absolute current data seek position within the filesystem, in bytes.
     /// This may be `None` if:
     ///   * The current seek position is outside the valid range, or
+    ///   * The attribute does not have a Data Run, or
     ///   * The current Data Run is a "sparse" Data Run
     pub(crate) fn data_position(&self) -> Option<u64> {
         let stream_data_run = self.stream_data_run.as_ref()?;

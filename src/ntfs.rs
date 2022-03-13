@@ -103,7 +103,7 @@ impl Ntfs {
                 position: self.mft_position,
                 ty: NtfsAttributeType::Data,
             })?;
-        let mut mft_data_value = mft_data_attribute.value()?;
+        let mut mft_data_value = mft_data_attribute.value(fs)?;
 
         mft_data_value.seek(fs, SeekFrom::Start(offset))?;
         let position = mft_data_value

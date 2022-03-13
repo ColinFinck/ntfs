@@ -1,4 +1,4 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use crate::attribute::NtfsAttributeType;
@@ -52,7 +52,7 @@ impl UpcaseTable {
         }
 
         // Read the entire raw data from the $DATA attribute.
-        let mut data_value = data_attribute.value()?;
+        let mut data_value = data_attribute.value(fs)?;
         let mut data = vec![0u8; UPCASE_TABLE_SIZE as usize];
         data_value.read_exact(fs, &mut data)?;
 

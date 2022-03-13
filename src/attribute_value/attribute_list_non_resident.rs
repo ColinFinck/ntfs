@@ -37,24 +37,32 @@ pub struct NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
 }
 
 impl<'n, 'f> NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
-    pub(crate) fn new(
+    pub(crate) fn new<T>(
         ntfs: &'n Ntfs,
+        fs: &mut T,
         attribute_list_entries: NtfsAttributeListEntries<'n, 'f>,
         instance: u16,
         ty: NtfsAttributeType,
         data_size: u64,
-    ) -> Self {
+    ) -> Result<Self>
+    where
+        T: Read + Seek,
+    {
         let connected_entries =
             AttributeListConnectedEntries::new(attribute_list_entries.clone(), instance, ty);
+        let stream_state = StreamState::new(data_size);
 
-        Self {
+        let mut value = Self {
             ntfs,
             initial_attribute_list_entries: attribute_list_entries,
             connected_entries,
             data_size,
             attribute_state: None,
-            stream_state: StreamState::new(data_size),
-        }
+            stream_state,
+        };
+        value.next_attribute(fs)?;
+
+        Ok(value)
     }
 
     /// Returns the absolute current data seek position within the filesystem, in bytes.
@@ -165,6 +173,19 @@ impl<'n, 'f> NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
     pub fn ntfs(&self) -> &'n Ntfs {
         self.ntfs
     }
+
+    /// Rewinds this value reader to the very beginning.
+    fn rewind<T>(&mut self, fs: &mut T) -> Result<()>
+    where
+        T: Read + Seek,
+    {
+        self.connected_entries.attribute_list_entries =
+            Some(self.initial_attribute_list_entries.clone());
+        self.stream_state = StreamState::new(self.len());
+        self.next_attribute(fs)?;
+
+        Ok(())
+    }
 }
 
 impl<'n, 'f> NtfsReadSeek for NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
@@ -208,11 +229,7 @@ impl<'n, 'f> NtfsReadSeek for NtfsAttributeListNonResidentAttributeValue<'n, 'f>
 
         let mut bytes_left_to_seek = match pos {
             SeekFrom::Start(n) => {
-                // Rewind to the very beginning.
-                self.connected_entries.attribute_list_entries =
-                    Some(self.initial_attribute_list_entries.clone());
-                self.attribute_state = None;
-                self.stream_state = StreamState::new(self.len());
+                self.rewind(fs)?;
                 n
             }
             SeekFrom::Current(n) if n >= 0 => n as u64,
