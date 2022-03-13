@@ -1,4 +1,4 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use crate::attribute::NtfsAttributeType;
@@ -163,8 +163,8 @@ pub enum NtfsError {
     UnexpectedResidentAttribute { position: u64 },
     /// The type of the NTFS Attribute at byte position {position:#010x} is {actual:#010x}, which is not supported
     UnsupportedAttributeType { position: u64, actual: u32 },
-    /// The cluster size is {actual} bytes, but the maximum supported one is {expected}
-    UnsupportedClusterSize { expected: u32, actual: u32 },
+    /// The cluster size is {actual} bytes, but it needs to be between {min} and {max}
+    UnsupportedClusterSize { min: u32, max: u32, actual: u32 },
     /// The namespace of the NTFS file name starting at byte position {position:#010x} is {actual}, which is not supported
     UnsupportedFileNamespace { position: u64, actual: u8 },
     /// The sector size is {actual} bytes, but the only supported one is {expected}

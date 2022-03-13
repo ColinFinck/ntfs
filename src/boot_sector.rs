@@ -1,4 +1,4 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use crate::error::{NtfsError, Result};
@@ -42,14 +42,20 @@ pub(crate) struct BiosParameterBlock {
 impl BiosParameterBlock {
     /// Returns the size of a single cluster, in bytes.
     pub(crate) fn cluster_size(&self) -> Result<u32> {
+        /// The cluster size cannot go lower than a single sector.
+        const MIN_CLUSTER_SIZE: u32 = 512;
+
         /// The maximum cluster size supported by Windows is 2 MiB.
         /// Source: https://en.wikipedia.org/wiki/NTFS
-        const MAXIMUM_CLUSTER_SIZE: u32 = 2097152;
+        const MAX_CLUSTER_SIZE: u32 = 2097152;
+
+        const CLUSTER_SIZE_RANGE: RangeInclusive<u32> = MIN_CLUSTER_SIZE..=MAX_CLUSTER_SIZE;
 
         let cluster_size = self.sectors_per_cluster as u32 * self.sector_size as u32;
-        if cluster_size > MAXIMUM_CLUSTER_SIZE || !cluster_size.is_power_of_two() {
+        if !CLUSTER_SIZE_RANGE.contains(&cluster_size) || !cluster_size.is_power_of_two() {
             return Err(NtfsError::UnsupportedClusterSize {
-                expected: MAXIMUM_CLUSTER_SIZE,
+                min: MIN_CLUSTER_SIZE,
+                max: MAX_CLUSTER_SIZE,
                 actual: cluster_size,
             });
         }
@@ -68,16 +74,17 @@ impl BiosParameterBlock {
 
     /// Source: https://en.wikipedia.org/wiki/NTFS#Partition_Boot_Sector_(VBR)
     fn record_size(&self, size_info: i8) -> Result<u32> {
-        /// The usual exponent of `BiosParameterBlock::file_record_size_info` is 10 (2^10 = 1024 bytes).
+        // The usual exponent of `BiosParameterBlock::file_record_size_info` is 10 (2^10 = 1024 bytes).
+        // For index records, it's usually 12 (2^12 = 4096 bytes).
+
         /// Exponents < 10 have never been seen and are denied to guarantee that every record header
         /// fits into a record.
-        const MINIMUM_SIZE_INFO_EXPONENT: u32 = 10;
+        const MIN_EXPONENT: u32 = 10;
 
-        /// Exponents > 10 would come as a surprise, but our code should still be able to handle those.
-        /// Exponents > 31 (2^31 = 2 GiB) would make no sense, exceed a u32, and must be outright denied.
-        const MAXIMUM_SIZE_INFO_EXPONENT: u32 = 31;
+        /// Exponents > 12 have neither been seen and are denied to prevent allocating too large buffers.
+        const MAX_EXPONENT: u32 = 12;
 
-        const SIZE_INFO_RANGE: Range<u32> = MINIMUM_SIZE_INFO_EXPONENT..MAXIMUM_SIZE_INFO_EXPONENT;
+        const EXPONENT_RANGE: RangeInclusive<u32> = MIN_EXPONENT..=MAX_EXPONENT;
 
         let cluster_size = self.cluster_size()?;
 
@@ -93,7 +100,7 @@ impl BiosParameterBlock {
             // The size field denotes a binary exponent after negation.
             let exponent = (-size_info) as u32;
 
-            if !SIZE_INFO_RANGE.contains(&exponent) {
+            if !EXPONENT_RANGE.contains(&exponent) {
                 return Err(NtfsError::InvalidRecordSizeInfo {
                     size_info,
                     cluster_size,
