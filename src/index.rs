@@ -160,11 +160,11 @@ where
 
                     // Read the subnode from the filesystem and get an iterator for it.
                     let index_allocation_item =
-                        iter_try!(self.index.index_allocation_item.as_ref().ok_or_else(|| {
+                        iter_try!(self.index.index_allocation_item.as_ref().ok_or(
                             NtfsError::MissingIndexAllocation {
                                 position: self.index.index_root_position,
                             }
-                        }));
+                        ));
                     let index_allocation_attribute = index_allocation_item.to_attribute();
                     let index_allocation =
                         iter_try!(index_allocation_attribute
@@ -295,12 +295,11 @@ where
             // it comes lexicographically AFTER what we're looking for.
             // In both cases, we have to continue iterating in the subnode of this entry (if there is any).
             let subnode_vcn = iter_try!(entry.subnode_vcn()?);
-            let index_allocation_item =
-                iter_try!(self.index.index_allocation_item.as_ref().ok_or_else(|| {
-                    NtfsError::MissingIndexAllocation {
-                        position: self.index.index_root_position,
-                    }
-                }));
+            let index_allocation_item = iter_try!(self.index.index_allocation_item.as_ref().ok_or(
+                NtfsError::MissingIndexAllocation {
+                    position: self.index.index_root_position,
+                }
+            ));
             let index_allocation_attribute = index_allocation_item.to_attribute();
             let index_allocation = iter_try!(
                 index_allocation_attribute.structured_value::<_, NtfsIndexAllocation>(fs)
