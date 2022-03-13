@@ -127,6 +127,8 @@ pub enum NtfsError {
     },
     /// A record size field in the BIOS Parameter Block denotes {size_info}, which is invalid considering the cluster size of {cluster_size} bytes
     InvalidRecordSizeInfo { size_info: i8, cluster_size: u32 },
+    /// The sectors per cluster field in the BIOS Parameter Block denotes {sectors_per_cluster:#04x}, which is invalid
+    InvalidSectorsPerCluster { sectors_per_cluster: u8 },
     /// The NTFS structured value at byte position {position:#x} of type {ty:?} has {actual} bytes where {expected} bytes were expected
     InvalidStructuredValueSize {
         position: NtfsPosition,

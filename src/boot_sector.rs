@@ -53,8 +53,10 @@ impl BiosParameterBlock {
 
         const CLUSTER_SIZE_RANGE: RangeInclusive<u32> = MIN_CLUSTER_SIZE..=MAX_CLUSTER_SIZE;
 
-        let cluster_size = self.sectors_per_cluster as u32 * self.sector_size as u32;
-        if !CLUSTER_SIZE_RANGE.contains(&cluster_size) || !cluster_size.is_power_of_two() {
+        // `sectors_per_cluster` and `sector_size` both check for powers of two.
+        // Don't need to do that a third time here.
+        let cluster_size = self.sectors_per_cluster()? as u32 * self.sector_size()? as u32;
+        if !CLUSTER_SIZE_RANGE.contains(&cluster_size) {
             return Err(NtfsError::UnsupportedClusterSize {
                 min: MIN_CLUSTER_SIZE,
                 max: MAX_CLUSTER_SIZE,
@@ -132,6 +134,43 @@ impl BiosParameterBlock {
         }
 
         Ok(self.sector_size)
+    }
+
+    fn sectors_per_cluster(&self) -> Result<u16> {
+        /// We can't go lower than a single sector per cluster.
+        const MIN_SECTORS_PER_CLUSTER: u8 = 1;
+
+        /// 2^12 = 4096 bytes. With 512 bytes sector size, this translates to 2 MiB cluster size,
+        /// which is the maximum currently supported by Windows.
+        const MAX_EXPONENT: i8 = 12;
+
+        // Cluster sizes from 512 to 64K are represented by taking `self.sectors_per_cluster`
+        // as-is (with possible values 1, 2, 4, 8, 16, 32, 64, 128).
+        // For larger cluster sizes, `self.sectors_per_cluster` is treated as a binary exponent
+        // after negation.
+        //
+        // See https://dfir.ru/2019/04/23/ntfs-large-clusters/
+        if self.sectors_per_cluster > 128 {
+            let exponent = -(self.sectors_per_cluster as i8);
+
+            if exponent > MAX_EXPONENT {
+                return Err(NtfsError::InvalidSectorsPerCluster {
+                    sectors_per_cluster: self.sectors_per_cluster,
+                });
+            }
+
+            Ok(1 << (exponent as u16))
+        } else {
+            if self.sectors_per_cluster < MIN_SECTORS_PER_CLUSTER
+                || !self.sectors_per_cluster.is_power_of_two()
+            {
+                return Err(NtfsError::InvalidSectorsPerCluster {
+                    sectors_per_cluster: self.sectors_per_cluster,
+                });
+            }
+
+            Ok(self.sectors_per_cluster as u16)
+        }
     }
 
     pub(crate) fn serial_number(&self) -> u64 {
