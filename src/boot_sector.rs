@@ -120,15 +120,20 @@ impl BiosParameterBlock {
     }
 
     pub(crate) fn sector_size(&self) -> Result<u16> {
-        // NTFS-3G supports more sector sizes, but I haven't got Windows to accept an NTFS partition
-        // with a sector size other than 512 bytes.
-        // This restriction is arbitrary and can be lifted once you show me a Windows NTFS partition
-        // with a different sector size.
-        const SUPPORTED_SECTOR_SIZE: u16 = 512;
+        /// This is the minimum supported by Windows.
+        /// NTFS-3G also supports 256-byte sectors, but I haven't seen them anywhere.
+        const MIN_SECTOR_SIZE: u16 = 512;
 
-        if self.sector_size != SUPPORTED_SECTOR_SIZE {
+        /// This is the maximum currently supported by Windows.
+        /// Tested with Arsenal Image Mounter (https://github.com/ColinFinck/ntfs/issues/14).
+        const MAX_SECTOR_SIZE: u16 = 4096;
+
+        const SECTOR_SIZE_RANGE: RangeInclusive<u16> = MIN_SECTOR_SIZE..=MAX_SECTOR_SIZE;
+
+        if !SECTOR_SIZE_RANGE.contains(&self.sector_size) || !self.sector_size.is_power_of_two() {
             return Err(NtfsError::UnsupportedSectorSize {
-                expected: SUPPORTED_SECTOR_SIZE,
+                min: MIN_SECTOR_SIZE,
+                max: MAX_SECTOR_SIZE,
                 actual: self.sector_size,
             });
         }

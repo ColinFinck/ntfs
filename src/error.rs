@@ -174,8 +174,8 @@ pub enum NtfsError {
     UnsupportedClusterSize { min: u32, max: u32, actual: u32 },
     /// The namespace of the NTFS file name starting at byte position {position:#x} is {actual}, which is not supported
     UnsupportedFileNamespace { position: NtfsPosition, actual: u8 },
-    /// The sector size is {actual} bytes, but the only supported one is {expected}
-    UnsupportedSectorSize { expected: u16, actual: u16 },
+    /// The sector size is {actual} bytes, but it needs to be between {min} and {max}
+    UnsupportedSectorSize { min: u16, max: u16, actual: u16 },
     /// The Update Sequence Array (USA) of the record at byte position {position:#x} has entries for {array_count} sectors of {sector_size} bytes, but the record is only {record_size} bytes long
     UpdateSequenceArrayExceedsRecordSize {
         position: NtfsPosition,
