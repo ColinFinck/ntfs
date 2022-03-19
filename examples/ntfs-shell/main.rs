@@ -41,7 +41,7 @@ fn main() -> Result<()> {
     }
 
     let f = File::open(&args[1])?;
-    let sr = SectorReader::new(f, 512)?;
+    let sr = SectorReader::new(f, 4096)?;
     let mut fs = BufReader::new(sr);
     let mut ntfs = Ntfs::new(&mut fs)?;
     ntfs.read_upcase_table(&mut fs)?;
