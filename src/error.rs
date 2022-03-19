@@ -176,11 +176,10 @@ pub enum NtfsError {
     UnsupportedFileNamespace { position: NtfsPosition, actual: u8 },
     /// The sector size is {actual} bytes, but it needs to be between {min} and {max}
     UnsupportedSectorSize { min: u16, max: u16, actual: u16 },
-    /// The Update Sequence Array (USA) of the record at byte position {position:#x} has entries for {array_count} sectors of {sector_size} bytes, but the record is only {record_size} bytes long
+    /// The Update Sequence Array (USA) of the record at byte position {position:#x} has entries for {array_count} blocks of 512 bytes, but the record is only {record_size} bytes long
     UpdateSequenceArrayExceedsRecordSize {
         position: NtfsPosition,
         array_count: u16,
-        sector_size: u16,
         record_size: usize,
     },
     /// Sector corruption: The 2 bytes at byte position {position:#x} should match the Update Sequence Number (USN) {expected:?}, but they are {actual:?}

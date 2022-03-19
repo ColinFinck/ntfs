@@ -111,7 +111,8 @@ bitflags! {
 /// [`NtfsAttribute`]: crate::attribute::NtfsAttribute
 #[derive(Clone, Debug)]
 pub struct NtfsFile<'n> {
-    record: Record<'n>,
+    ntfs: &'n Ntfs,
+    record: Record,
     file_record_number: u64,
 }
 
@@ -129,11 +130,12 @@ impl<'n> NtfsFile<'n> {
         fs.seek(SeekFrom::Start(position.get()))?;
         fs.read_exact(&mut data)?;
 
-        let mut record = Record::new(ntfs, data, position.into());
+        let mut record = Record::new(data, position.into());
         Self::validate_signature(&record)?;
         record.fixup()?;
 
         let file = Self {
+            ntfs,
             record,
             file_record_number,
         };
@@ -429,7 +431,7 @@ impl<'n> NtfsFile<'n> {
 
     /// Returns the [`Ntfs`] object reference associated to this file.
     pub fn ntfs(&self) -> &'n Ntfs {
-        self.record.ntfs()
+        self.ntfs
     }
 
     /// Returns the absolute byte position of this File Record in the NTFS filesystem.

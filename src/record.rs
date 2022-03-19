@@ -9,8 +9,9 @@ use byteorder::{ByteOrder, LittleEndian};
 use memoffset::{offset_of, span_of};
 
 use crate::error::{NtfsError, Result};
-use crate::ntfs::Ntfs;
 use crate::types::NtfsPosition;
+
+const NTFS_BLOCK_SIZE: usize = 512;
 
 #[repr(C, packed)]
 pub(crate) struct RecordHeader {
@@ -21,19 +22,14 @@ pub(crate) struct RecordHeader {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct Record<'n> {
-    ntfs: &'n Ntfs,
+pub(crate) struct Record {
     data: Vec<u8>,
     position: NtfsPosition,
 }
 
-impl<'n> Record<'n> {
-    pub(crate) fn new(ntfs: &'n Ntfs, data: Vec<u8>, position: NtfsPosition) -> Self {
-        Self {
-            ntfs,
-            data,
-            position,
-        }
+impl Record {
+    pub(crate) fn new(data: Vec<u8>, position: NtfsPosition) -> Self {
+        Self { data, position }
     }
 
     pub(crate) fn data(&self) -> &[u8] {
@@ -47,7 +43,7 @@ impl<'n> Record<'n> {
             self.update_sequence_offset() as usize + self.update_sequence_size() as usize;
 
         // The Update Sequence Number (USN) is written to the last 2 bytes of each sector.
-        let mut sector_position = self.ntfs.sector_size() as usize - mem::size_of::<u16>();
+        let mut sector_position = NTFS_BLOCK_SIZE - mem::size_of::<u16>();
 
         while array_position < array_end {
             let array_position_end = array_position + mem::size_of::<u16>();
@@ -57,7 +53,6 @@ impl<'n> Record<'n> {
                 return Err(NtfsError::UpdateSequenceArrayExceedsRecordSize {
                     position: self.position,
                     array_count: self.update_sequence_array_count(),
-                    sector_size: self.ntfs.sector_size(),
                     record_size: self.data.len(),
                 });
             }
@@ -83,7 +78,7 @@ impl<'n> Record<'n> {
 
             // Advance to the next array entry and sector.
             array_position += mem::size_of::<u16>();
-            sector_position += self.ntfs.sector_size() as usize;
+            sector_position += NTFS_BLOCK_SIZE;
         }
 
         Ok(())
@@ -97,10 +92,6 @@ impl<'n> Record<'n> {
         // A record is never larger than a u32.
         // Usually, it shouldn't even exceed a u16, but our code could handle that.
         self.data.len() as u32
-    }
-
-    pub(crate) fn ntfs(&self) -> &'n Ntfs {
-        self.ntfs
     }
 
     pub(crate) fn position(&self) -> NtfsPosition {

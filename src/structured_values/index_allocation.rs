@@ -45,7 +45,7 @@ impl<'n, 'f> NtfsIndexAllocation<'n, 'f> {
         fs: &mut T,
         index_record_size: u32,
         vcn: Vcn,
-    ) -> Result<NtfsIndexRecord<'n>>
+    ) -> Result<NtfsIndexRecord>
     where
         T: Read + Seek,
     {
@@ -62,7 +62,7 @@ impl<'n, 'f> NtfsIndexAllocation<'n, 'f> {
         }
 
         // Get the record.
-        let record = NtfsIndexRecord::new(self.ntfs, fs, value, index_record_size)?;
+        let record = NtfsIndexRecord::new(fs, value, index_record_size)?;
 
         // Validate that the VCN in the record is the requested one.
         if record.vcn() != vcn {
@@ -135,7 +135,7 @@ impl<'n, 'f> NtfsIndexRecords<'n, 'f> {
     }
 
     /// See [`Iterator::next`].
-    pub fn next<T>(&mut self, fs: &mut T) -> Option<Result<NtfsIndexRecord<'n>>>
+    pub fn next<T>(&mut self, fs: &mut T) -> Option<Result<NtfsIndexRecord>>
     where
         T: Read + Seek,
     {
@@ -145,7 +145,6 @@ impl<'n, 'f> NtfsIndexRecords<'n, 'f> {
 
         // Get the current record.
         let record = iter_try!(NtfsIndexRecord::new(
-            self.index_allocation.ntfs,
             fs,
             self.index_allocation.value.clone(),
             self.index_record_size
@@ -195,7 +194,7 @@ impl<'n, 'f, 'a, T> Iterator for NtfsIndexRecordsAttached<'n, 'f, 'a, T>
 where
     T: Read + Seek,
 {
-    type Item = Result<NtfsIndexRecord<'n>>;
+    type Item = Result<NtfsIndexRecord>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.index_records.next(self.fs)

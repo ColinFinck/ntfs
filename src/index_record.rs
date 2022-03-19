@@ -10,7 +10,6 @@ use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
 use crate::index_entry::{IndexNodeEntryRanges, NtfsIndexNodeEntries};
 use crate::indexes::NtfsIndexEntryType;
-use crate::ntfs::Ntfs;
 use crate::record::Record;
 use crate::record::RecordHeader;
 use crate::traits::NtfsReadSeek;
@@ -48,17 +47,16 @@ pub(crate) struct IndexNodeHeader {
 ///
 /// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/concepts/index_record.html>
 #[derive(Debug)]
-pub struct NtfsIndexRecord<'n> {
-    record: Record<'n>,
+pub struct NtfsIndexRecord {
+    record: Record,
 }
 
 const HAS_SUBNODES_FLAG: u8 = 0x01;
 
-impl<'n> NtfsIndexRecord<'n> {
+impl NtfsIndexRecord {
     pub(crate) fn new<T>(
-        ntfs: &'n Ntfs,
         fs: &mut T,
-        mut value: NtfsAttributeValue<'n, '_>,
+        mut value: NtfsAttributeValue,
         index_record_size: u32,
     ) -> Result<Self>
     where
@@ -69,7 +67,7 @@ impl<'n> NtfsIndexRecord<'n> {
         let mut data = vec![0; index_record_size as usize];
         value.read_exact(fs, &mut data)?;
 
-        let mut record = Record::new(ntfs, data, data_position);
+        let mut record = Record::new(data, data_position);
         Self::validate_signature(&record)?;
         record.fixup()?;
 
