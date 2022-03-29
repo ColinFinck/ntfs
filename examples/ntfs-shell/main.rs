@@ -9,13 +9,15 @@ use std::io;
 use std::io::{BufReader, Read, Seek, Write};
 
 use anyhow::{anyhow, bail, Context, Result};
-use chrono::{DateTime, Utc};
 use ntfs::attribute_value::NtfsAttributeValue;
 use ntfs::indexes::NtfsFileNameIndex;
 use ntfs::structured_values::{
     NtfsAttributeList, NtfsFileName, NtfsFileNamespace, NtfsStandardInformation,
 };
 use ntfs::{Ntfs, NtfsAttribute, NtfsAttributeType, NtfsFile, NtfsReadSeek};
+use time::format_description::FormatItem;
+use time::macros::format_description;
+use time::OffsetDateTime;
 
 use sector_reader::SectorReader;
 
@@ -352,6 +354,9 @@ where
 }
 
 fn fileinfo_std(attribute: NtfsAttribute) -> Result<()> {
+    const TIME_FORMAT: &[FormatItem] =
+        format_description!("[year]-[month]-[day] [hour]:[minute]:[second] UTC");
+
     println!();
     println!("{:=^72}", " STANDARD INFORMATION ");
 
@@ -359,11 +364,18 @@ fn fileinfo_std(attribute: NtfsAttribute) -> Result<()> {
 
     println!("{:34}{:?}", "Attributes:", std_info.file_attributes());
 
-    let format = "%F %T UTC";
-    let atime = DateTime::<Utc>::from(std_info.access_time()).format(format);
-    let ctime = DateTime::<Utc>::from(std_info.creation_time()).format(format);
-    let mtime = DateTime::<Utc>::from(std_info.modification_time()).format(format);
-    let mmtime = DateTime::<Utc>::from(std_info.mft_record_modification_time()).format(format);
+    let atime = OffsetDateTime::from(std_info.access_time())
+        .format(TIME_FORMAT)
+        .unwrap();
+    let ctime = OffsetDateTime::from(std_info.creation_time())
+        .format(TIME_FORMAT)
+        .unwrap();
+    let mtime = OffsetDateTime::from(std_info.modification_time())
+        .format(TIME_FORMAT)
+        .unwrap();
+    let mmtime = OffsetDateTime::from(std_info.mft_record_modification_time())
+        .format(TIME_FORMAT)
+        .unwrap();
     println!("{:34}{}", "Access Time:", atime);
     println!("{:34}{}", "Creation Time:", ctime);
     println!("{:34}{}", "Modification Time:", mtime);
