@@ -31,7 +31,7 @@ time = { version = "0.3.9", features = ["formatting", "large-dates", "macros"], 
 
 [features]
 default = ["std"]
-std = ["arrayvec/std", "binread/std", "byteorder/std"]
+std = ["arrayvec/std", "binread/std", "byteorder/std", "time?/std"]
 
 [[example]]
 name = "ntfs-shell"
