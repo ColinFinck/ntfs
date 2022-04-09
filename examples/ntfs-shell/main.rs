@@ -496,13 +496,13 @@ where
     let output_file_name = if data_stream_name.is_empty() {
         file_name.to_string()
     } else {
-        format!("{}_{}", file_name, data_stream_name)
+        format!("{file_name}_{data_stream_name}")
     };
     let mut output_file = OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&output_file_name)
-        .with_context(|| format!("Tried to open \"{}\" for writing", output_file_name))?;
+        .with_context(|| format!("Tried to open \"{output_file_name}\" for writing"))?;
 
     // Open the desired file and find the $DATA attribute we are looking for.
     let file = parse_file_arg(file_name, info)?;

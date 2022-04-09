@@ -1,7 +1,6 @@
 // Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use core::convert::TryInto;
 use core::iter::FusedIterator;
 use core::marker::PhantomData;
 use core::mem;

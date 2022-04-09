@@ -4,9 +4,6 @@
 use binread::BinRead;
 use derive_more::From;
 
-#[cfg(any(feature = "time", feature = "std"))]
-use core::convert::TryFrom;
-
 #[cfg(feature = "time")]
 use {crate::error::NtfsError, time::OffsetDateTime};
 

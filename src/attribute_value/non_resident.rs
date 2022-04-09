@@ -5,7 +5,6 @@
 //! Non-resident attribute values are split up into one or more data runs, which are spread across the filesystem.
 //! This reader provides one contiguous data stream for all data runs.
 
-use core::convert::TryFrom;
 use core::iter::FusedIterator;
 use core::mem;
 

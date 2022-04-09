@@ -345,7 +345,7 @@ mod tests {
         let mut subdir_finder = subdir_index.finder();
 
         for i in 1..=512 {
-            let dir_name = format!("{}", i);
+            let dir_name = format!("{i}");
             let entry = NtfsFileNameIndex::find(&mut subdir_finder, &ntfs, &mut testfs1, &dir_name)
                 .unwrap()
                 .unwrap();
@@ -375,7 +375,7 @@ mod tests {
         // We can create the same order by adding them to a vector and sorting that vector.
         let mut dir_names = Vec::with_capacity(512);
         for i in 1..=512 {
-            dir_names.push(format!("{}", i));
+            dir_names.push(format!("{i}"));
         }
 
         dir_names.sort_unstable();

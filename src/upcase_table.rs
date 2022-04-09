@@ -1,14 +1,15 @@
 // Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+use core::mem;
+
+use binread::io::{Read, Seek};
+
 use crate::attribute::NtfsAttributeType;
 use crate::error::{NtfsError, Result};
 use crate::file::KnownNtfsFileRecordNumber;
 use crate::ntfs::Ntfs;
 use crate::traits::NtfsReadSeek;
-use binread::io::{Read, Seek};
-use core::convert::TryInto;
-use core::mem;
 
 /// The Upcase Table contains an uppercase character for each Unicode character of the Basic Multilingual Plane.
 const UPCASE_CHARACTER_COUNT: usize = 65536;

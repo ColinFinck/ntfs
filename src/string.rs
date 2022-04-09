@@ -1,12 +1,14 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use crate::ntfs::Ntfs;
-use alloc::string::String;
 use core::char;
 use core::cmp::Ordering;
-use core::convert::{identity, TryInto};
+use core::convert::identity;
 use core::fmt;
+
+use alloc::string::String;
+
+use crate::ntfs::Ntfs;
 
 /// Zero-copy representation of a string stored in an NTFS filesystem structure.
 #[derive(Clone, Debug, Eq)]
