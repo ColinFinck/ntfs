@@ -1,6 +1,7 @@
 // Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+use core::cmp::Ordering;
 use core::num::NonZeroU64;
 
 use binread::io::{Read, Seek, SeekFrom};
@@ -15,6 +16,7 @@ use crate::index::NtfsIndex;
 use crate::indexes::NtfsFileNameIndex;
 use crate::ntfs::Ntfs;
 use crate::record::{Record, RecordHeader};
+use crate::string::{NtfsString, UpcaseOrd};
 use crate::structured_values::{
     NtfsFileName, NtfsFileNamespace, NtfsIndexRoot, NtfsStandardInformation,
     NtfsStructuredValueFromResidentAttributeValue,
@@ -182,9 +184,15 @@ impl<'n> NtfsFile<'n> {
     /// As NTFS supports multiple data streams per file, you can specify the name of the $DATA attribute
     /// to look up.
     /// Passing an empty string here looks up the default unnamed $DATA attribute (commonly known as the "file data").
+    /// The name is looked up case-insensitively.
     ///
     /// If you need more control over which $DATA attribute is available and picked up,
     /// you can use [`NtfsFile::attributes`] to iterate over all attributes of this file.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `data_stream_name` is non-empty and [`read_upcase_table`][Ntfs::read_upcase_table] had not been
+    /// called on the passed [`Ntfs`] object.
     pub fn data<'f, T>(
         &'f self,
         fs: &mut T,
@@ -194,6 +202,15 @@ impl<'n> NtfsFile<'n> {
         T: Read + Seek,
     {
         let mut iter = self.attributes();
+
+        let equal = if data_stream_name.is_empty() {
+            // Use a simpler "comparison" that doesn't require the $UpCase table.
+            |_ntfs: &Ntfs, name: &NtfsString, _data_stream_name: &str| name.is_empty()
+        } else {
+            |ntfs: &Ntfs, name: &NtfsString, data_stream_name: &str| {
+                name.upcase_cmp(ntfs, &data_stream_name) == Ordering::Equal
+            }
+        };
 
         while let Some(item) = iter.next(fs) {
             let item = iter_try!(item);
@@ -205,7 +222,7 @@ impl<'n> NtfsFile<'n> {
             }
 
             let name = iter_try!(attribute.name());
-            if name != data_stream_name {
+            if !equal(self.ntfs, &name, data_stream_name) {
                 continue;
             }
 
