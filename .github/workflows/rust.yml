@@ -18,6 +18,8 @@ jobs:
     - uses: actions/checkout@v2
     - name: Clippy
       run: cargo clippy --verbose
+    - name: Build no_std
+      run: cargo build --verbose --no-default-features
     - name: Build
       run: cargo build --verbose
     - name: Run tests

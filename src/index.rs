@@ -4,6 +4,7 @@
 use core::cmp::Ordering;
 use core::marker::PhantomData;
 
+use alloc::vec;
 use alloc::vec::Vec;
 use binread::io::{Read, Seek};
 

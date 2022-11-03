@@ -6,6 +6,7 @@ use core::marker::PhantomData;
 use core::mem;
 use core::ops::Range;
 
+use alloc::vec::Vec;
 use binread::io::{Read, Seek};
 use bitflags::bitflags;
 use byteorder::{ByteOrder, LittleEndian};

@@ -3,6 +3,8 @@
 
 use core::mem;
 
+use alloc::vec;
+use alloc::vec::Vec;
 use binread::io::{Read, Seek};
 
 use crate::attribute::NtfsAttributeType;

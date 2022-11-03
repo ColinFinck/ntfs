@@ -4,6 +4,7 @@
 use core::cmp::Ordering;
 use core::num::NonZeroU64;
 
+use alloc::vec;
 use binread::io::{Read, Seek, SeekFrom};
 use bitflags::bitflags;
 use byteorder::{ByteOrder, LittleEndian};
