@@ -268,7 +268,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
     }
 
     pub(crate) fn non_resident_value(&self) -> Result<NtfsNonResidentAttributeValue<'n, 'f>> {
-        let (data, position) = self.non_resident_value_data_and_position();
+        let (data, position) = self.non_resident_value_data_and_position()?;
 
         NtfsNonResidentAttributeValue::new(
             self.file.ntfs(),
@@ -278,14 +278,16 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         )
     }
 
-    pub(crate) fn non_resident_value_data_and_position(&self) -> (&'f [u8], NtfsPosition) {
+    pub(crate) fn non_resident_value_data_and_position(&self) -> Result<(&'f [u8], NtfsPosition)> {
         debug_assert!(!self.is_resident());
         let start = self.offset + self.non_resident_value_data_runs_offset() as usize;
         let end = self.offset + self.attribute_length() as usize;
-        let data = &self.file.record_data()[start..end];
         let position = self.file.position() + start;
-
-        (data, position)
+        if let Some(data) = &self.file.record_data().get(start..end) {
+            Ok((data, position))
+        } else {
+            Err(NtfsError::MissingIndexAllocation {position})
+        }
     }
 
     fn non_resident_value_data_size(&self) -> u64 {

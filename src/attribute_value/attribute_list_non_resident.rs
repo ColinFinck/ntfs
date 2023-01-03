@@ -105,7 +105,7 @@ impl<'n, 'f> NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
             attribute_state.attribute_offset,
             None,
         );
-        let (data, position) = attribute.non_resident_value_data_and_position();
+        let (data, position) = attribute.non_resident_value_data_and_position()?;
         let mut stream_data_runs =
             NtfsDataRuns::from_state(self.ntfs, data, position, data_runs_state);
 
@@ -149,7 +149,7 @@ impl<'n, 'f> NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
         }
 
         // Get an `NtfsDataRuns` iterator for iterating through the attribute value's data runs.
-        let (data, position) = attribute.non_resident_value_data_and_position();
+        let (data, position) = attribute.non_resident_value_data_and_position()?;
         let mut stream_data_runs = NtfsDataRuns::new(self.ntfs, data, position);
 
         // Get the first Data Run already here to save time and let `data_position` return something meaningful.
