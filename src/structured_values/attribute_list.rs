@@ -166,9 +166,8 @@ impl<'n, 'f> NtfsAttributeListEntries<'n, 'f> {
 
         // Advance our iterator to the next entry.
         let bytes_to_advance = entry.list_entry_length() as usize;
-        *slice = &slice[bytes_to_advance..];
+        *slice = slice.get(bytes_to_advance..)?;
         *position += bytes_to_advance;
-
         Some(Ok(entry))
     }
 }
