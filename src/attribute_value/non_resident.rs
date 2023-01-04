@@ -638,9 +638,12 @@ impl StreamState {
 
         // Perform the actual read.
         let bytes_read_in_data_run = data_run.read(fs, &mut buf[start..end])?;
+        if bytes_read_in_data_run == 0 {
+            return Ok(false);
+        }
+
         *bytes_read += bytes_read_in_data_run;
         self.stream_position += bytes_read_in_data_run as u64;
-
         Ok(true)
     }
 
