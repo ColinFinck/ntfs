@@ -428,7 +428,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
             });
         }
 
-        let end = start as u32 + self.resident_value_length();
+        let end = u32::from(start).saturating_add(self.resident_value_length());
         if end > self.attribute_length() {
             return Err(NtfsError::InvalidResidentAttributeValueLength {
                 position: self.position(),
