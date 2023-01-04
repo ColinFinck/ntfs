@@ -345,8 +345,13 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
 
         let start = self.offset + self.resident_value_offset() as usize;
         let end = start + self.resident_value_length() as usize;
-        let data = &self.file.record_data()[start..end];
-
+        let data = &self.file.record_data().get(start..end).ok_or(
+            NtfsError::InvalidResidentValueRange {
+                position: self.position(),
+                range: start..end,
+                size: self.file.record_data().len(),
+            },
+        )?;
         Ok(NtfsResidentAttributeValue::new(data, self.position()))
     }
 
