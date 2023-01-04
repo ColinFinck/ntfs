@@ -36,7 +36,7 @@ impl Record {
     }
 
     pub(crate) fn fixup(&mut self) -> Result<()> {
-        let update_sequence_number = self.update_sequence_number();
+        let update_sequence_number = self.update_sequence_number()?;
         let mut array_position = self.update_sequence_array_start() as usize;
         let array_end =
             self.update_sequence_offset() as usize + self.update_sequence_size() as usize;
@@ -116,10 +116,17 @@ impl Record {
         self.update_sequence_offset() + mem::size_of::<u16>() as u16
     }
 
-    fn update_sequence_number(&self) -> [u8; 2] {
+    fn update_sequence_number(&self) -> Result<[u8; 2]> {
         let start = self.update_sequence_offset() as usize;
         let end = start + mem::size_of::<u16>();
-        self.data[start..end].try_into().unwrap()
+        self.data
+            .get(start..end)
+            .and_then(|bytes| bytes.try_into().ok())
+            .ok_or(NtfsError::InvalidUpdateSequenceNumberRange {
+                position: self.position,
+                range: start..end,
+                size: self.data.len(),
+            })
     }
 
     fn update_sequence_offset(&self) -> u16 {

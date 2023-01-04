@@ -158,6 +158,12 @@ pub enum NtfsError {
         range: Range<usize>,
         size: usize,
     },
+    /// The NTFS Update Sequence Number at byte position {position:#x} references a data field in the range {range:?}, but the entry only has a size of {size} bytes
+    InvalidUpdateSequenceNumberRange {
+        position: NtfsPosition,
+        range: Range<usize>,
+        size: usize,
+    },
     /// I/O error: {0:?}
     Io(binread::io::Error),
     /// The Logical Cluster Number (LCN) {lcn} is too big to be multiplied by the cluster size
