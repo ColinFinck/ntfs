@@ -152,6 +152,12 @@ pub enum NtfsError {
         vcn: Vcn,
         previous_lcn: Lcn,
     },
+    /// The NTFS Non Resident Value Data at byte position {position:#x} references a data field in the range {range:?}, but the entry only has a size of {size} bytes
+    InvalidNonResidentValueDataRange {
+        position: NtfsPosition,
+        range: Range<usize>,
+        size: usize,
+    },
     /// I/O error: {0:?}
     Io(binread::io::Error),
     /// The Logical Cluster Number (LCN) {lcn} is too big to be multiplied by the cluster size
