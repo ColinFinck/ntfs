@@ -310,7 +310,7 @@ mod tests {
         let mut mft_attributes = mft.attributes_raw();
 
         // Check the FileName attribute of the MFT.
-        let attribute = mft_attributes.nth(1).unwrap();
+        let attribute = mft_attributes.nth(1).unwrap().unwrap();
         assert_eq!(attribute.ty().unwrap(), NtfsAttributeType::FileName);
         assert_eq!(attribute.attribute_length(), 104);
         assert!(attribute.is_resident());

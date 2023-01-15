@@ -766,7 +766,7 @@ mod tests {
         let empty_file = entry.to_file(&ntfs, &mut testfs1).unwrap();
 
         let data_attribute_item = empty_file.data(&mut testfs1, "").unwrap().unwrap();
-        let data_attribute = data_attribute_item.to_attribute();
+        let data_attribute = data_attribute_item.to_attribute().unwrap();
         assert_eq!(data_attribute.value_length(), 0);
 
         let mut data_attribute_value = data_attribute.value(&mut testfs1).unwrap();
