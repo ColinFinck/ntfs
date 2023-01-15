@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 // It is important to note that `NtfsAttributeListNonResidentAttributeValue` can't just encapsulate `NtfsNonResidentAttributeValue` and provide one
@@ -104,7 +104,7 @@ impl<'n, 'f> NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
             &attribute_state.file,
             attribute_state.attribute_offset,
             None,
-        );
+        )?;
         let (data, position) = attribute.non_resident_value_data_and_position()?;
         let mut stream_data_runs =
             NtfsDataRuns::from_state(self.ntfs, data, position, data_runs_state);

@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::mem;
@@ -46,7 +46,7 @@ impl UpcaseTable {
                 ty: NtfsAttributeType::Data,
             })??;
 
-        let data_attribute = data_item.to_attribute();
+        let data_attribute = data_item.to_attribute()?;
         if data_attribute.value_length() != UPCASE_TABLE_SIZE {
             return Err(NtfsError::InvalidUpcaseTableSize {
                 expected: UPCASE_TABLE_SIZE,

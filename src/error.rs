@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::ops::Range;
@@ -29,6 +29,12 @@ pub enum NtfsError {
     },
     /// The given buffer should have at least {expected} bytes, but it only has {actual} bytes
     BufferTooSmall { expected: usize, actual: usize },
+    /// The NTFS Attribute at byte position {position:#x} has a length of {expected} bytes, but only {actual} bytes are left in the record
+    InvalidAttributeLength {
+        position: NtfsPosition,
+        expected: usize,
+        actual: usize,
+    },
     /// The NTFS Attribute at byte position {position:#x} indicates a name length up to offset {expected}, but the attribute only has a size of {actual} bytes
     InvalidAttributeNameLength {
         position: NtfsPosition,

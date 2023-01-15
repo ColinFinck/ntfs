@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::iter::FusedIterator;
@@ -24,6 +24,9 @@ use crate::structured_values::{
     NtfsStructuredValueFromResidentAttributeValue,
 };
 use crate::types::{NtfsPosition, Vcn};
+
+/// Size of all [`NtfsAttributeHeader`] fields.
+const ATTRIBUTE_HEADER_SIZE: usize = 16;
 
 /// On-disk structure of the generic header of an NTFS Attribute.
 #[repr(C, packed)]
@@ -180,12 +183,15 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         file: &'f NtfsFile<'n>,
         offset: usize,
         list_entries: Option<&'f NtfsAttributeListEntries<'n, 'f>>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        let attribute = Self {
             file,
             offset,
             list_entries,
-        }
+        };
+        attribute.validate_attribute_length()?;
+
+        Ok(attribute)
     }
 
     /// Returns the length of this NTFS Attribute, in bytes.
@@ -400,6 +406,31 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         })
     }
 
+    fn validate_attribute_length(&self) -> Result<()> {
+        let start = self.offset;
+        let end = self.file.record_data().len();
+        let remaining_length = (start..end).len();
+
+        if remaining_length < ATTRIBUTE_HEADER_SIZE {
+            return Err(NtfsError::InvalidAttributeLength {
+                position: self.position(),
+                expected: ATTRIBUTE_HEADER_SIZE,
+                actual: remaining_length,
+            });
+        }
+
+        let attribute_length = self.attribute_length() as usize;
+        if attribute_length > remaining_length {
+            return Err(NtfsError::InvalidAttributeLength {
+                position: self.position(),
+                expected: attribute_length,
+                actual: remaining_length,
+            });
+        }
+
+        Ok(())
+    }
+
     fn validate_name_sizes(&self) -> Result<()> {
         let start = self.name_offset();
         if start as u32 >= self.attribute_length() {
@@ -581,7 +612,7 @@ impl<'n, 'f> NtfsAttributes<'n, 'f> {
                 }
             }
 
-            let attribute = self.raw_iter.next()?;
+            let attribute = iter_try!(self.raw_iter.next()?);
             if let Ok(NtfsAttributeType::AttributeList) = attribute.ty() {
                 let attribute_list =
                     iter_try!(attribute.structured_value::<T, NtfsAttributeList>(fs));
@@ -659,7 +690,7 @@ pub struct NtfsAttributeItem<'n, 'f> {
 
 impl<'n, 'f> NtfsAttributeItem<'n, 'f> {
     /// Returns the actual [`NtfsAttribute`] structure for this NTFS Attribute.
-    pub fn to_attribute<'i>(&'i self) -> NtfsAttribute<'n, 'i> {
+    pub fn to_attribute<'i>(&'i self) -> Result<NtfsAttribute<'n, 'i>> {
         if let Some(file) = &self.attribute_value_file {
             NtfsAttribute::new(file, self.attribute_offset, self.list_entries.as_ref())
         } else {
@@ -699,7 +730,7 @@ impl<'n, 'f> NtfsAttributesRaw<'n, 'f> {
 }
 
 impl<'n, 'f> Iterator for NtfsAttributesRaw<'n, 'f> {
-    type Item = NtfsAttribute<'n, 'f>;
+    type Item = Result<NtfsAttribute<'n, 'f>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.items_range.is_empty() {
@@ -714,13 +745,13 @@ impl<'n, 'f> Iterator for NtfsAttributesRaw<'n, 'f> {
         }
 
         // It's a real attribute.
-        let attribute = NtfsAttribute::new(self.file, self.items_range.start, None);
+        let attribute = iter_try!(NtfsAttribute::new(self.file, self.items_range.start, None));
         let length = usize::try_from(attribute.attribute_length()).ok()?;
         if length == 0 {
             return None;
         }
         self.items_range.start += length;
-        Some(attribute)
+        Some(Ok(attribute))
     }
 }
 

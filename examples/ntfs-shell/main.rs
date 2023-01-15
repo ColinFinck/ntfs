@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 mod sector_reader;
@@ -119,6 +119,7 @@ where
 
     let attributes = file.attributes_raw();
     for attribute in attributes {
+        let attribute = attribute?;
         let ty = attribute.ty()?;
 
         attr_print_attribute(
@@ -340,7 +341,7 @@ where
     let mut attributes = file.attributes();
     while let Some(attribute_item) = attributes.next(&mut info.fs) {
         let attribute_item = attribute_item?;
-        let attribute = attribute_item.to_attribute();
+        let attribute = attribute_item.to_attribute()?;
 
         match attribute.ty() {
             Ok(NtfsAttributeType::StandardInformation) => fileinfo_std(attribute)?,
@@ -517,7 +518,7 @@ where
         }
     };
     let data_item = data_item?;
-    let data_attribute = data_item.to_attribute();
+    let data_attribute = data_item.to_attribute()?;
     let mut data_value = data_attribute.value(&mut info.fs)?;
 
     println!(

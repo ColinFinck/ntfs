@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::mem;
@@ -277,15 +277,7 @@ impl NtfsAttributeListEntry {
         let instance = self.instance();
         let ty = self.ty()?;
 
-        file.attributes_raw()
-            .find(|attribute| {
-                attribute.instance() == instance
-                    && attribute.ty().map(|attr_ty| attr_ty == ty).unwrap_or(false)
-            })
-            .ok_or(NtfsError::AttributeNotFound {
-                position: file.position(),
-                ty,
-            })
+        file.find_resident_attribute(ty, None, Some(instance))
     }
 
     /// Reads the entire File Record referenced by this attribute and returns it.
