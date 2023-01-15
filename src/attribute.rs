@@ -252,13 +252,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
 
         let start = self.offset + self.name_offset() as usize;
         let end = start + self.name_length();
-        let string = NtfsString(&self.file.record_data().get(start..end).ok_or(
-            NtfsError::InvalidAttributeNameRange {
-                position: self.position(),
-                range: start..end,
-                size: self.file.record_data().len(),
-            },
-        )?);
+        let string = NtfsString(&self.file.record_data()[start..end]);
 
         Ok(string)
     }
