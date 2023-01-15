@@ -733,13 +733,13 @@ impl<'n, 'f> Iterator for NtfsAttributesRaw<'n, 'f> {
     type Item = Result<NtfsAttribute<'n, 'f>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.items_range.is_empty() {
-            return None;
-        }
-
         // This may be an entire attribute or just the 4-byte end marker.
         // Check if this marks the end of the attribute list.
-        let ty = LittleEndian::read_u32(&self.file.record_data()[self.items_range.start..]);
+        let start = self.items_range.start;
+        let end = start + mem::size_of::<u32>();
+        let ty_slice = self.file.record_data().get(start..end)?;
+
+        let ty = LittleEndian::read_u32(ty_slice);
         if ty == NtfsAttributeType::End as u32 {
             return None;
         }
