@@ -170,12 +170,6 @@ pub enum NtfsError {
         range: Range<usize>,
         size: usize,
     },
-    /// The NTFS Resident Value at byte position {position:#x} references a data field in the range {range:?}, but the entry only has a size of {size} bytes
-    InvalidResidentValueRange {
-        position: NtfsPosition,
-        range: Range<usize>,
-        size: usize,
-    },
     /// The NTFS Attribute name at byte position {position:#x} references a data field in the range {range:?}, but the entry only has a size of {size} bytes
     InvalidAttributeNameRange {
         position: NtfsPosition,
