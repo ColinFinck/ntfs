@@ -125,10 +125,11 @@ pub enum NtfsError {
         range: Range<usize>,
         size: usize,
     },
-    /// The resident NTFS Attribute at byte position {position:#x} indicates a value length up to offset {expected}, but the attribute only has a size of {actual} bytes
+    /// The resident NTFS Attribute at byte position {position:#x} indicates a value length of {length} starting at offset {offset}, but the attribute only has a size of {actual} bytes
     InvalidResidentAttributeValueLength {
         position: NtfsPosition,
-        expected: u32,
+        length: u32,
+        offset: u16,
         actual: u32,
     },
     /// The resident NTFS Attribute at byte position {position:#x} indicates that its value starts at offset {expected}, but the attribute only has a size of {actual} bytes

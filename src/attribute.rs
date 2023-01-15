@@ -445,21 +445,34 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
     fn validate_resident_value_sizes(&self) -> Result<()> {
         debug_assert!(self.is_resident());
 
+        let position = self.position();
+        let attribute_length = self.attribute_length();
+
         let start = self.resident_value_offset();
-        if start as u32 > self.attribute_length() {
+        if start as u32 > attribute_length {
             return Err(NtfsError::InvalidResidentAttributeValueOffset {
-                position: self.position(),
+                position,
                 expected: start,
-                actual: self.attribute_length(),
+                actual: attribute_length,
             });
         }
 
-        let end = u32::from(start).saturating_add(self.resident_value_length());
-        if end > self.attribute_length() {
+        let length = self.resident_value_length();
+
+        let end = u32::from(start).checked_add(length).ok_or(
+            NtfsError::InvalidResidentAttributeValueLength {
+                position,
+                length,
+                offset: start,
+                actual: attribute_length,
+            },
+        )?;
+        if end > attribute_length {
             return Err(NtfsError::InvalidResidentAttributeValueLength {
-                position: self.position(),
-                expected: end,
-                actual: self.attribute_length(),
+                position,
+                length,
+                offset: start,
+                actual: attribute_length,
             });
         }
 
