@@ -119,6 +119,12 @@ pub enum NtfsError {
     },
     /// The MFT LCN in the BIOS Parameter Block of the NTFS filesystem is invalid.
     InvalidMftLcn,
+    /// The NTFS Non Resident Value Data at byte position {position:#x} references a data field in the range {range:?}, but the entry only has a size of {size} bytes
+    InvalidNonResidentValueDataRange {
+        position: NtfsPosition,
+        range: Range<usize>,
+        size: usize,
+    },
     /// The resident NTFS Attribute at byte position {position:#x} indicates a value length up to offset {expected}, but the attribute only has a size of {actual} bytes
     InvalidResidentAttributeValueLength {
         position: NtfsPosition,
@@ -152,23 +158,17 @@ pub enum NtfsError {
     },
     /// The Upcase Table should have a size of {expected} bytes, but it has {actual} bytes
     InvalidUpcaseTableSize { expected: u64, actual: u64 },
-    /// The VCN {vcn} read from the NTFS Data Run header at byte position {position:#x} cannot be added to the LCN {previous_lcn} calculated from previous data runs
-    InvalidVcnInDataRunHeader {
-        position: NtfsPosition,
-        vcn: Vcn,
-        previous_lcn: Lcn,
-    },
-    /// The NTFS Non Resident Value Data at byte position {position:#x} references a data field in the range {range:?}, but the entry only has a size of {size} bytes
-    InvalidNonResidentValueDataRange {
-        position: NtfsPosition,
-        range: Range<usize>,
-        size: usize,
-    },
     /// The NTFS Update Sequence Number at byte position {position:#x} references a data field in the range {range:?}, but the entry only has a size of {size} bytes
     InvalidUpdateSequenceNumberRange {
         position: NtfsPosition,
         range: Range<usize>,
         size: usize,
+    },
+    /// The VCN {vcn} read from the NTFS Data Run header at byte position {position:#x} cannot be added to the LCN {previous_lcn} calculated from previous data runs
+    InvalidVcnInDataRunHeader {
+        position: NtfsPosition,
+        vcn: Vcn,
+        previous_lcn: Lcn,
     },
     /// I/O error: {0:?}
     Io(binread::io::Error),
