@@ -409,6 +409,14 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         }
 
         let attribute_length = self.attribute_length() as usize;
+        if attribute_length < ATTRIBUTE_HEADER_SIZE {
+            return Err(NtfsError::InvalidAttributeLength {
+                position: self.position(),
+                expected: ATTRIBUTE_HEADER_SIZE,
+                actual: attribute_length,
+            });
+        }
+
         if attribute_length > remaining_length {
             return Err(NtfsError::InvalidAttributeLength {
                 position: self.position(),
