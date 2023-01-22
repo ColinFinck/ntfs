@@ -192,7 +192,7 @@ impl NtfsAttributeListEntry {
             name: ArrayVec::from([0u8; NAME_MAX_SIZE]),
             position,
         };
-        entry.validate_name_length()?;
+        entry.validate_entry_and_name_length()?;
         entry.read_name(r)?;
 
         Ok(entry)
@@ -298,7 +298,7 @@ impl NtfsAttributeListEntry {
         })
     }
 
-    fn validate_name_length(&self) -> Result<()> {
+    fn validate_entry_and_name_length(&self) -> Result<()> {
         let total_size = ATTRIBUTE_LIST_ENTRY_HEADER_SIZE + self.name_length();
 
         if total_size > self.list_entry_length() as usize {
