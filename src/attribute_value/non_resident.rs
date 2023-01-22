@@ -99,7 +99,7 @@ impl<'n, 'f> NtfsNonResidentAttributeValue<'n, 'f> {
             None => return Ok(false),
         };
         let stream_data_run = stream_data_run?;
-        self.stream_state.set_stream_data_run(stream_data_run);
+        self.stream_state.set_stream_data_run(Some(stream_data_run));
 
         Ok(true)
     }
@@ -177,6 +177,7 @@ impl<'n, 'f> NtfsReadSeek for NtfsNonResidentAttributeValue<'n, 'f> {
                 continue;
             } else {
                 // We seeked as far as we could.
+                self.stream_state.set_stream_data_run(None);
                 break;
             }
         }
@@ -697,8 +698,8 @@ impl StreamState {
         }
     }
 
-    pub(crate) fn set_stream_data_run(&mut self, stream_data_run: NtfsDataRun) {
-        self.stream_data_run = Some(stream_data_run);
+    pub(crate) fn set_stream_data_run(&mut self, stream_data_run: Option<NtfsDataRun>) {
+        self.stream_data_run = stream_data_run;
     }
 
     pub(crate) fn set_stream_position(&mut self, stream_position: u64) {
