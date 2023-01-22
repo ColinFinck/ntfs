@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 //! This module implements a reader for a value that is already in memory and can therefore be accessed via a slice.
@@ -96,5 +96,89 @@ impl<'f> NtfsReadSeek for NtfsResidentAttributeValue<'f> {
 
     fn stream_position(&self) -> u64 {
         self.stream_position
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use binread::io::SeekFrom;
+
+    use crate::indexes::NtfsFileNameIndex;
+    use crate::ntfs::Ntfs;
+    use crate::traits::NtfsReadSeek;
+
+    #[test]
+    fn test_read_and_seek() {
+        let mut testfs1 = crate::helpers::tests::testfs1();
+        let mut ntfs = Ntfs::new(&mut testfs1).unwrap();
+        ntfs.read_upcase_table(&mut testfs1).unwrap();
+        let root_dir = ntfs.root_directory(&mut testfs1).unwrap();
+
+        // Find the "file-with-12345".
+        let root_dir_index = root_dir.directory_index(&mut testfs1).unwrap();
+        let mut root_dir_finder = root_dir_index.finder();
+        let entry =
+            NtfsFileNameIndex::find(&mut root_dir_finder, &ntfs, &mut testfs1, "file-with-12345")
+                .unwrap()
+                .unwrap();
+        let file = entry.to_file(&ntfs, &mut testfs1).unwrap();
+
+        // Get its data attribute.
+        let data_attribute_item = file.data(&mut testfs1, "").unwrap().unwrap();
+        let data_attribute = data_attribute_item.to_attribute().unwrap();
+        assert_eq!(data_attribute.value_length(), 5);
+
+        let mut data_attribute_value = data_attribute.value(&mut testfs1).unwrap();
+        assert_eq!(data_attribute_value.stream_position(), 0);
+        assert_eq!(data_attribute_value.len(), 5);
+
+        // TEST READING
+        let data_position_before = data_attribute_value.data_position().value().unwrap();
+
+        // We have a 6 bytes buffer, but the file is only 5 bytes long.
+        // The last byte should be untouched.
+        let mut buf = [0xCCu8; 6];
+        let bytes_read = data_attribute_value.read(&mut testfs1, &mut buf).unwrap();
+        assert_eq!(bytes_read, 5);
+        assert_eq!(buf, [b'1', b'2', b'3', b'4', b'5', 0xCC]);
+
+        // The internal position should have stopped directly after the last byte of the file,
+        // and must also yield a valid data position.
+        assert_eq!(data_attribute_value.stream_position(), 5);
+
+        let data_position_after = data_attribute_value.data_position().value().unwrap();
+        assert_eq!(
+            data_position_after,
+            data_position_before.checked_add(5).unwrap()
+        );
+
+        // TEST SEEKING
+        // A seek to the beginning should yield the data position before the read.
+        data_attribute_value
+            .seek(&mut testfs1, SeekFrom::Start(0))
+            .unwrap();
+        assert_eq!(data_attribute_value.stream_position(), 0);
+        assert_eq!(
+            data_attribute_value.data_position().value().unwrap(),
+            data_position_before
+        );
+
+        // A seek to one byte after the last read byte should yield the data position
+        // after the read.
+        data_attribute_value
+            .seek(&mut testfs1, SeekFrom::Start(5))
+            .unwrap();
+        assert_eq!(data_attribute_value.stream_position(), 5);
+        assert_eq!(
+            data_attribute_value.data_position().value().unwrap(),
+            data_position_after
+        );
+
+        // A seek beyond the size of the data must yield no valid data position.
+        data_attribute_value
+            .seek(&mut testfs1, SeekFrom::Start(6))
+            .unwrap();
+        assert_eq!(data_attribute_value.stream_position(), 6);
+        assert_eq!(data_attribute_value.data_position().value(), None);
     }
 }
