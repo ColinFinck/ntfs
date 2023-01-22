@@ -55,6 +55,11 @@ pub enum NtfsError {
     },
     /// The NTFS Data Run cluster count {cluster_count} is too big to be multiplied by the cluster size
     InvalidClusterCount { cluster_count: u64 },
+    /// The cluster count {cluster_count} read from the NTFS Data Run header at byte position {position:#x} is invalid
+    InvalidClusterCountInDataRunHeader {
+        position: NtfsPosition,
+        cluster_count: u64,
+    },
     /// The NTFS File Record at byte position {position:#x} indicates an allocated size of {expected} bytes, but the record only has a size of {actual} bytes
     InvalidFileAllocatedSize {
         position: NtfsPosition,

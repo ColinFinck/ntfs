@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 //! This module implements a reader for a non-resident attribute value (that is not part of an Attribute List).
@@ -380,6 +380,12 @@ impl<'n, 'f> Iterator for NtfsDataRuns<'n, 'f> {
         let cluster_count = iter_try!(
             self.read_variable_length_unsigned_integer(&mut cursor, cluster_count_byte_count)
         );
+        if cluster_count == 0 {
+            return Some(Err(NtfsError::InvalidClusterCountInDataRunHeader {
+                position: NtfsDataRuns::position(self),
+                cluster_count,
+            }));
+        }
 
         // The upper nibble indicates the length of the following VCN variable length integer.
         let vcn_byte_count = (header & 0xf0) >> 4;
