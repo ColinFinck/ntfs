@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::cmp::Ordering;
@@ -54,12 +54,12 @@ where
         index_root_item: NtfsAttributeItem<'n, 'f>,
         index_allocation_item: Option<NtfsAttributeItem<'n, 'f>>,
     ) -> Result<Self> {
-        let index_root_attribute = index_root_item.to_attribute();
+        let index_root_attribute = index_root_item.to_attribute()?;
         index_root_attribute.ensure_ty(NtfsAttributeType::IndexRoot)?;
         let index_root = index_root_attribute.resident_structured_value::<NtfsIndexRoot>()?;
 
         if let Some(item) = &index_allocation_item {
-            let attribute = item.to_attribute();
+            let attribute = item.to_attribute()?;
             attribute.ensure_ty(NtfsAttributeType::IndexAllocation)?;
         } else if index_root.is_large_index() {
             return Err(NtfsError::MissingIndexAllocation {
@@ -169,7 +169,8 @@ where
                                 position: self.index.index_root_position,
                             }
                         ));
-                    let index_allocation_attribute = index_allocation_item.to_attribute();
+                    let index_allocation_attribute =
+                        iter_try!(index_allocation_item.to_attribute());
                     let index_allocation =
                         iter_try!(index_allocation_attribute
                             .structured_value::<_, NtfsIndexAllocation>(fs));
@@ -304,7 +305,7 @@ where
                     position: self.index.index_root_position,
                 }
             ));
-            let index_allocation_attribute = index_allocation_item.to_attribute();
+            let index_allocation_attribute = iter_try!(index_allocation_item.to_attribute());
             let index_allocation = iter_try!(
                 index_allocation_attribute.structured_value::<_, NtfsIndexAllocation>(fs)
             );

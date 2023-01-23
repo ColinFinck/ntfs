@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::mem;
@@ -166,9 +166,8 @@ impl<'n, 'f> NtfsAttributeListEntries<'n, 'f> {
 
         // Advance our iterator to the next entry.
         let bytes_to_advance = entry.list_entry_length() as usize;
-        *slice = &slice[bytes_to_advance..];
+        *slice = slice.get(bytes_to_advance..)?;
         *position += bytes_to_advance;
-
         Some(Ok(entry))
     }
 }
@@ -193,7 +192,7 @@ impl NtfsAttributeListEntry {
             name: ArrayVec::from([0u8; NAME_MAX_SIZE]),
             position,
         };
-        entry.validate_name_length()?;
+        entry.validate_entry_and_name_length()?;
         entry.read_name(r)?;
 
         Ok(entry)
@@ -278,15 +277,7 @@ impl NtfsAttributeListEntry {
         let instance = self.instance();
         let ty = self.ty()?;
 
-        file.attributes_raw()
-            .find(|attribute| {
-                attribute.instance() == instance
-                    && attribute.ty().map(|attr_ty| attr_ty == ty).unwrap_or(false)
-            })
-            .ok_or(NtfsError::AttributeNotFound {
-                position: file.position(),
-                ty,
-            })
+        file.find_resident_attribute(ty, None, Some(instance))
     }
 
     /// Reads the entire File Record referenced by this attribute and returns it.
@@ -307,7 +298,7 @@ impl NtfsAttributeListEntry {
         })
     }
 
-    fn validate_name_length(&self) -> Result<()> {
+    fn validate_entry_and_name_length(&self) -> Result<()> {
         let total_size = ATTRIBUTE_LIST_ENTRY_HEADER_SIZE + self.name_length();
 
         if total_size > self.list_entry_length() as usize {

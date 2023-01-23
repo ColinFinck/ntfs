@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 //! This module implements a reader for a non-resident attribute value (that is not part of an Attribute List).
@@ -99,7 +99,7 @@ impl<'n, 'f> NtfsNonResidentAttributeValue<'n, 'f> {
             None => return Ok(false),
         };
         let stream_data_run = stream_data_run?;
-        self.stream_state.set_stream_data_run(stream_data_run);
+        self.stream_state.set_stream_data_run(Some(stream_data_run));
 
         Ok(true)
     }
@@ -177,6 +177,7 @@ impl<'n, 'f> NtfsReadSeek for NtfsNonResidentAttributeValue<'n, 'f> {
                 continue;
             } else {
                 // We seeked as far as we could.
+                self.stream_state.set_stream_data_run(None);
                 break;
             }
         }
@@ -380,6 +381,12 @@ impl<'n, 'f> Iterator for NtfsDataRuns<'n, 'f> {
         let cluster_count = iter_try!(
             self.read_variable_length_unsigned_integer(&mut cursor, cluster_count_byte_count)
         );
+        if cluster_count == 0 {
+            return Some(Err(NtfsError::InvalidClusterCountInDataRunHeader {
+                position: NtfsDataRuns::position(self),
+                cluster_count,
+            }));
+        }
 
         // The upper nibble indicates the length of the following VCN variable length integer.
         let vcn_byte_count = (header & 0xf0) >> 4;
@@ -638,9 +645,12 @@ impl StreamState {
 
         // Perform the actual read.
         let bytes_read_in_data_run = data_run.read(fs, &mut buf[start..end])?;
+        if bytes_read_in_data_run == 0 {
+            return Ok(false);
+        }
+
         *bytes_read += bytes_read_in_data_run;
         self.stream_position += bytes_read_in_data_run as u64;
-
         Ok(true)
     }
 
@@ -688,8 +698,8 @@ impl StreamState {
         }
     }
 
-    pub(crate) fn set_stream_data_run(&mut self, stream_data_run: NtfsDataRun) {
-        self.stream_data_run = Some(stream_data_run);
+    pub(crate) fn set_stream_data_run(&mut self, stream_data_run: Option<NtfsDataRun>) {
+        self.stream_data_run = stream_data_run;
     }
 
     pub(crate) fn set_stream_position(&mut self, stream_position: u64) {
@@ -699,5 +709,91 @@ impl StreamState {
     /// Returns the current relative position within the entire value, in bytes.
     pub(crate) fn stream_position(&self) -> u64 {
         self.stream_position
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use binread::io::SeekFrom;
+
+    use crate::indexes::NtfsFileNameIndex;
+    use crate::ntfs::Ntfs;
+    use crate::traits::NtfsReadSeek;
+
+    #[test]
+    fn test_read_and_seek() {
+        let mut testfs1 = crate::helpers::tests::testfs1();
+        let mut ntfs = Ntfs::new(&mut testfs1).unwrap();
+        ntfs.read_upcase_table(&mut testfs1).unwrap();
+        let root_dir = ntfs.root_directory(&mut testfs1).unwrap();
+
+        // Find the "1000-bytes-file".
+        let root_dir_index = root_dir.directory_index(&mut testfs1).unwrap();
+        let mut root_dir_finder = root_dir_index.finder();
+        let entry =
+            NtfsFileNameIndex::find(&mut root_dir_finder, &ntfs, &mut testfs1, "1000-bytes-file")
+                .unwrap()
+                .unwrap();
+        let file = entry.to_file(&ntfs, &mut testfs1).unwrap();
+
+        // Get its data attribute.
+        let data_attribute_item = file.data(&mut testfs1, "").unwrap().unwrap();
+        let data_attribute = data_attribute_item.to_attribute().unwrap();
+        assert_eq!(data_attribute.value_length(), 1000);
+
+        let mut data_attribute_value = data_attribute.value(&mut testfs1).unwrap();
+        assert_eq!(data_attribute_value.stream_position(), 0);
+        assert_eq!(data_attribute_value.len(), 1000);
+
+        // TEST READING
+        let data_position_before = data_attribute_value.data_position().value().unwrap();
+
+        // We have a 1001 bytes buffer, but the file is only 1000 bytes long.
+        // The last byte should be untouched.
+        let mut buf = [0xCCu8; 1001];
+        let bytes_read = data_attribute_value.read(&mut testfs1, &mut buf).unwrap();
+        assert_eq!(bytes_read, 1000);
+        assert_eq!(&buf[..1000], &[b'1', b'2', b'3', b'4', b'5'].repeat(200));
+        assert_eq!(buf[1000], 0xCC);
+
+        // The internal position should have stopped directly after the last byte of the file,
+        // and must also yield a valid data position.
+        assert_eq!(data_attribute_value.stream_position(), 1000);
+
+        let data_position_after = data_attribute_value.data_position().value().unwrap();
+        assert_eq!(
+            data_position_after,
+            data_position_before.checked_add(1000).unwrap()
+        );
+
+        // TEST SEEKING
+        // A seek to the beginning should yield the data position before the read.
+        data_attribute_value
+            .seek(&mut testfs1, SeekFrom::Start(0))
+            .unwrap();
+        assert_eq!(data_attribute_value.stream_position(), 0);
+        assert_eq!(
+            data_attribute_value.data_position().value().unwrap(),
+            data_position_before
+        );
+
+        // A seek to one byte after the last read byte should yield the data position
+        // after the read.
+        data_attribute_value
+            .seek(&mut testfs1, SeekFrom::Start(1000))
+            .unwrap();
+        assert_eq!(data_attribute_value.stream_position(), 1000);
+        assert_eq!(
+            data_attribute_value.data_position().value().unwrap(),
+            data_position_after
+        );
+
+        // A seek beyond the allocated size of the data run (1024 bytes) must yield
+        // no valid data position.
+        data_attribute_value
+            .seek(&mut testfs1, SeekFrom::Start(1026))
+            .unwrap();
+        assert_eq!(data_attribute_value.stream_position(), 1026);
+        assert_eq!(data_attribute_value.data_position().value(), None);
     }
 }

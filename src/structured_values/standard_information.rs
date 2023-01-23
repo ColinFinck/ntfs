@@ -187,7 +187,7 @@ mod tests {
         let mut mft_attributes = mft.attributes_raw();
 
         // Check the StandardInformation attribute of the MFT.
-        let attribute = mft_attributes.nth(0).unwrap();
+        let attribute = mft_attributes.nth(0).unwrap().unwrap();
         assert_eq!(
             attribute.ty().unwrap(),
             NtfsAttributeType::StandardInformation,

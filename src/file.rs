@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::cmp::Ordering;
@@ -10,7 +10,9 @@ use bitflags::bitflags;
 use byteorder::{ByteOrder, LittleEndian};
 use memoffset::offset_of;
 
-use crate::attribute::{NtfsAttributeItem, NtfsAttributeType, NtfsAttributes, NtfsAttributesRaw};
+use crate::attribute::{
+    NtfsAttribute, NtfsAttributeItem, NtfsAttributeType, NtfsAttributes, NtfsAttributesRaw,
+};
 use crate::error::{NtfsError, Result};
 use crate::file_reference::NtfsFileReference;
 use crate::index::NtfsIndex;
@@ -215,7 +217,7 @@ impl<'n> NtfsFile<'n> {
 
         while let Some(item) = iter.next(fs) {
             let item = iter_try!(item);
-            let attribute = item.to_attribute();
+            let attribute = iter_try!(item.to_attribute());
 
             let ty = iter_try!(attribute.ty());
             if ty != NtfsAttributeType::Data {
@@ -268,7 +270,7 @@ impl<'n> NtfsFile<'n> {
         // The IndexRoot attribute is always resident and has to exist for every directory.
         let index_root_item =
             self.find_attribute(fs, NtfsAttributeType::IndexRoot, Some(directory_index_name))?;
-        let index_root_attribute = index_root_item.to_attribute();
+        let index_root_attribute = index_root_item.to_attribute()?;
         let index_root = index_root_attribute.resident_structured_value::<NtfsIndexRoot>()?;
 
         // The IndexAllocation attribute is only required for "large" indexes.
@@ -310,7 +312,7 @@ impl<'n> NtfsFile<'n> {
 
         while let Some(item) = iter.next(fs) {
             let item = item?;
-            let attribute = item.to_attribute();
+            let attribute = item.to_attribute()?;
 
             if attribute.ty()? != ty {
                 continue;
@@ -323,6 +325,48 @@ impl<'n> NtfsFile<'n> {
             }
 
             return Ok(item);
+        }
+
+        Err(NtfsError::AttributeNotFound {
+            position: self.position(),
+            ty,
+        })
+    }
+
+    /// Finds a resident attribute of a specific type, optionally with a specific name and/or a specific
+    /// instance identifier, and returns it.
+    /// Returns [`NtfsError::AttributeNotFound`] if no such resident attribute could be found.
+    ///
+    /// The attribute type is given through the passed structured value type parameter.
+    ///
+    /// Note that this function DOES NOT traverse Attribute Lists!
+    pub(crate) fn find_resident_attribute<'f>(
+        &'f self,
+        ty: NtfsAttributeType,
+        match_name: Option<&str>,
+        match_instance: Option<u16>,
+    ) -> Result<NtfsAttribute<'n, 'f>> {
+        // Resident attributes are always stored on the top-level (we don't have to dig into Attribute Lists).
+        for attribute in self.attributes_raw() {
+            let attribute = attribute?;
+
+            if attribute.ty()? != ty {
+                continue;
+            }
+
+            if let Some(instance) = match_instance {
+                if attribute.instance() != instance {
+                    continue;
+                }
+            }
+
+            if let Some(name) = match_name {
+                if attribute.name()? != name {
+                    continue;
+                }
+            }
+
+            return Ok(attribute);
         }
 
         Err(NtfsError::AttributeNotFound {
@@ -344,25 +388,7 @@ impl<'n> NtfsFile<'n> {
     where
         S: NtfsStructuredValueFromResidentAttributeValue<'n, 'f>,
     {
-        // Resident attributes are always stored on the top-level (we don't have to dig into Attribute Lists).
-        let attribute = self
-            .attributes_raw()
-            .find(|attribute| {
-                // TODO: Replace by attribute.ty().contains() once https://github.com/rust-lang/rust/issues/62358 has landed.
-                let ty_matches = attribute.ty().map(|x| x == S::TY).unwrap_or(false);
-
-                let name_matches = if let Some(name) = match_name {
-                    attribute.name().map(|x| x == name).unwrap_or(false)
-                } else {
-                    true
-                };
-
-                ty_matches && name_matches
-            })
-            .ok_or(NtfsError::AttributeNotFound {
-                position: self.position(),
-                ty: S::TY,
-            })?;
+        let attribute = self.find_resident_attribute(S::TY, match_name, None)?;
         attribute.resident_structured_value::<S>()
     }
 
@@ -418,7 +444,7 @@ impl<'n> NtfsFile<'n> {
 
         while let Some(item) = iter.next(fs) {
             let item = iter_try!(item);
-            let attribute = item.to_attribute();
+            let attribute = iter_try!(item.to_attribute());
 
             let ty = iter_try!(attribute.ty());
             if ty != NtfsAttributeType::FileName {

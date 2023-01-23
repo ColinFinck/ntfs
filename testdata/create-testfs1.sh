@@ -16,15 +16,13 @@ cd mnt
 # Create a file with a specific modification time that we can check.
 touch -m -t 202101011337 empty-file
 
-# Create some zeroed files, as allocated and sparse files.
-dd if=/dev/zero of=file-with-5-zeros bs=1 count=5
-dd if=/dev/zero of=big-sparse-file skip=5M bs=1 count=1
+# Create a 5-bytes file with resident data.
+echo -n 12345 > file-with-12345
 
-# Create subdirectories of subdirectories.
-mkdir -p subdir/subsubdir
-
-# Create a file with some basic real content.
-echo abcdef > subdir/subsubdir/file-with-6-letters
+# Create a 1000-bytes file with non-resident data.
+for i in {1..200}; do
+    echo -n 12345 >> 1000-bytes-file
+done
 
 # Create so many directories that the filesystem needs an INDEX_ROOT and INDEX_ALLOCATION.
 mkdir many_subdirs

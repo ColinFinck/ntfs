@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::iter::FusedIterator;
@@ -24,6 +24,9 @@ use crate::structured_values::{
     NtfsStructuredValueFromResidentAttributeValue,
 };
 use crate::types::{NtfsPosition, Vcn};
+
+/// Size of all [`NtfsAttributeHeader`] fields.
+const ATTRIBUTE_HEADER_SIZE: usize = 16;
 
 /// On-disk structure of the generic header of an NTFS Attribute.
 #[repr(C, packed)]
@@ -180,12 +183,15 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         file: &'f NtfsFile<'n>,
         offset: usize,
         list_entries: Option<&'f NtfsAttributeListEntries<'n, 'f>>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        let attribute = Self {
             file,
             offset,
             list_entries,
-        }
+        };
+        attribute.validate_attribute_length()?;
+
+        Ok(attribute)
     }
 
     /// Returns the length of this NTFS Attribute, in bytes.
@@ -268,7 +274,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
     }
 
     pub(crate) fn non_resident_value(&self) -> Result<NtfsNonResidentAttributeValue<'n, 'f>> {
-        let (data, position) = self.non_resident_value_data_and_position();
+        let (data, position) = self.non_resident_value_data_and_position()?;
 
         NtfsNonResidentAttributeValue::new(
             self.file.ntfs(),
@@ -278,14 +284,19 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         )
     }
 
-    pub(crate) fn non_resident_value_data_and_position(&self) -> (&'f [u8], NtfsPosition) {
+    pub(crate) fn non_resident_value_data_and_position(&self) -> Result<(&'f [u8], NtfsPosition)> {
         debug_assert!(!self.is_resident());
         let start = self.offset + self.non_resident_value_data_runs_offset() as usize;
         let end = self.offset + self.attribute_length() as usize;
-        let data = &self.file.record_data()[start..end];
         let position = self.file.position() + start;
-
-        (data, position)
+        let data = &self.file.record_data().get(start..end).ok_or(
+            NtfsError::InvalidNonResidentValueDataRange {
+                position,
+                range: start..end,
+                size: self.file.record_data().len(),
+            },
+        )?;
+        Ok((data, position))
     }
 
     fn non_resident_value_data_size(&self) -> u64 {
@@ -384,6 +395,39 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         })
     }
 
+    fn validate_attribute_length(&self) -> Result<()> {
+        let start = self.offset;
+        let end = self.file.record_data().len();
+        let remaining_length = (start..end).len();
+
+        if remaining_length < ATTRIBUTE_HEADER_SIZE {
+            return Err(NtfsError::InvalidAttributeLength {
+                position: self.position(),
+                expected: ATTRIBUTE_HEADER_SIZE,
+                actual: remaining_length,
+            });
+        }
+
+        let attribute_length = self.attribute_length() as usize;
+        if attribute_length < ATTRIBUTE_HEADER_SIZE {
+            return Err(NtfsError::InvalidAttributeLength {
+                position: self.position(),
+                expected: ATTRIBUTE_HEADER_SIZE,
+                actual: attribute_length,
+            });
+        }
+
+        if attribute_length > remaining_length {
+            return Err(NtfsError::InvalidAttributeLength {
+                position: self.position(),
+                expected: attribute_length,
+                actual: remaining_length,
+            });
+        }
+
+        Ok(())
+    }
+
     fn validate_name_sizes(&self) -> Result<()> {
         let start = self.name_offset();
         if start as u32 >= self.attribute_length() {
@@ -409,21 +453,34 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
     fn validate_resident_value_sizes(&self) -> Result<()> {
         debug_assert!(self.is_resident());
 
+        let position = self.position();
+        let attribute_length = self.attribute_length();
+
         let start = self.resident_value_offset();
-        if start as u32 > self.attribute_length() {
+        if start as u32 > attribute_length {
             return Err(NtfsError::InvalidResidentAttributeValueOffset {
-                position: self.position(),
+                position,
                 expected: start,
-                actual: self.attribute_length(),
+                actual: attribute_length,
             });
         }
 
-        let end = start as u32 + self.resident_value_length();
-        if end > self.attribute_length() {
+        let length = self.resident_value_length();
+
+        let end = u32::from(start).checked_add(length).ok_or(
+            NtfsError::InvalidResidentAttributeValueLength {
+                position,
+                length,
+                offset: start,
+                actual: attribute_length,
+            },
+        )?;
+        if end > attribute_length {
             return Err(NtfsError::InvalidResidentAttributeValueLength {
-                position: self.position(),
-                expected: end,
-                actual: self.attribute_length(),
+                position,
+                length,
+                offset: start,
+                actual: attribute_length,
             });
         }
 
@@ -565,7 +622,7 @@ impl<'n, 'f> NtfsAttributes<'n, 'f> {
                 }
             }
 
-            let attribute = self.raw_iter.next()?;
+            let attribute = iter_try!(self.raw_iter.next()?);
             if let Ok(NtfsAttributeType::AttributeList) = attribute.ty() {
                 let attribute_list =
                     iter_try!(attribute.structured_value::<T, NtfsAttributeList>(fs));
@@ -643,7 +700,7 @@ pub struct NtfsAttributeItem<'n, 'f> {
 
 impl<'n, 'f> NtfsAttributeItem<'n, 'f> {
     /// Returns the actual [`NtfsAttribute`] structure for this NTFS Attribute.
-    pub fn to_attribute<'i>(&'i self) -> NtfsAttribute<'n, 'i> {
+    pub fn to_attribute<'i>(&'i self) -> Result<NtfsAttribute<'n, 'i>> {
         if let Some(file) = &self.attribute_value_file {
             NtfsAttribute::new(file, self.attribute_offset, self.list_entries.as_ref())
         } else {
@@ -683,25 +740,25 @@ impl<'n, 'f> NtfsAttributesRaw<'n, 'f> {
 }
 
 impl<'n, 'f> Iterator for NtfsAttributesRaw<'n, 'f> {
-    type Item = NtfsAttribute<'n, 'f>;
+    type Item = Result<NtfsAttribute<'n, 'f>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.items_range.is_empty() {
-            return None;
-        }
-
         // This may be an entire attribute or just the 4-byte end marker.
         // Check if this marks the end of the attribute list.
-        let ty = LittleEndian::read_u32(&self.file.record_data()[self.items_range.start..]);
+        let start = self.items_range.start;
+        let end = start + mem::size_of::<u32>();
+        let ty_slice = self.file.record_data().get(start..end)?;
+
+        let ty = LittleEndian::read_u32(ty_slice);
         if ty == NtfsAttributeType::End as u32 {
             return None;
         }
 
         // It's a real attribute.
-        let attribute = NtfsAttribute::new(self.file, self.items_range.start, None);
+        let attribute = iter_try!(NtfsAttribute::new(self.file, self.items_range.start, None));
         self.items_range.start += attribute.attribute_length() as usize;
 
-        Some(attribute)
+        Some(Ok(attribute))
     }
 }
 
@@ -730,7 +787,7 @@ mod tests {
         let empty_file = entry.to_file(&ntfs, &mut testfs1).unwrap();
 
         let data_attribute_item = empty_file.data(&mut testfs1, "").unwrap().unwrap();
-        let data_attribute = data_attribute_item.to_attribute();
+        let data_attribute = data_attribute_item.to_attribute().unwrap();
         assert_eq!(data_attribute.value_length(), 0);
 
         let mut data_attribute_value = data_attribute.value(&mut testfs1).unwrap();

@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use binread::io::{Read, Seek, SeekFrom};
@@ -95,18 +95,8 @@ impl Ntfs {
         //
         // This unwrap is safe, because `self.mft_position` has been checked in `Ntfs::new`.
         let mft = NtfsFile::new(self, fs, self.mft_position.value().unwrap(), 0)?;
-        let mft_data_attribute = mft
-            .attributes_raw()
-            .find(|attribute| {
-                attribute
-                    .ty()
-                    .map(|ty| ty == NtfsAttributeType::Data)
-                    .unwrap_or(false)
-            })
-            .ok_or(NtfsError::AttributeNotFound {
-                position: self.mft_position,
-                ty: NtfsAttributeType::Data,
-            })?;
+        let mft_data_attribute =
+            mft.find_resident_attribute(NtfsAttributeType::Data, None, None)?;
         let mut mft_data_value = mft_data_attribute.value(fs)?;
 
         mft_data_value.seek(fs, SeekFrom::Start(offset))?;

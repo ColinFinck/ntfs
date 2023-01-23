@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 // It is important to note that `NtfsAttributeListNonResidentAttributeValue` can't just encapsulate `NtfsNonResidentAttributeValue` and provide one
@@ -104,8 +104,8 @@ impl<'n, 'f> NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
             &attribute_state.file,
             attribute_state.attribute_offset,
             None,
-        );
-        let (data, position) = attribute.non_resident_value_data_and_position();
+        )?;
+        let (data, position) = attribute.non_resident_value_data_and_position()?;
         let mut stream_data_runs =
             NtfsDataRuns::from_state(self.ntfs, data, position, data_runs_state);
 
@@ -115,7 +115,7 @@ impl<'n, 'f> NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
             None => return Ok(false),
         };
         let stream_data_run = stream_data_run?;
-        self.stream_state.set_stream_data_run(stream_data_run);
+        self.stream_state.set_stream_data_run(Some(stream_data_run));
 
         // We got another Data Run, so serialize the updated `NtfsDataRuns` state for the next iteration.
         // This step is skipped when we got no Data Run, because it means we have fully iterated this iterator (and hence also the attribute and file).
@@ -149,7 +149,7 @@ impl<'n, 'f> NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
         }
 
         // Get an `NtfsDataRuns` iterator for iterating through the attribute value's data runs.
-        let (data, position) = attribute.non_resident_value_data_and_position();
+        let (data, position) = attribute.non_resident_value_data_and_position()?;
         let mut stream_data_runs = NtfsDataRuns::new(self.ntfs, data, position);
 
         // Get the first Data Run already here to save time and let `data_position` return something meaningful.
@@ -158,7 +158,7 @@ impl<'n, 'f> NtfsAttributeListNonResidentAttributeValue<'n, 'f> {
             None => return Ok(false),
         };
         let stream_data_run = stream_data_run?;
-        self.stream_state.set_stream_data_run(stream_data_run);
+        self.stream_state.set_stream_data_run(Some(stream_data_run));
 
         // Store the `NtfsFile` and serialize the `NtfsDataRuns` state for a later iteration.
         let data_runs_state = Some(stream_data_runs.into_state());
@@ -260,6 +260,7 @@ impl<'n, 'f> NtfsReadSeek for NtfsAttributeListNonResidentAttributeValue<'n, 'f>
                 continue;
             } else {
                 // We seeked as far as we could.
+                self.stream_state.set_stream_data_run(None);
                 break;
             }
         }

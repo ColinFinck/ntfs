@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::ops::Range;
@@ -29,6 +29,12 @@ pub enum NtfsError {
     },
     /// The given buffer should have at least {expected} bytes, but it only has {actual} bytes
     BufferTooSmall { expected: usize, actual: usize },
+    /// The NTFS Attribute at byte position {position:#x} has a length of {expected} bytes, but only {actual} bytes are left in the record
+    InvalidAttributeLength {
+        position: NtfsPosition,
+        expected: usize,
+        actual: usize,
+    },
     /// The NTFS Attribute at byte position {position:#x} indicates a name length up to offset {expected}, but the attribute only has a size of {actual} bytes
     InvalidAttributeNameLength {
         position: NtfsPosition,
@@ -49,6 +55,11 @@ pub enum NtfsError {
     },
     /// The NTFS Data Run cluster count {cluster_count} is too big to be multiplied by the cluster size
     InvalidClusterCount { cluster_count: u64 },
+    /// The cluster count {cluster_count} read from the NTFS Data Run header at byte position {position:#x} is invalid
+    InvalidClusterCountInDataRunHeader {
+        position: NtfsPosition,
+        cluster_count: u64,
+    },
     /// The NTFS File Record at byte position {position:#x} indicates an allocated size of {expected} bytes, but the record only has a size of {actual} bytes
     InvalidFileAllocatedSize {
         position: NtfsPosition,
@@ -113,10 +124,17 @@ pub enum NtfsError {
     },
     /// The MFT LCN in the BIOS Parameter Block of the NTFS filesystem is invalid.
     InvalidMftLcn,
-    /// The resident NTFS Attribute at byte position {position:#x} indicates a value length up to offset {expected}, but the attribute only has a size of {actual} bytes
+    /// The NTFS Non Resident Value Data at byte position {position:#x} references a data field in the range {range:?}, but the entry only has a size of {size} bytes
+    InvalidNonResidentValueDataRange {
+        position: NtfsPosition,
+        range: Range<usize>,
+        size: usize,
+    },
+    /// The resident NTFS Attribute at byte position {position:#x} indicates a value length of {length} starting at offset {offset}, but the attribute only has a size of {actual} bytes
     InvalidResidentAttributeValueLength {
         position: NtfsPosition,
-        expected: u32,
+        length: u32,
+        offset: u16,
         actual: u32,
     },
     /// The resident NTFS Attribute at byte position {position:#x} indicates that its value starts at offset {expected}, but the attribute only has a size of {actual} bytes
@@ -146,6 +164,12 @@ pub enum NtfsError {
     },
     /// The Upcase Table should have a size of {expected} bytes, but it has {actual} bytes
     InvalidUpcaseTableSize { expected: u64, actual: u64 },
+    /// The NTFS Update Sequence Number at byte position {position:#x} references a data field in the range {range:?}, but the entry only has a size of {size} bytes
+    InvalidUpdateSequenceNumberRange {
+        position: NtfsPosition,
+        range: Range<usize>,
+        size: usize,
+    },
     /// The VCN {vcn} read from the NTFS Data Run header at byte position {position:#x} cannot be added to the LCN {previous_lcn} calculated from previous data runs
     InvalidVcnInDataRunHeader {
         position: NtfsPosition,
