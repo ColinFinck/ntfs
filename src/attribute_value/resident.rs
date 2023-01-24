@@ -126,6 +126,7 @@ mod tests {
         // Get its data attribute.
         let data_attribute_item = file.data(&mut testfs1, "").unwrap().unwrap();
         let data_attribute = data_attribute_item.to_attribute().unwrap();
+        assert!(data_attribute.is_resident());
         assert_eq!(data_attribute.value_length(), 5);
 
         let mut data_attribute_value = data_attribute.value(&mut testfs1).unwrap();
