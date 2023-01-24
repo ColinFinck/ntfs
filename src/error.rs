@@ -53,8 +53,6 @@ pub enum NtfsError {
         expected: u8,
         actual: u8,
     },
-    /// The NTFS Data Run cluster count {cluster_count} is too big to be multiplied by the cluster size
-    InvalidClusterCount { cluster_count: u64 },
     /// The cluster count {cluster_count} read from the NTFS Data Run header at byte position {position:#x} is invalid
     InvalidClusterCountInDataRunHeader {
         position: NtfsPosition,

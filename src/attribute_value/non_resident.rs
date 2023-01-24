@@ -387,6 +387,12 @@ impl<'n, 'f> Iterator for NtfsDataRuns<'n, 'f> {
                 cluster_count,
             }));
         }
+        let allocated_size = iter_try!(cluster_count
+            .checked_mul(self.ntfs.cluster_size() as u64)
+            .ok_or_else(|| NtfsError::InvalidClusterCountInDataRunHeader {
+                position: NtfsDataRuns::position(self),
+                cluster_count,
+            }));
 
         // The upper nibble indicates the length of the following VCN variable length integer.
         let vcn_byte_count = (header & 0xf0) >> 4;
@@ -394,22 +400,30 @@ impl<'n, 'f> Iterator for NtfsDataRuns<'n, 'f> {
             self.read_variable_length_signed_integer(&mut cursor, vcn_byte_count)
         ));
 
-        // Turn the read VCN into an absolute LCN.
-        let lcn = iter_try!(self.state.previous_lcn.checked_add(vcn).ok_or({
-            NtfsError::InvalidVcnInDataRunHeader {
-                position: NtfsDataRuns::position(self),
-                vcn,
-                previous_lcn: self.state.previous_lcn,
-            }
-        }));
-        self.state.previous_lcn = lcn;
+        // The VCN may either indicate "real" data or a sparse Data Run.
+        let position = if vcn.value() != 0 {
+            // This Data Run contains "real" data.
+            // Turn the read VCN into an absolute LCN.
+            let new_lcn = iter_try!(self.state.previous_lcn.checked_add(vcn).ok_or(
+                NtfsError::InvalidVcnInDataRunHeader {
+                    position: NtfsDataRuns::position(self),
+                    vcn,
+                    previous_lcn: self.state.previous_lcn,
+                }
+            ));
+            self.state.previous_lcn = new_lcn;
+            iter_try!(new_lcn.position(self.ntfs))
+        } else {
+            // This is a sparse Data Run.
+            NtfsPosition::none()
+        };
 
         // Only advance after having checked for success.
         // In case of an error, a subsequent call shall output the same error again.
         let bytes_to_advance = cursor.stream_position().unwrap() as usize;
         self.state.offset += bytes_to_advance;
 
-        let data_run = iter_try!(NtfsDataRun::new(self.ntfs, lcn, cluster_count));
+        let data_run = NtfsDataRun::new(position, allocated_size);
         Some(Ok(data_run))
     }
 }
@@ -427,10 +441,10 @@ pub(crate) struct DataRunsState {
 /// A Data Run's size is a multiple of the cluster size configured for the filesystem.
 /// However, a Data Run does not know about the actual size used by data. This information is only available in the corresponding attribute.
 /// Keep this in mind when doing reads and seeks on data runs. You may end up on allocated but unused data.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NtfsDataRun {
     /// Absolute position of the Data Run within the filesystem, in bytes.
-    /// This may be zero if this is a "sparse" Data Run.
+    /// This may be `NtfsPosition(None)` if this is a "sparse" Data Run.
     position: NtfsPosition,
     /// Total allocated size of the Data Run, in bytes.
     /// The actual size used by data may be lower, but a Data Run does not know about that.
@@ -440,17 +454,12 @@ pub struct NtfsDataRun {
 }
 
 impl NtfsDataRun {
-    pub(crate) fn new(ntfs: &Ntfs, lcn: Lcn, cluster_count: u64) -> Result<Self> {
-        let position = lcn.position(ntfs)?;
-        let allocated_size = cluster_count
-            .checked_mul(ntfs.cluster_size() as u64)
-            .ok_or(NtfsError::InvalidClusterCount { cluster_count })?;
-
-        Ok(Self {
+    pub(crate) fn new(position: NtfsPosition, allocated_size: u64) -> Self {
+        Self {
             position,
             allocated_size,
             stream_position: 0,
-        })
+        }
     }
 
     /// Returns the allocated size of the Data Run, in bytes.
@@ -795,5 +804,54 @@ mod tests {
             .unwrap();
         assert_eq!(data_attribute_value.stream_position(), 1026);
         assert_eq!(data_attribute_value.data_position().value(), None);
+    }
+
+    #[test]
+    fn test_sparse_file() {
+        let mut testfs1 = crate::helpers::tests::testfs1();
+        let mut ntfs = Ntfs::new(&mut testfs1).unwrap();
+        ntfs.read_upcase_table(&mut testfs1).unwrap();
+        let root_dir = ntfs.root_directory(&mut testfs1).unwrap();
+
+        // Find the "sparse-file".
+        let root_dir_index = root_dir.directory_index(&mut testfs1).unwrap();
+        let mut root_dir_finder = root_dir_index.finder();
+        let entry =
+            NtfsFileNameIndex::find(&mut root_dir_finder, &ntfs, &mut testfs1, "sparse-file")
+                .unwrap()
+                .unwrap();
+        let file = entry.to_file(&ntfs, &mut testfs1).unwrap();
+
+        // Get its data attribute.
+        let data_attribute_item = file.data(&mut testfs1, "").unwrap().unwrap();
+        let data_attribute = data_attribute_item.to_attribute().unwrap();
+        assert!(!data_attribute.is_resident());
+        assert_eq!(data_attribute.value_length(), 500005);
+
+        // Check its Data Runs.
+        // The first one has data, the second one is sparse, the third one has data again.
+        let non_resident_value = data_attribute.non_resident_value().unwrap();
+        let mut data_runs = non_resident_value.data_runs();
+
+        let first_data_run = data_runs.next().unwrap().unwrap();
+        let second_data_run = data_runs.next().unwrap().unwrap();
+        let third_data_run = data_runs.next().unwrap().unwrap();
+        assert!(data_runs.next().is_none());
+
+        assert!(first_data_run.data_position().value().is_some());
+        assert!(second_data_run.data_position().value().is_none());
+        assert!(third_data_run.data_position().value().is_some());
+
+        // Read the data and validate it.
+        let mut data_attribute_value = data_attribute.value(&mut testfs1).unwrap();
+        assert_eq!(data_attribute_value.stream_position(), 0);
+        assert_eq!(data_attribute_value.len(), 500005);
+
+        let mut buf = vec![0u8; 500005];
+        let bytes_read = data_attribute_value.read(&mut testfs1, &mut buf).unwrap();
+        assert_eq!(bytes_read, 500005);
+        assert_eq!(buf[..5], [b'1', b'2', b'3', b'4', b'5']);
+        assert_eq!(buf[5..500000], [0u8].repeat(499995));
+        assert_eq!(buf[500000..500005], [b'1', b'1', b'1', b'1', b'1']);
     }
 }

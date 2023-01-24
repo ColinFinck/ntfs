@@ -24,6 +24,10 @@ for i in {1..200}; do
     echo -n 12345 >> 1000-bytes-file
 done
 
+# Create a sparse file with data at the beginning and at the end.
+echo -n 12345 > sparse-file
+tr '\0' '1' < /dev/zero | dd of=sparse-file seek=500000 bs=1 count=5
+
 # Create so many directories that the filesystem needs an INDEX_ROOT and INDEX_ALLOCATION.
 mkdir many_subdirs
 cd many_subdirs
