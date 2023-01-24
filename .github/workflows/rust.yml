@@ -16,11 +16,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: Format
+      run: cargo fmt --all -- --check
     - name: Clippy
-      run: cargo clippy --verbose
+      run: cargo clippy --workspace --all-targets --all-features --verbose -- -D warnings
     - name: Build no_std
-      run: cargo build --verbose --no-default-features
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+      run: cargo build --workspace --no-default-features --verbose
+    - name: Build std
+      run: cargo build --workspace --all-features --verbose
+    - name: Tests
+      run: cargo test --workspace --all-features --verbose
