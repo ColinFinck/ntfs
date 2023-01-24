@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 //! Supplementary helper types.
@@ -90,7 +90,7 @@ impl fmt::Binary for NtfsPosition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
             Some(position) => fmt::Binary::fmt(&position, f),
-            None => write!(f, "{}", Self::NONE_STR),
+            None => fmt::Display::fmt(Self::NONE_STR, f),
         }
     }
 }
@@ -99,7 +99,7 @@ impl fmt::Display for NtfsPosition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
             Some(position) => fmt::Display::fmt(&position, f),
-            None => write!(f, "{}", Self::NONE_STR),
+            None => fmt::Display::fmt(Self::NONE_STR, f),
         }
     }
 }
@@ -108,7 +108,7 @@ impl fmt::LowerHex for NtfsPosition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
             Some(position) => fmt::LowerHex::fmt(&position, f),
-            None => write!(f, "{}", Self::NONE_STR),
+            None => fmt::Display::fmt(Self::NONE_STR, f),
         }
     }
 }
@@ -117,7 +117,7 @@ impl fmt::Octal for NtfsPosition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
             Some(position) => fmt::Octal::fmt(&position, f),
-            None => write!(f, "{}", Self::NONE_STR),
+            None => fmt::Display::fmt(Self::NONE_STR, f),
         }
     }
 }
@@ -126,7 +126,7 @@ impl fmt::UpperHex for NtfsPosition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
             Some(position) => fmt::UpperHex::fmt(&position, f),
-            None => write!(f, "{}", Self::NONE_STR),
+            None => fmt::Display::fmt(Self::NONE_STR, f),
         }
     }
 }

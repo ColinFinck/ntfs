@@ -172,7 +172,7 @@ fn attr_print_attribute<'n, T>(
 where
     T: Read + Seek,
 {
-    let instance = format!("{}{}", attribute_prefix, attribute.instance());
+    let instance = format!("{attribute_prefix}{}", attribute.instance());
     let ty = attribute.ty()?;
     let resident = attribute.is_resident();
     let start = attribute.position();
@@ -180,7 +180,7 @@ where
     let name = attribute.name()?.to_string_lossy();
 
     println!(
-        "{:<10} | {:<20} | {:<8} | {:#13x} | {:#18x} | {:>13} | \"{}\"",
+        "{:<10} | {:<20} | {:<8} | {:>#13x} | {:>#18x} | {:>13} | \"{}\"",
         instance, ty, resident, record_number, start, length, name
     );
 
@@ -190,12 +190,12 @@ where
         if let NtfsAttributeValue::NonResident(non_resident_value) = value {
             for (i, data_run) in non_resident_value.data_runs().enumerate() {
                 let data_run = data_run?;
-                let instance = format!("{}{}", data_run_prefix, i);
+                let instance = format!("{data_run_prefix}{i}");
                 let start = data_run.data_position();
                 let length = data_run.allocated_size();
 
                 println!(
-                    "{:<10} | {:<20} | {:<8} | {:>13} | {:#18x} | {:>13} |",
+                    "{:<10} | {:<20} | {:<8} | {:>13} | {:>#18x} | {:>13} |",
                     instance, "DataRun", "", "", start, length
                 );
             }
