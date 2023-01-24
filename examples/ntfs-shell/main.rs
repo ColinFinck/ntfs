@@ -97,13 +97,14 @@ fn main() -> Result<()> {
             )),
         };
         if let Err(e) = result {
-            eprintln!("Error: {:?}", e);
+            eprintln!("Error: {e:?}");
         }
     }
 
     Ok(())
 }
 
+#[allow(clippy::print_literal)]
 fn attr<T>(with_runs: bool, arg: &str, info: &mut CommandInfo<T>) -> Result<()>
 where
     T: Read + Seek,
@@ -161,10 +162,11 @@ where
     Ok(())
 }
 
-fn attr_print_attribute<'n, T>(
+#[allow(clippy::uninlined_format_args)]
+fn attr_print_attribute<T>(
     info: &mut CommandInfo<T>,
     with_runs: bool,
-    attribute: &NtfsAttribute<'n, '_>,
+    attribute: &NtfsAttribute,
     record_number: u64,
     attribute_prefix: &str,
     data_run_prefix: &str,
@@ -264,7 +266,7 @@ where
         let maybe_entry = NtfsFileNameIndex::find(&mut finder, info.ntfs, &mut info.fs, arg);
 
         if maybe_entry.is_none() {
-            println!("Cannot find subdirectory \"{}\".", arg);
+            println!("Cannot find subdirectory \"{arg}\".");
             return Ok(());
         }
 
@@ -274,7 +276,7 @@ where
             .expect("key must exist for a found Index Entry")?;
 
         if !file_name.is_directory() {
-            println!("\"{}\" is not a directory.", arg);
+            println!("\"{arg}\" is not a directory.");
             return Ok(());
         }
 
@@ -510,10 +512,7 @@ where
     let data_item = match file.data(&mut info.fs, data_stream_name) {
         Some(data_item) => data_item,
         None => {
-            println!(
-                "The file does not have a \"{}\" $DATA attribute.",
-                data_stream_name
-            );
+            println!("The file does not have a \"{data_stream_name}\" $DATA attribute.");
             return Ok(());
         }
     };
@@ -534,7 +533,7 @@ where
             break;
         }
 
-        output_file.write(&buf[..bytes_read])?;
+        output_file.write_all(&buf[..bytes_read])?;
     }
 
     Ok(())
@@ -615,15 +614,16 @@ fn help_file(command: &str) {
     println!("  ● A name of a file in the current directory.");
     println!("    Enter the filename as is, including any spaces. Don't put it into additional quotation marks.");
     println!("    Examples:");
-    println!("      ○ {} ntoskrnl.exe", command);
-    println!("      ○ {} File with spaces.exe", command);
+    println!("      ○ {command} ntoskrnl.exe");
+    println!("      ○ {command} File with spaces.exe");
     println!("  ● A File Record Number anywhere on the filesystem.");
     println!("    This is indicated through a leading slash (/). A hexadecimal File Record Number is indicated via 0x.");
     println!("    Examples:");
-    println!("      ○ {} /5", command);
-    println!("      ○ {} /0xa299", command);
+    println!("      ○ {command} /5");
+    println!("      ○ {command} /0xa299");
 }
 
+#[allow(clippy::from_str_radix_10)]
 fn parse_file_arg<'n, T>(arg: &str, info: &mut CommandInfo<'n, T>) -> Result<NtfsFile<'n>>
 where
     T: Read + Seek,
@@ -632,7 +632,7 @@ where
         bail!("Missing argument!");
     }
 
-    if let Some(record_number_arg) = arg.strip_prefix("/") {
+    if let Some(record_number_arg) = arg.strip_prefix('/') {
         let record_number = match record_number_arg.strip_prefix("0x") {
             Some(hex_record_number_arg) => u64::from_str_radix(hex_record_number_arg, 16),
             None => u64::from_str_radix(record_number_arg, 10),

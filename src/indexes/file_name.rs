@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use crate::error::Result;
@@ -21,9 +21,9 @@ impl NtfsFileNameIndex {
     /// # Panics
     ///
     /// Panics if [`read_upcase_table`][Ntfs::read_upcase_table] had not been called on the passed [`Ntfs`] object.
-    pub fn find<'a, 'n, T>(
+    pub fn find<'a, T>(
         index_finder: &'a mut NtfsIndexFinder<Self>,
-        ntfs: &'n Ntfs,
+        ntfs: &Ntfs,
         fs: &mut T,
         name: &str,
     ) -> Option<Result<NtfsIndexEntry<'a, Self>>>
