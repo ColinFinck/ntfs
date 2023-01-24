@@ -16,13 +16,15 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: Rust Version
+      run: rustc --version
     - name: Format
       run: cargo fmt --all -- --check
     - name: Clippy
-      run: cargo clippy --workspace --all-targets --all-features --verbose -- -D warnings
+      run: cargo clippy --workspace --all-targets --all-features -- -D warnings
     - name: Build no_std
-      run: cargo build --workspace --no-default-features --verbose
+      run: cargo build --workspace --no-default-features
     - name: Build std
-      run: cargo build --workspace --all-features --verbose
+      run: cargo build --workspace --all-features
     - name: Tests
-      run: cargo test --workspace --all-features --verbose
+      run: cargo test --workspace --all-features
