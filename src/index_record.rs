@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use alloc::vec;
@@ -148,7 +148,7 @@ impl NtfsIndexRecord {
     }
 
     fn validate_sizes(&self) -> Result<()> {
-        let index_record_size = self.record.len() as u32;
+        let index_record_size = self.record.len();
 
         // The total size allocated for this Index Record must not be larger than
         // the size defined for all index records of this index.

@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use binread::io::{Cursor, Read, Seek};
@@ -187,7 +187,7 @@ mod tests {
         let mut mft_attributes = mft.attributes_raw();
 
         // Check the StandardInformation attribute of the MFT.
-        let attribute = mft_attributes.nth(0).unwrap().unwrap();
+        let attribute = mft_attributes.next().unwrap().unwrap();
         assert_eq!(
             attribute.ty().unwrap(),
             NtfsAttributeType::StandardInformation,

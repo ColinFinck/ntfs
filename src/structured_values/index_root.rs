@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::ops::Range;
@@ -80,8 +80,8 @@ impl<'f> NtfsIndexRoot<'f> {
     }
 
     fn entries_range_and_position(&self) -> (Range<usize>, NtfsPosition) {
-        let start = INDEX_ROOT_HEADER_SIZE as usize + self.index_entries_offset() as usize;
-        let end = INDEX_ROOT_HEADER_SIZE as usize + self.index_data_size() as usize;
+        let start = INDEX_ROOT_HEADER_SIZE + self.index_entries_offset() as usize;
+        let end = INDEX_ROOT_HEADER_SIZE + self.index_data_size() as usize;
         let position = self.position + start;
 
         (start..end, position)

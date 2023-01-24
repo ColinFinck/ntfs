@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use binread::BinRead;
@@ -69,8 +69,7 @@ impl TryFrom<SystemTime> for NtfsTime {
 
     fn try_from(st: SystemTime) -> Result<Self, Self::Error> {
         let duration_since_unix_epoch = st.duration_since(SystemTime::UNIX_EPOCH)?;
-        let intervals_since_unix_epoch = duration_since_unix_epoch.as_secs() as u64
-            * INTERVALS_PER_SECOND
+        let intervals_since_unix_epoch = duration_since_unix_epoch.as_secs() * INTERVALS_PER_SECOND
             + duration_since_unix_epoch.subsec_nanos() as u64 / 100;
         let intervals_since_windows_epoch =
             intervals_since_unix_epoch + EPOCH_DIFFERENCE_IN_INTERVALS;
