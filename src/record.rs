@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::mem;
@@ -40,6 +40,15 @@ impl Record {
         let mut array_position = self.update_sequence_array_start() as usize;
         let array_end =
             self.update_sequence_offset() as usize + self.update_sequence_size() as usize;
+        let sectors_end = self.update_sequence_array_count() as usize * NTFS_BLOCK_SIZE;
+
+        if array_end > self.data.len() || sectors_end > self.data.len() {
+            return Err(NtfsError::UpdateSequenceArrayExceedsRecordSize {
+                position: self.position,
+                array_count: self.update_sequence_array_count(),
+                record_size: self.data.len(),
+            });
+        }
 
         // The Update Sequence Number (USN) is written to the last 2 bytes of each sector.
         let mut sector_position = NTFS_BLOCK_SIZE - mem::size_of::<u16>();
@@ -47,14 +56,6 @@ impl Record {
         while array_position < array_end {
             let array_position_end = array_position + mem::size_of::<u16>();
             let sector_position_end = sector_position + mem::size_of::<u16>();
-
-            if sector_position_end > self.data.len() {
-                return Err(NtfsError::UpdateSequenceArrayExceedsRecordSize {
-                    position: self.position,
-                    array_count: self.update_sequence_array_count(),
-                    record_size: self.data.len(),
-                });
-            }
 
             // The array contains the actual 2 bytes that need to be at `sector_position` after the fixup.
             let new_bytes: [u8; 2] = self.data[array_position..array_position_end]
