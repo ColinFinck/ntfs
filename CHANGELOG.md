@@ -5,6 +5,33 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.3.0] - 2023-01-25
+
+### Added
+- Added validation of the attribute length when creating an `NtfsAttribute` object (#23)
+- Added tests for resident and non-resident read/seek semantics (#23)
+
+### Changed
+- Changed `NtfsFile::data` to look up attribute names case-insensitively (#17)
+- Changed `NtfsDataRuns::next` to bail out early if the cluster count of a Data Run is zero (#22, #23)
+- Changed `NtfsAttributeListNonResidentAttributeValue::seek` and `NtfsNonResidentAttributeValue::seek` to reset the internal `stream_data_run` (and thereby the external `data_position`) to `None` when seeking beyond the valid total length of an attribute (#22, #23)
+- Upgraded `memoffset` dependency to 0.8.0
+
+### Fixed
+- Fixed no_std build and added that to CI
+- Fixed out-of-bounds access in `NtfsAttribute::non_resident_value_data_and_position` (#20, #23)
+- Fixed unsafe `i8` to `u32` conversion in `BiosParameterBlock::record_size` (#20, #23)
+- Fixed out-of-bounds access in `Record::update_sequence_offset` (#20, #23)
+- Fixed out-of-bounds access in `NtfsAttributeListEntries::next_resident` (#20, #23)
+- Fixed infinite loop in `StreamState::read_data_run` when reading zero bytes (#20, #23)
+- Fixed addition overflow in `NtfsAttribute::validate_resident_sizes` (#20, #23)
+- Fixed potential panic when reading an attribute list (#23)
+- Fixed sparse file / sparse Data Run handling broken in 0.2.0
+- Fixed formatting when printing information about sparse Data Runs
+- Fixed trivial issues reported by clippy of Rust 1.66.1
+- Fixed out-of-bounds access in `Record::fixup` (#24)
+
+
 ## [0.2.0] - 2022-04-14
 - Fix accessing attributes of zero length (#6)
 - Check BPB-reported sizes more thoroughly and improve related error messages (#1, #4)
