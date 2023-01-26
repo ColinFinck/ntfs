@@ -162,6 +162,11 @@ pub enum NtfsError {
     },
     /// The Upcase Table should have a size of {expected} bytes, but it has {actual} bytes
     InvalidUpcaseTableSize { expected: u64, actual: u64 },
+    /// The NTFS Update Sequence Count of the record at byte position {position:#x} has the invalid value {update_sequence_count}
+    InvalidUpdateSequenceCount {
+        position: NtfsPosition,
+        update_sequence_count: u16,
+    },
     /// The NTFS Update Sequence Number at byte position {position:#x} references a data field in the range {range:?}, but the entry only has a size of {size} bytes
     InvalidUpdateSequenceNumberRange {
         position: NtfsPosition,

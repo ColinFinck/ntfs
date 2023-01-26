@@ -37,15 +37,17 @@ impl Record {
 
     pub(crate) fn fixup(&mut self) -> Result<()> {
         let update_sequence_number = self.update_sequence_number()?;
+        let array_count = self.update_sequence_array_count()?;
+
         let mut array_position = self.update_sequence_array_start() as usize;
         let array_end =
             self.update_sequence_offset() as usize + self.update_sequence_size() as usize;
-        let sectors_end = self.update_sequence_array_count() as usize * NTFS_BLOCK_SIZE;
+        let sectors_end = array_count as usize * NTFS_BLOCK_SIZE;
 
         if array_end > self.data.len() || sectors_end > self.data.len() {
             return Err(NtfsError::UpdateSequenceArrayExceedsRecordSize {
                 position: self.position,
-                array_count: self.update_sequence_array_count(),
+                array_count,
                 record_size: self.data.len(),
             });
         }
@@ -104,12 +106,17 @@ impl Record {
             .unwrap()
     }
 
-    fn update_sequence_array_count(&self) -> u16 {
+    fn update_sequence_array_count(&self) -> Result<u16> {
         let start = offset_of!(RecordHeader, update_sequence_count);
         let update_sequence_count = LittleEndian::read_u16(&self.data[start..]);
 
-        // Subtract the Update Sequence Number (USN), so that only the number of array elements remains.
-        update_sequence_count - mem::size_of::<u16>() as u16
+        // Subtract the Update Sequence Number (USN) element, so that only the number of array elements remains.
+        update_sequence_count
+            .checked_sub(1)
+            .ok_or(NtfsError::InvalidUpdateSequenceCount {
+                position: self.position,
+                update_sequence_count,
+            })
     }
 
     fn update_sequence_array_start(&self) -> u16 {
