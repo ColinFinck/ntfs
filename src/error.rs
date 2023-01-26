@@ -167,7 +167,7 @@ pub enum NtfsError {
         position: NtfsPosition,
         update_sequence_count: u16,
     },
-    /// The NTFS Update Sequence Number at byte position {position:#x} references a data field in the range {range:?}, but the entry only has a size of {size} bytes
+    /// The NTFS Update Sequence Number of the record at byte position {position:#x} references a data field in the range {range:?}, but the entry only has a size of {size} bytes
     InvalidUpdateSequenceNumberRange {
         position: NtfsPosition,
         range: Range<usize>,
