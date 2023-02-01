@@ -5,6 +5,15 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.3.1] - 2023-02-01
+
+### Changed
+- Made `NtfsError::InvalidUpdateSequenceNumberRange` message more precise
+
+### Fixed
+- Fixed `Record::update_sequence_array_count` calculation and perform safe subtraction (#25, #26)
+
+
 ## [0.3.0] - 2023-01-25
 
 ### Added
