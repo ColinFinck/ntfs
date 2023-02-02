@@ -37,12 +37,13 @@ impl Ntfs {
     ///
     /// The reader must cover the entire NTFS partition, not more and not less.
     /// It will be rewinded to the beginning before reading anything.
+    #[allow(clippy::seek_to_start_instead_of_rewind)]
     pub fn new<T>(fs: &mut T) -> Result<Self>
     where
         T: Read + Seek,
     {
         // Read and validate the boot sector.
-        fs.rewind()?;
+        fs.seek(SeekFrom::Start(0))?;
         let boot_sector = fs.read_le::<BootSector>()?;
         boot_sector.validate()?;
 
