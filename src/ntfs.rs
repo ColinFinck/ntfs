@@ -42,7 +42,7 @@ impl Ntfs {
         T: Read + Seek,
     {
         // Read and validate the boot sector.
-        fs.seek(SeekFrom::Start(0))?;
+        fs.rewind()?;
         let boot_sector = fs.read_le::<BootSector>()?;
         boot_sector.validate()?;
 
