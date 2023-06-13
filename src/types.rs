@@ -7,7 +7,7 @@ use core::fmt;
 use core::num::NonZeroU64;
 use core::ops::{Add, AddAssign};
 
-use binread::BinRead;
+use binrw::BinRead;
 use derive_more::{Binary, Display, From, LowerHex, Octal, UpperHex};
 
 use crate::error::{NtfsError, Result};

@@ -1,8 +1,8 @@
 // Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use binread::io::{Read, Seek, SeekFrom};
-use binread::BinReaderExt;
+use binrw::io::{Read, Seek, SeekFrom};
+use binrw::BinReaderExt;
 
 use crate::attribute::NtfsAttributeType;
 use crate::boot_sector::BootSector;

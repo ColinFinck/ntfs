@@ -6,7 +6,7 @@ use core::mem;
 
 use alloc::vec;
 use alloc::vec::Vec;
-use binread::io::{Read, Seek};
+use binrw::io::{Read, Seek};
 use nt_string::u16strle::U16StrLe;
 
 use crate::attribute::NtfsAttributeType;

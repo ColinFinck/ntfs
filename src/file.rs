@@ -6,7 +6,7 @@ use core::fmt;
 use core::num::NonZeroU64;
 
 use alloc::vec;
-use binread::io::{Read, Seek, SeekFrom};
+use binrw::io::{Read, Seek, SeekFrom};
 use bitflags::bitflags;
 use byteorder::{ByteOrder, LittleEndian};
 use memoffset::offset_of;

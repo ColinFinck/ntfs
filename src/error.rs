@@ -180,7 +180,7 @@ pub enum NtfsError {
         previous_lcn: Lcn,
     },
     /// I/O error: {0:?}
-    Io(binread::io::Error),
+    Io(binrw::io::Error),
     /// The Logical Cluster Number (LCN) {lcn} is too big to be multiplied by the cluster size
     LcnTooBig { lcn: Lcn },
     /// The index root at byte position {position:#x} is a large index, but no matching index allocation attribute was provided
@@ -227,31 +227,31 @@ pub enum NtfsError {
     VcnTooBig { vcn: Vcn },
 }
 
-impl From<binread::error::Error> for NtfsError {
-    fn from(error: binread::error::Error) -> Self {
-        if let binread::error::Error::Io(io_error) = error {
+impl From<binrw::error::Error> for NtfsError {
+    fn from(error: binrw::error::Error) -> Self {
+        if let binrw::error::Error::Io(io_error) = error {
             Self::Io(io_error)
         } else {
-            // We don't use any binread attributes that result in other errors.
-            unreachable!("Got a binread error of unexpected type: {:?}", error);
+            // We don't use any binrw attributes that result in other errors.
+            unreachable!("Got a binrw error of unexpected type: {:?}", error);
         }
     }
 }
 
-impl From<binread::io::Error> for NtfsError {
-    fn from(error: binread::io::Error) -> Self {
+impl From<binrw::io::Error> for NtfsError {
+    fn from(error: binrw::io::Error) -> Self {
         Self::Io(error)
     }
 }
 
 // To stay compatible with standardized interfaces (e.g. io::Read, io::Seek),
 // we sometimes need to convert from NtfsError to io::Error.
-impl From<NtfsError> for binread::io::Error {
+impl From<NtfsError> for binrw::io::Error {
     fn from(error: NtfsError) -> Self {
         if let NtfsError::Io(io_error) = error {
             io_error
         } else {
-            binread::io::Error::new(binread::io::ErrorKind::Other, error)
+            binrw::io::Error::new(binrw::io::ErrorKind::Other, error)
         }
     }
 }

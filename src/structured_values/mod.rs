@@ -1,4 +1,4 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 //! Various types of NTFS Attribute structured values.
@@ -26,7 +26,7 @@ pub use volume_name::*;
 use crate::attribute::NtfsAttributeType;
 use crate::attribute_value::{NtfsAttributeValue, NtfsResidentAttributeValue};
 use crate::error::Result;
-use binread::io::{Read, Seek};
+use binrw::io::{Read, Seek};
 use bitflags::bitflags;
 
 bitflags! {

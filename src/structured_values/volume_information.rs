@@ -1,10 +1,10 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::fmt;
 
-use binread::io::{Cursor, Read, Seek};
-use binread::{BinRead, BinReaderExt};
+use binrw::io::{Cursor, Read, Seek};
+use binrw::{BinRead, BinReaderExt};
 use bitflags::bitflags;
 
 use crate::attribute::NtfsAttributeType;

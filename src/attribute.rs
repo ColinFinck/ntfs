@@ -5,7 +5,7 @@ use core::iter::FusedIterator;
 use core::ops::Range;
 use core::{fmt, mem};
 
-use binread::io::{Read, Seek};
+use binrw::io::{Read, Seek};
 use bitflags::bitflags;
 use byteorder::{ByteOrder, LittleEndian};
 use enumn::N;

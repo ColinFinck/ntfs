@@ -6,7 +6,7 @@ use core::marker::PhantomData;
 
 use alloc::vec;
 use alloc::vec::Vec;
-use binread::io::{Read, Seek};
+use binrw::io::{Read, Seek};
 
 use crate::attribute::{NtfsAttributeItem, NtfsAttributeType};
 use crate::error::{NtfsError, Result};

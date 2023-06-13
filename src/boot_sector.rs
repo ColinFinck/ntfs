@@ -1,9 +1,9 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::ops::RangeInclusive;
 
-use binread::BinRead;
+use binrw::BinRead;
 use memoffset::offset_of;
 
 use crate::error::{NtfsError, Result};

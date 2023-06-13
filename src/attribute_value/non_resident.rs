@@ -8,10 +8,10 @@
 use core::iter::FusedIterator;
 use core::mem;
 
-use binread::io;
-use binread::io::Cursor;
-use binread::io::{Read, Seek, SeekFrom};
-use binread::BinRead;
+use binrw::io;
+use binrw::io::Cursor;
+use binrw::io::{Read, Seek, SeekFrom};
+use binrw::BinRead;
 
 use super::seek_contiguous;
 use crate::error::{NtfsError, Result};
@@ -723,7 +723,7 @@ impl StreamState {
 
 #[cfg(test)]
 mod tests {
-    use binread::io::SeekFrom;
+    use binrw::io::SeekFrom;
 
     use crate::indexes::NtfsFileNameIndex;
     use crate::ntfs::Ntfs;

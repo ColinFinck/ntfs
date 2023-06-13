@@ -1,11 +1,11 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::mem;
 
 use arrayvec::ArrayVec;
-use binread::io::{Cursor, Read, Seek};
-use binread::{BinRead, BinReaderExt};
+use binrw::io::{Cursor, Read, Seek};
+use binrw::{BinRead, BinReaderExt};
 use enumn::N;
 use nt_string::u16strle::U16StrLe;
 

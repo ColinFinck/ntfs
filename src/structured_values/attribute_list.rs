@@ -4,8 +4,8 @@
 use core::mem;
 
 use arrayvec::ArrayVec;
-use binread::io::{Cursor, Read, Seek, SeekFrom};
-use binread::{BinRead, BinReaderExt};
+use binrw::io::{Cursor, Read, Seek, SeekFrom};
+use binrw::{BinRead, BinReaderExt};
 use nt_string::u16strle::U16StrLe;
 
 use crate::attribute::{NtfsAttribute, NtfsAttributeType};

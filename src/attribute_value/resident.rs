@@ -7,7 +7,7 @@
 //! are always read into a buffer first and then fixed up in memory.
 //! Further accesses to the record data can then happen via slices.
 
-use binread::io::{Read, Seek, SeekFrom};
+use binrw::io::{Read, Seek, SeekFrom};
 
 use super::seek_contiguous;
 use crate::error::Result;
@@ -101,7 +101,7 @@ impl<'f> NtfsReadSeek for NtfsResidentAttributeValue<'f> {
 
 #[cfg(test)]
 mod tests {
-    use binread::io::SeekFrom;
+    use binrw::io::SeekFrom;
 
     use crate::indexes::NtfsFileNameIndex;
     use crate::ntfs::Ntfs;

@@ -1,7 +1,7 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use binread::BinRead;
+use binrw::BinRead;
 use core::fmt;
 
 /// Size of a single GUID on disk (= size of all GUID fields).

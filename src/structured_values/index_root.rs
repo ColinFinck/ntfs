@@ -3,7 +3,7 @@
 
 use core::ops::Range;
 
-use binread::io::{Read, Seek};
+use binrw::io::{Read, Seek};
 use byteorder::{ByteOrder, LittleEndian};
 use memoffset::offset_of;
 

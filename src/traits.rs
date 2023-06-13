@@ -1,6 +1,9 @@
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 use crate::error::{NtfsError, Result};
-use binread::io;
-use binread::io::{Read, Seek, SeekFrom};
+use binrw::io;
+use binrw::io::{Read, Seek, SeekFrom};
 
 /// Trait to read/seek in a source by the help of a temporarily passed mutable reference to the filesystem reader.
 ///

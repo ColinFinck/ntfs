@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::iter::FusedIterator;
@@ -7,7 +7,7 @@ use core::ops::Range;
 use core::{fmt, mem};
 
 use alloc::vec::Vec;
-use binread::io::{Read, Seek};
+use binrw::io::{Read, Seek};
 use bitflags::bitflags;
 use byteorder::{ByteOrder, LittleEndian};
 use memoffset::offset_of;

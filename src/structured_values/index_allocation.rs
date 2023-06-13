@@ -1,4 +1,4 @@
-// Copyright 2021-2022 Colin Finck <colin@reactos.org>
+// Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use crate::attribute::NtfsAttributeType;
@@ -9,7 +9,7 @@ use crate::ntfs::Ntfs;
 use crate::structured_values::NtfsStructuredValue;
 use crate::traits::NtfsReadSeek;
 use crate::types::Vcn;
-use binread::io::{Read, Seek, SeekFrom};
+use binrw::io::{Read, Seek, SeekFrom};
 use core::iter::FusedIterator;
 
 /// Structure of an $INDEX_ALLOCATION attribute.

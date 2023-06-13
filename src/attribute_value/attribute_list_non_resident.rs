@@ -6,7 +6,7 @@
 // Connected attributes are stored in a way that the first attribute reports the entire data size and all further attributes report a zero value length.
 // We have to go down to the Data Run level to get trustable lengths again, and this is what `NtfsAttributeListNonResidentAttributeValue` does here.
 
-use binread::io::{Read, Seek, SeekFrom};
+use binrw::io::{Read, Seek, SeekFrom};
 
 use super::{DataRunsState, NtfsDataRuns, StreamState};
 use crate::attribute::{NtfsAttribute, NtfsAttributeType};
