@@ -1,6 +1,8 @@
 // Copyright 2021-2022 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+use core::fmt;
+
 use binread::io::{Cursor, Read, Seek};
 use binread::{BinRead, BinReaderExt};
 use bitflags::bitflags;
@@ -26,6 +28,7 @@ struct VolumeInformationData {
 
 bitflags! {
     /// Flags returned by [`NtfsVolumeInformation::flags`].
+    #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
     pub struct NtfsVolumeFlags: u16 {
         /// The volume needs to be checked by `chkdsk`.
         const IS_DIRTY = 0x0001;
@@ -36,6 +39,12 @@ bitflags! {
         const REPAIR_OBJECT_ID = 0x0020;
         const CHKDSK_UNDERWAY = 0x4000;
         const MODIFIED_BY_CHKDSK = 0x8000;
+    }
+}
+
+impl fmt::Display for NtfsVolumeFlags {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
     }
 }
 

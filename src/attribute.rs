@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::iter::FusedIterator;
-use core::mem;
 use core::ops::Range;
+use core::{fmt, mem};
 
 use binread::io::{Read, Seek};
 use bitflags::bitflags;
@@ -49,6 +49,7 @@ struct NtfsAttributeHeader {
 
 bitflags! {
     /// Flags returned by [`NtfsAttribute::flags`].
+    #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
     pub struct NtfsAttributeFlags: u16 {
         /// The attribute value is compressed.
         const COMPRESSED = 0x0001;
@@ -56,6 +57,12 @@ bitflags! {
         const ENCRYPTED = 0x4000;
         /// The attribute value is stored sparsely.
         const SPARSE = 0x8000;
+    }
+}
+
+impl fmt::Display for NtfsAttributeFlags {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
     }
 }
 

@@ -3,8 +3,8 @@
 
 use core::iter::FusedIterator;
 use core::marker::PhantomData;
-use core::mem;
 use core::ops::Range;
+use core::{fmt, mem};
 
 use alloc::vec::Vec;
 use binread::io::{Read, Seek};
@@ -43,11 +43,18 @@ struct IndexEntryHeader {
 
 bitflags! {
     /// Flags returned by [`NtfsIndexEntry::flags`].
+    #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
     pub struct NtfsIndexEntryFlags: u8 {
         /// This Index Entry points to a sub-node.
         const HAS_SUBNODE = 0x01;
         /// This is the last Index Entry in the list.
         const LAST_ENTRY = 0x02;
+    }
+}
+
+impl fmt::Display for NtfsIndexEntryFlags {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
     }
 }
 

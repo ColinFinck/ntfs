@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::cmp::Ordering;
+use core::fmt;
 use core::num::NonZeroU64;
 
 use alloc::vec;
@@ -95,11 +96,18 @@ struct FileRecordHeader {
 
 bitflags! {
     /// Flags returned by [`NtfsFile::flags`].
+    #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
     pub struct NtfsFileFlags: u16 {
         /// Record is in use.
         const IN_USE = 0x0001;
         /// Record is a directory.
         const IS_DIRECTORY = 0x0002;
+    }
+}
+
+impl fmt::Display for NtfsFileFlags {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
     }
 }
 
