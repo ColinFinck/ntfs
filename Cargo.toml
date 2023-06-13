@@ -22,6 +22,7 @@ derive_more = "0.99.17"
 displaydoc = { version = "0.2.3", default-features = false }
 enumn = "0.1.3"
 memoffset = "0.8.0"
+nt-string = { version = "0.1.1", features = ["alloc"], default-features = false }
 strum_macros = "0.24.0"
 time = { version = "0.3.9", features = ["large-dates", "macros"], default-features = false, optional = true }
 
@@ -31,7 +32,7 @@ time = { version = "0.3.9", features = ["formatting", "large-dates", "macros"], 
 
 [features]
 default = ["std"]
-std = ["arrayvec/std", "binread/std", "byteorder/std", "time?/std"]
+std = ["arrayvec/std", "binread/std", "byteorder/std", "nt-string/std", "time?/std"]
 
 [[example]]
 name = "ntfs-shell"

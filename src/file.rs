@@ -9,6 +9,7 @@ use binread::io::{Read, Seek, SeekFrom};
 use bitflags::bitflags;
 use byteorder::{ByteOrder, LittleEndian};
 use memoffset::offset_of;
+use nt_string::u16strle::U16StrLe;
 
 use crate::attribute::{
     NtfsAttribute, NtfsAttributeItem, NtfsAttributeType, NtfsAttributes, NtfsAttributesRaw,
@@ -19,12 +20,12 @@ use crate::index::NtfsIndex;
 use crate::indexes::NtfsFileNameIndex;
 use crate::ntfs::Ntfs;
 use crate::record::{Record, RecordHeader};
-use crate::string::{NtfsString, UpcaseOrd};
 use crate::structured_values::{
     NtfsFileName, NtfsFileNamespace, NtfsIndexRoot, NtfsStandardInformation,
     NtfsStructuredValueFromResidentAttributeValue,
 };
 use crate::types::NtfsPosition;
+use crate::upcase_table::UpcaseOrd;
 
 /// A list of standardized NTFS File Record Numbers.
 ///
@@ -208,9 +209,9 @@ impl<'n> NtfsFile<'n> {
 
         let equal = if data_stream_name.is_empty() {
             // Use a simpler "comparison" that doesn't require the $UpCase table.
-            |_ntfs: &Ntfs, name: &NtfsString, _data_stream_name: &str| name.is_empty()
+            |_ntfs: &Ntfs, name: &U16StrLe, _data_stream_name: &str| name.is_empty()
         } else {
-            |ntfs: &Ntfs, name: &NtfsString, data_stream_name: &str| {
+            |ntfs: &Ntfs, name: &U16StrLe, data_stream_name: &str| {
                 name.upcase_cmp(ntfs, &data_stream_name) == Ordering::Equal
             }
         };

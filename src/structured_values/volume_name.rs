@@ -5,11 +5,11 @@ use core::mem;
 
 use arrayvec::ArrayVec;
 use binread::io::{Cursor, Read, Seek};
+use nt_string::u16strle::U16StrLe;
 
 use crate::attribute::NtfsAttributeType;
 use crate::attribute_value::{NtfsAttributeValue, NtfsResidentAttributeValue};
 use crate::error::{NtfsError, Result};
-use crate::string::NtfsString;
 use crate::structured_values::{
     NtfsStructuredValue, NtfsStructuredValueFromResidentAttributeValue,
 };
@@ -56,9 +56,9 @@ impl NtfsVolumeName {
         Ok(Self { name })
     }
 
-    /// Gets the volume name and returns it wrapped in an [`NtfsString`].
-    pub fn name(&self) -> NtfsString {
-        NtfsString(&self.name)
+    /// Gets the volume name and returns it wrapped in a [`U16StrLe`].
+    pub fn name(&self) -> U16StrLe {
+        U16StrLe(&self.name)
     }
 
     /// Returns the volume name length, in bytes.
