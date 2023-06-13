@@ -1,8 +1,9 @@
 // Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use binrw::BinRead;
 use core::fmt;
+
+use binrw::BinRead;
 
 /// Size of a single GUID on disk (= size of all GUID fields).
 pub(crate) const GUID_SIZE: usize = 16;

@@ -23,11 +23,12 @@ pub use standard_information::*;
 pub use volume_information::*;
 pub use volume_name::*;
 
+use binrw::io::{Read, Seek};
+use bitflags::bitflags;
+
 use crate::attribute::NtfsAttributeType;
 use crate::attribute_value::{NtfsAttributeValue, NtfsResidentAttributeValue};
 use crate::error::Result;
-use binrw::io::{Read, Seek};
-use bitflags::bitflags;
 
 bitflags! {
     /// Flags that a user can set for a file (Read-Only, Hidden, System, Archive, etc.).

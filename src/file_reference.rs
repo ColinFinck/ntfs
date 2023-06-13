@@ -1,11 +1,12 @@
 // Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+use binrw::io::{Read, Seek};
+use binrw::BinRead;
+
 use crate::error::Result;
 use crate::file::NtfsFile;
 use crate::ntfs::Ntfs;
-use binrw::io::{Read, Seek};
-use binrw::BinRead;
 
 /// Absolute reference to a File Record on the filesystem, composed out of a File Record Number and a Sequence Number.
 ///

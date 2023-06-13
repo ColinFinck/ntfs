@@ -1,6 +1,8 @@
 // Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+use binrw::io::{Read, Seek};
+
 use crate::error::Result;
 use crate::index::NtfsIndexFinder;
 use crate::index_entry::NtfsIndexEntry;
@@ -8,7 +10,6 @@ use crate::indexes::{NtfsIndexEntryHasFileReference, NtfsIndexEntryType};
 use crate::ntfs::Ntfs;
 use crate::structured_values::NtfsFileName;
 use crate::upcase_table::UpcaseOrd;
-use binrw::io::{Read, Seek};
 
 /// Defines the [`NtfsIndexEntryType`] for filename indexes (commonly known as "directories").
 #[derive(Clone, Copy, Debug)]
