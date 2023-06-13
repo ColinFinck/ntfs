@@ -27,6 +27,7 @@ use crate::types::Vcn;
 /// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/attributes/index_allocation.html>
 ///
 /// [`NtfsFileName`]: crate::structured_values::NtfsFileName
+/// [`NtfsIndexRoot`]: crate::structured_values::NtfsIndexRoot
 #[derive(Clone, Debug)]
 pub struct NtfsIndexAllocation<'n, 'f> {
     ntfs: &'n Ntfs,
