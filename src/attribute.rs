@@ -10,6 +10,7 @@ use bitflags::bitflags;
 use byteorder::{ByteOrder, LittleEndian};
 use enumn::N;
 use memoffset::offset_of;
+use nt_string::u16strle::U16StrLe;
 use strum_macros::Display;
 
 use crate::attribute_value::{
@@ -18,7 +19,6 @@ use crate::attribute_value::{
 };
 use crate::error::{NtfsError, Result};
 use crate::file::NtfsFile;
-use crate::string::NtfsString;
 use crate::structured_values::{
     NtfsAttributeList, NtfsAttributeListEntries, NtfsStructuredValue,
     NtfsStructuredValueFromResidentAttributeValue,
@@ -246,20 +246,20 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
         is_non_resident == 0
     }
 
-    /// Gets the name of this NTFS Attribute (if any) and returns it wrapped in an [`NtfsString`].
+    /// Gets the name of this NTFS Attribute (if any) and returns it wrapped in a [`U16StrLe`].
     ///
     /// Note that most NTFS attributes have no name and are distinguished by their types.
     /// Use [`NtfsAttribute::ty`] to get the attribute type.
-    pub fn name(&self) -> Result<NtfsString<'f>> {
+    pub fn name(&self) -> Result<U16StrLe<'f>> {
         if self.name_offset() == 0 || self.name_length() == 0 {
-            return Ok(NtfsString(&[]));
+            return Ok(U16StrLe(&[]));
         }
 
         self.validate_name_sizes()?;
 
         let start = self.offset + self.name_offset() as usize;
         let end = start + self.name_length();
-        let string = NtfsString(&self.file.record_data()[start..end]);
+        let string = U16StrLe(&self.file.record_data()[start..end]);
 
         Ok(string)
     }

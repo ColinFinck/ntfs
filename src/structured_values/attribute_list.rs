@@ -6,6 +6,7 @@ use core::mem;
 use arrayvec::ArrayVec;
 use binread::io::{Cursor, Read, Seek, SeekFrom};
 use binread::{BinRead, BinReaderExt};
+use nt_string::u16strle::U16StrLe;
 
 use crate::attribute::{NtfsAttribute, NtfsAttributeType};
 use crate::attribute_value::{NtfsAttributeValue, NtfsNonResidentAttributeValue};
@@ -13,7 +14,6 @@ use crate::error::{NtfsError, Result};
 use crate::file::NtfsFile;
 use crate::file_reference::NtfsFileReference;
 use crate::ntfs::Ntfs;
-use crate::string::NtfsString;
 use crate::structured_values::NtfsStructuredValue;
 use crate::traits::NtfsReadSeek;
 use crate::types::{NtfsPosition, Vcn};
@@ -228,9 +228,9 @@ impl NtfsAttributeListEntry {
         self.header.lowest_vcn
     }
 
-    /// Gets the attribute name and returns it wrapped in an [`NtfsString`].
-    pub fn name(&self) -> NtfsString {
-        NtfsString(&self.name)
+    /// Gets the attribute name and returns it wrapped in a [`U16StrLe`].
+    pub fn name(&self) -> U16StrLe {
+        U16StrLe(&self.name)
     }
 
     /// Returns the file name length, in bytes.

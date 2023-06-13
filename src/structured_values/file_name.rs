@@ -7,13 +7,13 @@ use arrayvec::ArrayVec;
 use binread::io::{Cursor, Read, Seek};
 use binread::{BinRead, BinReaderExt};
 use enumn::N;
+use nt_string::u16strle::U16StrLe;
 
 use crate::attribute::NtfsAttributeType;
 use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
 use crate::file_reference::NtfsFileReference;
 use crate::indexes::NtfsIndexEntryKey;
-use crate::string::NtfsString;
 use crate::structured_values::{NtfsFileAttributeFlags, NtfsStructuredValue};
 use crate::time::NtfsTime;
 use crate::types::NtfsPosition;
@@ -206,9 +206,9 @@ impl NtfsFileName {
         self.header.modification_time
     }
 
-    /// Gets the file name and returns it wrapped in an [`NtfsString`].
-    pub fn name(&self) -> NtfsString {
-        NtfsString(&self.name)
+    /// Gets the file name and returns it wrapped in a [`U16StrLe`].
+    pub fn name(&self) -> U16StrLe {
+        U16StrLe(&self.name)
     }
 
     /// Returns the file name length, in bytes.
@@ -339,7 +339,7 @@ mod tests {
         assert_eq!(file_name.name().to_string_lossy(), String::from("$MFT"));
         assert_eq!(
             file_name.name(),
-            NtfsString(&[b'$', 0, b'M', 0, b'F', 0, b'T', 0])
+            U16StrLe(&[b'$', 0, b'M', 0, b'F', 0, b'T', 0])
         );
     }
 }

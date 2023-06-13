@@ -1,11 +1,13 @@
 // Copyright 2021-2023 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+use core::cmp::Ordering;
 use core::mem;
 
 use alloc::vec;
 use alloc::vec::Vec;
 use binread::io::{Read, Seek};
+use nt_string::u16strle::U16StrLe;
 
 use crate::attribute::NtfsAttributeType;
 use crate::error::{NtfsError, Result};
@@ -76,6 +78,68 @@ impl UpcaseTable {
     /// A character without an uppercase equivalent is returned as-is.
     pub(crate) fn u16_to_uppercase(&self, character: u16) -> u16 {
         self.uppercase_characters[character as usize]
+    }
+}
+
+/// Trait for a case-insensitive ordering with respect to the $UpCase table read from the filesystem.
+pub trait UpcaseOrd<Rhs> {
+    /// Performs a case-insensitive ordering based on the $UpCase table read from the filesystem.
+    ///
+    /// # Panics
+    ///
+    /// Panics if [`read_upcase_table`][Ntfs::read_upcase_table] had not been called on the passed [`Ntfs`] object.
+    fn upcase_cmp(&self, ntfs: &Ntfs, other: &Rhs) -> Ordering;
+}
+
+impl<'a, 'b> UpcaseOrd<U16StrLe<'a>> for U16StrLe<'b> {
+    fn upcase_cmp(&self, ntfs: &Ntfs, other: &U16StrLe<'a>) -> Ordering {
+        upcase_cmp_iter(self.u16_iter(), other.u16_iter(), ntfs)
+    }
+}
+
+impl<'a> UpcaseOrd<&str> for U16StrLe<'a> {
+    fn upcase_cmp(&self, ntfs: &Ntfs, other: &&str) -> Ordering {
+        upcase_cmp_iter(self.u16_iter(), other.encode_utf16(), ntfs)
+    }
+}
+
+impl<'a> UpcaseOrd<U16StrLe<'a>> for &str {
+    fn upcase_cmp(&self, ntfs: &Ntfs, other: &U16StrLe<'a>) -> Ordering {
+        upcase_cmp_iter(self.encode_utf16(), other.u16_iter(), ntfs)
+    }
+}
+
+fn upcase_cmp_iter<TI, OI>(mut this_iter: TI, mut other_iter: OI, ntfs: &Ntfs) -> Ordering
+where
+    TI: Iterator<Item = u16>,
+    OI: Iterator<Item = u16>,
+{
+    let upcase_table = ntfs.upcase_table();
+
+    loop {
+        match (this_iter.next(), other_iter.next()) {
+            (Some(this_code_unit), Some(other_code_unit)) => {
+                // We have two UTF-16 code units to compare.
+                let this_upper = upcase_table.u16_to_uppercase(this_code_unit);
+                let other_upper = upcase_table.u16_to_uppercase(other_code_unit);
+
+                if this_upper != other_upper {
+                    return this_upper.cmp(&other_upper);
+                }
+            }
+            (Some(_), None) => {
+                // `this_iter` is longer than `other_iter` but otherwise equal.
+                return Ordering::Greater;
+            }
+            (None, Some(_)) => {
+                // `other_iter` is longer than `this_iter` but otherwise equal.
+                return Ordering::Less;
+            }
+            (None, None) => {
+                // We made it to the end of both strings, so they must be equal.
+                return Ordering::Equal;
+            }
+        }
     }
 }
 

@@ -6,8 +6,8 @@ use crate::index::NtfsIndexFinder;
 use crate::index_entry::NtfsIndexEntry;
 use crate::indexes::{NtfsIndexEntryHasFileReference, NtfsIndexEntryType};
 use crate::ntfs::Ntfs;
-use crate::string::UpcaseOrd;
 use crate::structured_values::NtfsFileName;
+use crate::upcase_table::UpcaseOrd;
 use binread::io::{Read, Seek};
 
 /// Defines the [`NtfsIndexEntryType`] for filename indexes (commonly known as "directories").
