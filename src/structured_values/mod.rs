@@ -12,6 +12,8 @@ mod standard_information;
 mod volume_information;
 mod volume_name;
 
+use core::fmt;
+
 pub use attribute_list::*;
 pub use file_name::*;
 pub use index_allocation::*;
@@ -36,6 +38,7 @@ bitflags! {
     /// Returned by [`NtfsStandardInformation::file_attributes`] and [`NtfsFileName::file_attributes`].
     ///
     /// [`NtfsAttribute`]: crate::attribute::NtfsAttribute
+    #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
     pub struct NtfsFileAttributeFlags: u32 {
         /// File is marked read-only.
         const READ_ONLY = 0x0001;
@@ -68,6 +71,12 @@ bitflags! {
         ///
         /// This attribute is only returned from [`NtfsFileName::file_attributes`].
         const IS_DIRECTORY = 0x1000_0000;
+    }
+}
+
+impl fmt::Display for NtfsFileAttributeFlags {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
     }
 }
 

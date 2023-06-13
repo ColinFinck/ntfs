@@ -365,7 +365,7 @@ fn fileinfo_std(attribute: NtfsAttribute) -> Result<()> {
 
     let std_info = attribute.resident_structured_value::<NtfsStandardInformation>()?;
 
-    println!("{:34}{:?}", "Attributes:", std_info.file_attributes());
+    println!("{:34}{}", "Attributes:", std_info.file_attributes());
 
     let atime = OffsetDateTime::from(std_info.access_time())
         .format(TIME_FORMAT)
