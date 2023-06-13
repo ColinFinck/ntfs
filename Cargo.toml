@@ -1,6 +1,6 @@
 [package]
 name = "ntfs"
-version = "0.3.1"
+version = "0.4.0"
 authors = ["Colin Finck <colin@reactos.org>"]
 description = "A low-level NTFS filesystem library"
 homepage = "https://github.com/ColinFinck/ntfs"

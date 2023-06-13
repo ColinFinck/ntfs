@@ -5,6 +5,23 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.4.0] - 2023-06-13
+
+### Added
+- Added `Display` implementation for all flags structures
+
+### Changed
+- Replaced `NtfsString` by `U16StrLe` from my new `nt-string` crate
+- Replaced abandoned `binread` dependency by its `binrw` successor crate
+- Upgraded `bitflags` dependency to 2.3.1 (#28)  
+  Note that this changes the output of the `Debug` implementation of the flags structures.
+  If you need something similar to the previous output, use the new `Display` implementation instead.
+- Upgraded `memoffset` dependency to 0.9.0 (#28)
+
+### Fixed
+- Fixed broken intra-doc link to `NtfsIndexRoot`
+
+
 ## [0.3.1] - 2023-02-01
 
 ### Changed
