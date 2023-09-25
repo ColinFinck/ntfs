@@ -15,7 +15,7 @@ categories = ["filesystem", "no-std", "os::windows-apis", "parser-implementation
 
 [dependencies]
 arrayvec = { version = "0.7.2", default-features = false }
-binrw = { version = "0.11.2", default-features = false }
+binrw = { version = "0.12.0", default-features = false }
 byteorder = { version = "1.4.3", default-features = false }
 bitflags = "2.3.1"
 derive_more = "0.99.17"
