@@ -73,6 +73,42 @@ impl Ntfs {
         Ok(ntfs)
     }
 
+    /// Creates a new [`Ntfs`] object from a reader, using manually-supplied parameters.
+    ///
+    /// Unlike [`new`], this function does not validate bootsector information.
+    /// Use this function if you're trying to read a damaged NTFS filesystem.
+    /// 
+    /// The reader must cover the entire NTFS partition, not more and not less.
+    /// It will be rewinded to the beginning before reading anything.
+    #[allow(clippy::seek_to_start_instead_of_rewind)]
+    pub fn new_manual<T>(
+        fs: &mut T,
+        cluster_size: u32,
+        sector_size: u16,
+        size: u64,
+        mft_position: Option<NtfsPosition>,
+        file_record_size: u32,
+        serial_number: Option<u64>,
+    ) -> Result<Self>
+    where
+        T: Read + Seek,
+    {
+        // Read and validate the boot sector.
+        fs.seek(SeekFrom::Start(0))?;
+
+        let ntfs = Self {
+            cluster_size,
+            sector_size,
+            size,
+            mft_position: mft_position.unwrap_or(NtfsPosition::none()),
+            file_record_size,
+            serial_number: serial_number.unwrap_or_default(),
+            upcase_table: None,
+        };
+
+        Ok(ntfs)
+    }
+
     /// Returns the size of a single cluster, in bytes.
     pub fn cluster_size(&self) -> u32 {
         self.cluster_size
