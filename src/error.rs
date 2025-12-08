@@ -27,6 +27,8 @@ pub enum NtfsError {
         expected: NtfsAttributeType,
         actual: NtfsAttributeType,
     },
+    /// Error while deserializing data: {0:?}
+    BinrwError(binrw::error::Error),
     /// The given buffer should have at least {expected} bytes, but it only has {actual} bytes
     BufferTooSmall { expected: usize, actual: usize },
     /// The NTFS Attribute at byte position {position:#x} has a length of {expected} bytes, but only {actual} bytes are left in the record
@@ -232,8 +234,9 @@ impl From<binrw::error::Error> for NtfsError {
         if let binrw::error::Error::Io(io_error) = error {
             Self::Io(io_error)
         } else {
-            // We don't use any binrw attributes that result in other errors.
-            unreachable!("Got a binrw error of unexpected type: {:?}", error);
+            // Generic binrw error. This is generally a binrw::backtrace::Error that
+            // contains details about the parsing issue.
+            Self::BinrwError(error)
         }
     }
 }
