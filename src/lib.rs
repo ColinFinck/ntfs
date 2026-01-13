@@ -35,6 +35,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![doc(html_logo_url = "https://colinfinck.de/img/software/ntfs.svg")]
 #![forbid(unsafe_code)]
 
 extern crate alloc;
