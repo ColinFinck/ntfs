@@ -162,7 +162,7 @@ impl<'n, 'f> NtfsAttributeListEntries<'n, 'f> {
         }
 
         // Get the current entry.
-        let mut cursor = ReadOnlyCursor::new(*slice);
+        let mut cursor = ReadOnlyCursor::new(slice);
         let entry = iter_try!(NtfsAttributeListEntry::new(&mut cursor, *position));
 
         // Advance our iterator to the next entry.
@@ -230,7 +230,7 @@ impl NtfsAttributeListEntry {
     }
 
     /// Gets the attribute name and returns it wrapped in a [`U16StrLe`].
-    pub fn name(&self) -> U16StrLe {
+    pub fn name<'a>(&'a self) -> U16StrLe<'a> {
         U16StrLe(&self.name)
     }
 

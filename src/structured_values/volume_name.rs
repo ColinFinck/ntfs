@@ -58,7 +58,7 @@ impl NtfsVolumeName {
     }
 
     /// Gets the volume name and returns it wrapped in a [`U16StrLe`].
-    pub fn name(&self) -> U16StrLe {
+    pub fn name<'a>(&'a self) -> U16StrLe<'a> {
         U16StrLe(&self.name)
     }
 
