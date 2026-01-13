@@ -1,14 +1,13 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::iter::FusedIterator;
-
-use binrw::io::{Read, Seek, SeekFrom};
 
 use crate::attribute::NtfsAttributeType;
 use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
 use crate::index_record::NtfsIndexRecord;
+use crate::io::{Read, Seek, SeekFrom};
 use crate::ntfs::Ntfs;
 use crate::structured_values::NtfsStructuredValue;
 use crate::traits::NtfsReadSeek;

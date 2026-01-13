@@ -1,15 +1,16 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::mem;
 
 use arrayvec::ArrayVec;
-use binrw::io::{Cursor, Read, Seek};
 use nt_string::u16strle::U16StrLe;
 
 use crate::attribute::NtfsAttributeType;
 use crate::attribute_value::{NtfsAttributeValue, NtfsResidentAttributeValue};
 use crate::error::{NtfsError, Result};
+use crate::helpers::ReadOnlyCursor;
+use crate::io::{Read, Seek};
 use crate::structured_values::{
     NtfsStructuredValue, NtfsStructuredValueFromResidentAttributeValue,
 };
@@ -36,7 +37,7 @@ pub struct NtfsVolumeName {
 impl NtfsVolumeName {
     fn new<T>(r: &mut T, position: NtfsPosition, value_length: u64) -> Result<Self>
     where
-        T: Read + Seek,
+        T: Read,
     {
         if value_length > VOLUME_NAME_MAX_SIZE as u64 {
             return Err(NtfsError::InvalidStructuredValueSize {
@@ -89,7 +90,7 @@ impl<'n, 'f> NtfsStructuredValueFromResidentAttributeValue<'n, 'f> for NtfsVolum
         let position = value.data_position();
         let value_length = value.len();
 
-        let mut cursor = Cursor::new(value.data());
+        let mut cursor = ReadOnlyCursor::new(value.data());
         Self::new(&mut cursor, position, value_length)
     }
 }

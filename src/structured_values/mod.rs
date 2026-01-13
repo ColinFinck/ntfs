@@ -1,4 +1,4 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 //! Various types of NTFS Attribute structured values.
@@ -23,12 +23,12 @@ pub use standard_information::*;
 pub use volume_information::*;
 pub use volume_name::*;
 
-use binrw::io::{Read, Seek};
 use bitflags::bitflags;
 
 use crate::attribute::NtfsAttributeType;
 use crate::attribute_value::{NtfsAttributeValue, NtfsResidentAttributeValue};
 use crate::error::Result;
+use crate::io::{Read, Seek};
 
 bitflags! {
     /// Flags that a user can set for a file (Read-Only, Hidden, System, Archive, etc.).

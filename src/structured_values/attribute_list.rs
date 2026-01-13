@@ -1,18 +1,19 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::mem;
 
 use arrayvec::ArrayVec;
-use binrw::io::{Cursor, Read, Seek, SeekFrom};
-use binrw::{BinRead, BinReaderExt};
 use nt_string::u16strle::U16StrLe;
+use zerocopy::{FromBytes, Immutable, KnownLayout, LittleEndian, Unaligned, U16, U32};
 
 use crate::attribute::{NtfsAttribute, NtfsAttributeType};
 use crate::attribute_value::{NtfsAttributeValue, NtfsNonResidentAttributeValue};
 use crate::error::{NtfsError, Result};
 use crate::file::NtfsFile;
 use crate::file_reference::NtfsFileReference;
+use crate::helpers::{read_pod, ReadOnlyCursor};
+use crate::io::{Read, Seek, SeekFrom};
 use crate::ntfs::Ntfs;
 use crate::structured_values::NtfsStructuredValue;
 use crate::traits::NtfsReadSeek;
@@ -25,13 +26,13 @@ const ATTRIBUTE_LIST_ENTRY_HEADER_SIZE: usize = 26;
 /// Hence, the name occupies up to 510 bytes.
 const NAME_MAX_SIZE: usize = (u8::MAX as usize) * mem::size_of::<u16>();
 
-#[allow(unused)]
-#[derive(BinRead, Clone, Debug)]
+#[derive(Clone, Debug, FromBytes, Immutable, KnownLayout, Unaligned)]
+#[repr(C, packed)]
 struct AttributeListEntryHeader {
     /// Type of the attribute, known types are in [`NtfsAttributeType`].
-    ty: u32,
+    ty: U32<LittleEndian>,
     /// Length of this attribute list entry, in bytes.
-    list_entry_length: u16,
+    list_entry_length: U16<LittleEndian>,
     /// Length of the name, in UTF-16 code points (every code point is 2 bytes).
     name_length: u8,
     /// Offset to the beginning of the name, in bytes from the beginning of this header.
@@ -43,7 +44,7 @@ struct AttributeListEntryHeader {
     /// Reference to the File Record where this attribute is stored.
     base_file_reference: NtfsFileReference,
     /// Identifier of this attribute that is unique within the [`NtfsFile`].
-    instance: u16,
+    instance: U16<LittleEndian>,
 }
 
 /// Structure of an $ATTRIBUTE_LIST attribute.
@@ -161,7 +162,7 @@ impl<'n, 'f> NtfsAttributeListEntries<'n, 'f> {
         }
 
         // Get the current entry.
-        let mut cursor = Cursor::new(*slice);
+        let mut cursor = ReadOnlyCursor::new(*slice);
         let entry = iter_try!(NtfsAttributeListEntry::new(&mut cursor, *position));
 
         // Advance our iterator to the next entry.
@@ -183,9 +184,9 @@ pub struct NtfsAttributeListEntry {
 impl NtfsAttributeListEntry {
     fn new<T>(r: &mut T, position: NtfsPosition) -> Result<Self>
     where
-        T: Read + Seek,
+        T: Read,
     {
-        let header = r.read_le::<AttributeListEntryHeader>()?;
+        let header = read_pod::<T, AttributeListEntryHeader, ATTRIBUTE_LIST_ENTRY_HEADER_SIZE>(r)?;
 
         let mut entry = Self {
             header,
@@ -210,12 +211,12 @@ impl NtfsAttributeListEntry {
     /// Multiple entries of the same type and instance number form a connected attribute,
     /// meaning an attribute whose value is stretched over multiple attributes.
     pub fn instance(&self) -> u16 {
-        self.header.instance
+        self.header.instance.get()
     }
 
     /// Returns the length of this attribute list entry, in bytes.
     pub fn list_entry_length(&self) -> u16 {
-        self.header.list_entry_length
+        self.header.list_entry_length.get()
     }
 
     /// Returns the offset of this attribute's value data as a Virtual Cluster Number (VCN).
@@ -247,7 +248,7 @@ impl NtfsAttributeListEntry {
 
     fn read_name<T>(&mut self, r: &mut T) -> Result<()>
     where
-        T: Read + Seek,
+        T: Read,
     {
         debug_assert_eq!(self.name.len(), NAME_MAX_SIZE);
 
@@ -292,9 +293,9 @@ impl NtfsAttributeListEntry {
     /// Returns the type of this NTFS Attribute, or [`NtfsError::UnsupportedAttributeType`]
     /// if it's an unknown type.
     pub fn ty(&self) -> Result<NtfsAttributeType> {
-        NtfsAttributeType::n(self.header.ty).ok_or(NtfsError::UnsupportedAttributeType {
+        NtfsAttributeType::n(self.header.ty.get()).ok_or(NtfsError::UnsupportedAttributeType {
             position: self.position(),
-            actual: self.header.ty,
+            actual: self.header.ty.get(),
         })
     }
 

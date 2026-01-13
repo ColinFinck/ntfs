@@ -1,13 +1,15 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use binrw::io::{Read, Seek, SeekFrom};
-use binrw::BinReaderExt;
+use core::mem;
+
+use zerocopy::FromBytes;
 
 use crate::attribute::NtfsAttributeType;
 use crate::boot_sector::BootSector;
 use crate::error::{NtfsError, Result};
 use crate::file::{KnownNtfsFileRecordNumber, NtfsFile};
+use crate::io::{Read, Seek, SeekFrom};
 use crate::structured_values::{NtfsVolumeInformation, NtfsVolumeName};
 use crate::traits::NtfsReadSeek;
 use crate::types::NtfsPosition;
@@ -37,14 +39,15 @@ impl Ntfs {
     ///
     /// The reader must cover the entire NTFS partition, not more and not less.
     /// It will be rewinded to the beginning before reading anything.
-    #[allow(clippy::seek_to_start_instead_of_rewind)]
     pub fn new<T>(fs: &mut T) -> Result<Self>
     where
         T: Read + Seek,
     {
         // Read and validate the boot sector.
-        fs.seek(SeekFrom::Start(0))?;
-        let boot_sector = fs.read_le::<BootSector>()?;
+        fs.rewind()?;
+        let mut boot_sector_bytes = [0u8; mem::size_of::<BootSector>()];
+        fs.read_exact(&mut boot_sector_bytes)?;
+        let boot_sector = BootSector::ref_from_bytes(&boot_sector_bytes).unwrap();
         boot_sector.validate()?;
 
         let bpb = boot_sector.bpb();

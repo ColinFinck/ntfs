@@ -1,17 +1,16 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::ops::Range;
 
 use alloc::vec;
-use binrw::io::{Read, Seek};
-use byteorder::{ByteOrder, LittleEndian};
 use memoffset::offset_of;
 
 use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
 use crate::index_entry::{IndexNodeEntryRanges, NtfsIndexNodeEntries};
 use crate::indexes::NtfsIndexEntryType;
+use crate::io::{Read, Seek};
 use crate::record::Record;
 use crate::record::RecordHeader;
 use crate::traits::NtfsReadSeek;
@@ -111,18 +110,18 @@ impl NtfsIndexRecord {
     /// Returns the allocated size of this NTFS Index Record, in bytes.
     pub fn index_allocated_size(&self) -> u32 {
         let start = INDEX_RECORD_HEADER_SIZE as usize + offset_of!(IndexNodeHeader, allocated_size);
-        LittleEndian::read_u32(&self.record.data()[start..])
+        u32::from_le_bytes(*self.record.data()[start..].first_chunk().unwrap())
     }
 
     /// Returns the size actually used by index data within this NTFS Index Record, in bytes.
     pub fn index_data_size(&self) -> u32 {
         let start = INDEX_RECORD_HEADER_SIZE as usize + offset_of!(IndexNodeHeader, index_size);
-        LittleEndian::read_u32(&self.record.data()[start..])
+        u32::from_le_bytes(*self.record.data()[start..].first_chunk().unwrap())
     }
 
     pub(crate) fn index_entries_offset(&self) -> u32 {
         let start = INDEX_RECORD_HEADER_SIZE as usize + offset_of!(IndexNodeHeader, entries_offset);
-        LittleEndian::read_u32(&self.record.data()[start..])
+        u32::from_le_bytes(*self.record.data()[start..].first_chunk().unwrap())
     }
 
     pub(crate) fn into_entry_ranges<E>(self) -> IndexNodeEntryRanges<E>
@@ -184,6 +183,8 @@ impl NtfsIndexRecord {
     /// [`NtfsIndexAllocation::record_from_vcn`]: crate::structured_values::NtfsIndexAllocation::record_from_vcn
     pub fn vcn(&self) -> Vcn {
         let start = offset_of!(IndexRecordHeader, vcn);
-        Vcn::from(LittleEndian::read_i64(&self.record.data()[start..]))
+        Vcn::from(i64::from_le_bytes(
+            *self.record.data()[start..].first_chunk().unwrap(),
+        ))
     }
 }

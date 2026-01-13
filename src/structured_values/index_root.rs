@@ -1,10 +1,8 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::ops::Range;
 
-use binrw::io::{Read, Seek};
-use byteorder::{ByteOrder, LittleEndian};
 use memoffset::offset_of;
 
 use crate::attribute::NtfsAttributeType;
@@ -13,6 +11,7 @@ use crate::error::{NtfsError, Result};
 use crate::index_entry::{IndexNodeEntryRanges, NtfsIndexNodeEntries};
 use crate::index_record::{IndexNodeHeader, INDEX_NODE_HEADER_SIZE};
 use crate::indexes::NtfsIndexEntryType;
+use crate::io::{Read, Seek};
 use crate::structured_values::{
     NtfsStructuredValue, NtfsStructuredValueFromResidentAttributeValue,
 };
@@ -101,24 +100,24 @@ impl<'f> NtfsIndexRoot<'f> {
     /// Returns the allocated size of this NTFS Index Root, in bytes.
     pub fn index_allocated_size(&self) -> u32 {
         let start = INDEX_ROOT_HEADER_SIZE + offset_of!(IndexNodeHeader, allocated_size);
-        LittleEndian::read_u32(&self.slice[start..])
+        u32::from_le_bytes(*self.slice[start..].first_chunk().unwrap())
     }
 
     /// Returns the size actually used by index data within this NTFS Index Root, in bytes.
     pub fn index_data_size(&self) -> u32 {
         let start = INDEX_ROOT_HEADER_SIZE + offset_of!(IndexNodeHeader, index_size);
-        LittleEndian::read_u32(&self.slice[start..])
+        u32::from_le_bytes(*self.slice[start..].first_chunk().unwrap())
     }
 
     fn index_entries_offset(&self) -> u32 {
         let start = INDEX_ROOT_HEADER_SIZE + offset_of!(IndexNodeHeader, entries_offset);
-        LittleEndian::read_u32(&self.slice[start..])
+        u32::from_le_bytes(*self.slice[start..].first_chunk().unwrap())
     }
 
     /// Returns the size of a single Index Record, in bytes.
     pub fn index_record_size(&self) -> u32 {
         let start = offset_of!(IndexRootHeader, index_record_size);
-        LittleEndian::read_u32(&self.slice[start..])
+        u32::from_le_bytes(*self.slice[start..].first_chunk().unwrap())
     }
 
     /// Returns whether the index belonging to this Index Root is large enough

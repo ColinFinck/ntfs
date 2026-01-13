@@ -1,17 +1,18 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use binrw::io::{Read, Seek};
-use binrw::BinRead;
+use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned};
 
 use crate::error::Result;
 use crate::file::NtfsFile;
+use crate::io::{Read, Seek};
 use crate::ntfs::Ntfs;
 
 /// Absolute reference to a File Record on the filesystem, composed out of a File Record Number and a Sequence Number.
 ///
 /// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/concepts/file_reference.html>
-#[derive(BinRead, Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, FromBytes, Immutable, KnownLayout, Unaligned)]
+#[repr(transparent)]
 pub struct NtfsFileReference([u8; 8]);
 
 impl NtfsFileReference {

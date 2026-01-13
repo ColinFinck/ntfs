@@ -1,10 +1,9 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::mem;
 
 use alloc::vec::Vec;
-use byteorder::{ByteOrder, LittleEndian};
 use memoffset::{offset_of, span_of};
 
 use crate::error::{NtfsError, Result};
@@ -108,7 +107,7 @@ impl Record {
 
     fn update_sequence_array_count(&self) -> Result<u16> {
         let start = offset_of!(RecordHeader, update_sequence_count);
-        let update_sequence_count = LittleEndian::read_u16(&self.data[start..]);
+        let update_sequence_count = u16::from_le_bytes(*self.data[start..].first_chunk().unwrap());
 
         // Subtract the Update Sequence Number (USN) element, so that only the number of array elements remains.
         update_sequence_count
@@ -139,12 +138,12 @@ impl Record {
 
     fn update_sequence_offset(&self) -> u16 {
         let start = offset_of!(RecordHeader, update_sequence_offset);
-        LittleEndian::read_u16(&self.data[start..])
+        u16::from_le_bytes(*self.data[start..].first_chunk().unwrap())
     }
 
     pub(crate) fn update_sequence_size(&self) -> u32 {
         let start = offset_of!(RecordHeader, update_sequence_count);
-        let update_sequence_count = LittleEndian::read_u16(&self.data[start..]);
+        let update_sequence_count = u16::from_le_bytes(*self.data[start..].first_chunk().unwrap());
         update_sequence_count as u32 * mem::size_of::<u16>() as u32
     }
 }

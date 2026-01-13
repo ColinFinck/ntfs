@@ -1,4 +1,4 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::cmp::Ordering;
@@ -6,9 +6,7 @@ use core::fmt;
 use core::num::NonZeroU64;
 
 use alloc::vec;
-use binrw::io::{Read, Seek, SeekFrom};
 use bitflags::bitflags;
-use byteorder::{ByteOrder, LittleEndian};
 use memoffset::offset_of;
 use nt_string::u16strle::U16StrLe;
 
@@ -19,6 +17,7 @@ use crate::error::{NtfsError, Result};
 use crate::file_reference::NtfsFileReference;
 use crate::index::NtfsIndex;
 use crate::indexes::NtfsFileNameIndex;
+use crate::io::{Read, Seek, SeekFrom};
 use crate::ntfs::Ntfs;
 use crate::record::{Record, RecordHeader};
 use crate::structured_values::{
@@ -161,7 +160,7 @@ impl<'n> NtfsFile<'n> {
     /// Returns the allocated size of this NTFS File Record, in bytes.
     pub fn allocated_size(&self) -> u32 {
         let start = offset_of!(FileRecordHeader, allocated_size);
-        LittleEndian::read_u32(&self.record.data()[start..])
+        u32::from_le_bytes(*self.record.data()[start..].first_chunk().unwrap())
     }
 
     /// Returns an iterator over all attributes of this file.
@@ -249,7 +248,7 @@ impl<'n> NtfsFile<'n> {
     /// This is less or equal than [`NtfsFile::allocated_size`].
     pub fn data_size(&self) -> u32 {
         let start = offset_of!(FileRecordHeader, data_size);
-        LittleEndian::read_u32(&self.record.data()[start..])
+        u32::from_le_bytes(*self.record.data()[start..].first_chunk().unwrap())
     }
 
     /// Convenience function to return an [`NtfsIndex`] if this file is a directory.
@@ -403,19 +402,21 @@ impl<'n> NtfsFile<'n> {
 
     pub(crate) fn first_attribute_offset(&self) -> u16 {
         let start = offset_of!(FileRecordHeader, first_attribute_offset);
-        LittleEndian::read_u16(&self.record.data()[start..])
+        u16::from_le_bytes(*self.record.data()[start..].first_chunk().unwrap())
     }
 
     /// Returns flags set for this file as specified by [`NtfsFileFlags`].
     pub fn flags(&self) -> NtfsFileFlags {
         let start = offset_of!(FileRecordHeader, flags);
-        NtfsFileFlags::from_bits_truncate(LittleEndian::read_u16(&self.record.data()[start..]))
+        NtfsFileFlags::from_bits_truncate(u16::from_le_bytes(
+            *self.record.data()[start..].first_chunk().unwrap(),
+        ))
     }
 
     /// Returns the number of hard links to this NTFS File Record.
     pub fn hard_link_count(&self) -> u16 {
         let start = offset_of!(FileRecordHeader, hard_link_count);
-        LittleEndian::read_u16(&self.record.data()[start..])
+        u16::from_le_bytes(*self.record.data()[start..].first_chunk().unwrap())
     }
 
     /// Convenience function to get the $STANDARD_INFORMATION attribute of this file
@@ -503,7 +504,7 @@ impl<'n> NtfsFile<'n> {
     /// Hence, it gives a count how many time this File Record has been reused.
     pub fn sequence_number(&self) -> u16 {
         let start = offset_of!(FileRecordHeader, sequence_number);
-        LittleEndian::read_u16(&self.record.data()[start..])
+        u16::from_le_bytes(*self.record.data()[start..].first_chunk().unwrap())
     }
 
     fn validate_signature(record: &Record) -> Result<()> {

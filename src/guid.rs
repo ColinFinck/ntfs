@@ -1,20 +1,43 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::fmt;
 
-use binrw::BinRead;
+use zerocopy::{FromBytes, Immutable, KnownLayout, LittleEndian, Unaligned, U16, U32};
 
 /// Size of a single GUID on disk (= size of all GUID fields).
 pub(crate) const GUID_SIZE: usize = 16;
 
 /// A Globally Unique Identifier (GUID), used for Object IDs in NTFS.
-#[derive(BinRead, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, FromBytes, Immutable, KnownLayout, PartialEq, Unaligned)]
+#[repr(C, packed)]
 pub struct NtfsGuid {
-    pub data1: u32,
-    pub data2: u16,
-    pub data3: u16,
-    pub data4: [u8; 8],
+    data1: U32<LittleEndian>,
+    data2: U16<LittleEndian>,
+    data3: U16<LittleEndian>,
+    data4: [u8; 8],
+}
+
+impl NtfsGuid {
+    /// Returns the `data1` component of the GUID.
+    pub fn data1(&self) -> u32 {
+        self.data1.get()
+    }
+
+    /// Returns the `data2` component of the GUID.
+    pub fn data2(&self) -> u16 {
+        self.data2.get()
+    }
+
+    /// Returns the `data3` component of the GUID.
+    pub fn data3(&self) -> u16 {
+        self.data3.get()
+    }
+
+    /// Returns the `data4` component of the GUID.
+    pub fn data4(&self) -> [u8; 8] {
+        self.data4
+    }
 }
 
 impl fmt::Display for NtfsGuid {
@@ -44,9 +67,9 @@ mod tests {
     #[test]
     fn test_guid() {
         let guid = NtfsGuid {
-            data1: 0x67c8770b,
-            data2: 0x44f1,
-            data3: 0x410a,
+            data1: U32::new(0x67c8770b),
+            data2: U16::new(0x44f1),
+            data3: U16::new(0x410a),
             data4: [0xab, 0x9a, 0xf9, 0xb5, 0x44, 0x6f, 0x13, 0xee],
         };
         let guid_string = guid.to_string();

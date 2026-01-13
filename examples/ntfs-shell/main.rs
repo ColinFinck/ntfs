@@ -1,4 +1,4 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 mod sector_reader;
@@ -384,42 +384,31 @@ fn fileinfo_std(attribute: NtfsAttribute) -> Result<()> {
     println!("{:34}{}", "Modification Time:", mtime);
     println!("{:34}{}", "MFT Record Modification Time:", mmtime);
 
+    println!("{:34}{}", "Maximum Versions:", std_info.maximum_versions());
+    println!("{:34}{}", "Version:", std_info.version());
+    println!("{:34}{}", "Class ID:", std_info.class_id());
+
     // NTFS 3.x extended information
-    let class_id = std_info
-        .class_id()
-        .map(|x| x.to_string())
-        .unwrap_or_else(|| "<NONE>".to_string());
-    let maximum_versions = std_info
-        .maximum_versions()
-        .map(|x| x.to_string())
-        .unwrap_or_else(|| "<NONE>".to_string());
     let owner_id = std_info
         .owner_id()
-        .map(|x| x.to_string())
-        .unwrap_or_else(|| "<NONE>".to_string());
-    let quota_charged = std_info
-        .quota_charged()
         .map(|x| x.to_string())
         .unwrap_or_else(|| "<NONE>".to_string());
     let security_id = std_info
         .security_id()
         .map(|x| x.to_string())
         .unwrap_or_else(|| "<NONE>".to_string());
+    let quota_charged = std_info
+        .quota_charged()
+        .map(|x| x.to_string())
+        .unwrap_or_else(|| "<NONE>".to_string());
     let usn = std_info
         .usn()
         .map(|x| x.to_string())
         .unwrap_or_else(|| "<NONE>".to_string());
-    let version = std_info
-        .version()
-        .map(|x| x.to_string())
-        .unwrap_or_else(|| "<NONE>".to_string());
-    println!("{:34}{}", "Class ID:", class_id);
-    println!("{:34}{}", "Maximum Versions:", maximum_versions);
     println!("{:34}{}", "Owner ID:", owner_id);
-    println!("{:34}{}", "Quota Charged:", quota_charged);
     println!("{:34}{}", "Security ID:", security_id);
+    println!("{:34}{}", "Quota Charged:", quota_charged);
     println!("{:34}{}", "USN:", usn);
-    println!("{:34}{}", "Version:", version);
 
     Ok(())
 }

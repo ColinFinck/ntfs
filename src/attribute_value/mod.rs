@@ -1,4 +1,4 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 //! Readers for attribute value types.
@@ -11,10 +11,9 @@ pub use attribute_list_non_resident::*;
 pub use non_resident::*;
 pub use resident::*;
 
-use binrw::io;
-use binrw::io::{Read, Seek, SeekFrom};
-
 use crate::error::{NtfsError, Result};
+use crate::io;
+use crate::io::{Read, Seek, SeekFrom};
 use crate::traits::NtfsReadSeek;
 use crate::types::NtfsPosition;
 

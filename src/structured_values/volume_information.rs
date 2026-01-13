@@ -1,15 +1,16 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::fmt;
 
-use binrw::io::{Cursor, Read, Seek};
-use binrw::{BinRead, BinReaderExt};
 use bitflags::bitflags;
+use zerocopy::{FromBytes, Immutable, KnownLayout, LittleEndian, Unaligned, U16, U64};
 
 use crate::attribute::NtfsAttributeType;
 use crate::attribute_value::{NtfsAttributeValue, NtfsResidentAttributeValue};
 use crate::error::{NtfsError, Result};
+use crate::helpers::{read_pod, ReadOnlyCursor};
+use crate::io::{Read, Seek};
 use crate::structured_values::{
     NtfsStructuredValue, NtfsStructuredValueFromResidentAttributeValue,
 };
@@ -18,12 +19,13 @@ use crate::types::NtfsPosition;
 /// Size of all [`VolumeInformationData`] fields.
 const VOLUME_INFORMATION_SIZE: usize = 12;
 
-#[derive(BinRead, Clone, Debug)]
+#[derive(Clone, Debug, FromBytes, Immutable, KnownLayout, Unaligned)]
+#[repr(C, packed)]
 struct VolumeInformationData {
-    _reserved: u64,
+    _reserved: U64<LittleEndian>,
     major_version: u8,
     minor_version: u8,
-    flags: u16,
+    flags: U16<LittleEndian>,
 }
 
 bitflags! {
@@ -66,7 +68,7 @@ pub struct NtfsVolumeInformation {
 impl NtfsVolumeInformation {
     fn new<T>(r: &mut T, position: NtfsPosition, value_length: u64) -> Result<Self>
     where
-        T: Read + Seek,
+        T: Read,
     {
         if value_length < VOLUME_INFORMATION_SIZE as u64 {
             return Err(NtfsError::InvalidStructuredValueSize {
@@ -77,14 +79,14 @@ impl NtfsVolumeInformation {
             });
         }
 
-        let info = r.read_le::<VolumeInformationData>()?;
+        let info = read_pod::<T, VolumeInformationData, VOLUME_INFORMATION_SIZE>(r)?;
 
         Ok(Self { info })
     }
 
     /// Returns flags set for this NTFS filesystem/volume as specified by [`NtfsVolumeFlags`].
     pub fn flags(&self) -> NtfsVolumeFlags {
-        NtfsVolumeFlags::from_bits_truncate(self.info.flags)
+        NtfsVolumeFlags::from_bits_truncate(self.info.flags.get())
     }
 
     /// Returns the major NTFS version of this filesystem (e.g. `3` for NTFS 3.1).
@@ -118,7 +120,7 @@ impl<'n, 'f> NtfsStructuredValueFromResidentAttributeValue<'n, 'f> for NtfsVolum
         let position = value.data_position();
         let value_length = value.len();
 
-        let mut cursor = Cursor::new(value.data());
+        let mut cursor = ReadOnlyCursor::new(value.data());
         Self::new(&mut cursor, position, value_length)
     }
 }

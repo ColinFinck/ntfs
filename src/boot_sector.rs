@@ -1,44 +1,45 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::ops::RangeInclusive;
 
-use binrw::BinRead;
 use memoffset::offset_of;
 
 use crate::error::{NtfsError, Result};
 use crate::types::{Lcn, NtfsPosition};
+use zerocopy::byteorder::LittleEndian;
+use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, U16, U32, U64};
 
 // Sources:
 // - https://en.wikipedia.org/wiki/NTFS#Partition_Boot_Sector_(VBR)
 // - https://en.wikipedia.org/wiki/BIOS_parameter_block#NTFS
 // - https://wiki.osdev.org/NTFS
 // - The iBored tool from https://apps.tempel.org/iBored/
-#[allow(unused)]
-#[derive(BinRead)]
+#[derive(FromBytes, Immutable, KnownLayout, Unaligned)]
+#[repr(C, packed)]
 pub(crate) struct BiosParameterBlock {
-    sector_size: u16,
+    sector_size: U16<LittleEndian>,
     sectors_per_cluster: u8,
     zeros_1: [u8; 7],
     media: u8,
     zeros_2: [u8; 2],
-    dummy_sectors_per_track: u16,
-    dummy_heads: u16,
-    hidden_sectors: u32,
-    zeros_3: u32,
+    dummy_sectors_per_track: U16<LittleEndian>,
+    dummy_heads: U16<LittleEndian>,
+    hidden_sectors: U32<LittleEndian>,
+    zeros_3: U32<LittleEndian>,
     physical_drive_number: u8,
     flags: u8,
     extended_boot_signature: u8,
     reserved: u8,
-    total_sectors: u64,
+    total_sectors: U64<LittleEndian>,
     mft_lcn: Lcn,
     mft_mirror_lcn: Lcn,
     file_record_size_info: i8,
     zeros_4: [u8; 3],
     index_record_size_info: i8,
     zeros_5: [u8; 3],
-    serial_number: u64,
-    checksum: u32,
+    serial_number: U64<LittleEndian>,
+    checksum: U32<LittleEndian>,
 }
 
 impl BiosParameterBlock {
@@ -130,15 +131,17 @@ impl BiosParameterBlock {
 
         const SECTOR_SIZE_RANGE: RangeInclusive<u16> = MIN_SECTOR_SIZE..=MAX_SECTOR_SIZE;
 
-        if !SECTOR_SIZE_RANGE.contains(&self.sector_size) || !self.sector_size.is_power_of_two() {
+        if !SECTOR_SIZE_RANGE.contains(&self.sector_size.get())
+            || !self.sector_size.get().is_power_of_two()
+        {
             return Err(NtfsError::UnsupportedSectorSize {
                 min: MIN_SECTOR_SIZE,
                 max: MAX_SECTOR_SIZE,
-                actual: self.sector_size,
+                actual: self.sector_size.get(),
             });
         }
 
-        Ok(self.sector_size)
+        Ok(self.sector_size.get())
     }
 
     fn sectors_per_cluster(&self) -> Result<u16> {
@@ -179,16 +182,16 @@ impl BiosParameterBlock {
     }
 
     pub(crate) fn serial_number(&self) -> u64 {
-        self.serial_number
+        self.serial_number.get()
     }
 
     pub(crate) fn total_sectors(&self) -> u64 {
-        self.total_sectors
+        self.total_sectors.get()
     }
 }
 
-#[allow(unused)]
-#[derive(BinRead)]
+#[derive(FromBytes, Immutable, KnownLayout, Unaligned)]
+#[repr(C, packed)]
 pub(crate) struct BootSector {
     bootjmp: [u8; 3],
     oem_name: [u8; 8],

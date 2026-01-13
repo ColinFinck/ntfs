@@ -1,4 +1,4 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 //! Supplementary helper types.
@@ -7,8 +7,9 @@ use core::fmt;
 use core::num::NonZeroU64;
 use core::ops::{Add, AddAssign};
 
-use binrw::BinRead;
 use derive_more::{Binary, Display, From, LowerHex, Octal, UpperHex};
+use zerocopy::byteorder::LittleEndian;
+use zerocopy::{FromBytes, Immutable, KnownLayout, Unaligned, I64, U64};
 
 use crate::error::{NtfsError, Result};
 use crate::ntfs::Ntfs;
@@ -143,30 +144,34 @@ impl From<NonZeroU64> for NtfsPosition {
 /// The LCN is an absolute cluster index into the filesystem.
 #[derive(
     Binary,
-    BinRead,
     Clone,
     Copy,
     Debug,
     Display,
     Eq,
-    From,
+    FromBytes,
+    Immutable,
+    KnownLayout,
     LowerHex,
     Octal,
     Ord,
     PartialEq,
     PartialOrd,
+    Unaligned,
     UpperHex,
 )]
-pub struct Lcn(u64);
+#[repr(transparent)]
+pub struct Lcn(U64<LittleEndian>);
 
 impl Lcn {
     /// Performs a checked addition of the given Virtual Cluster Number (VCN), returning a new LCN.
     pub fn checked_add(&self, vcn: Vcn) -> Option<Lcn> {
         if vcn.0 >= 0 {
-            self.0.checked_add(vcn.0 as u64).map(Into::into)
+            self.0.get().checked_add(vcn.0.get() as u64).map(Into::into)
         } else {
             self.0
-                .checked_sub(vcn.0.wrapping_neg() as u64)
+                .get()
+                .checked_sub(vcn.0.get().wrapping_neg() as u64)
                 .map(Into::into)
         }
     }
@@ -175,6 +180,7 @@ impl Lcn {
     pub fn position(&self, ntfs: &Ntfs) -> Result<NtfsPosition> {
         let value = self
             .0
+            .get()
             .checked_mul(ntfs.cluster_size() as u64)
             .ok_or(NtfsError::LcnTooBig { lcn: *self })?;
         Ok(NtfsPosition::new(value))
@@ -182,7 +188,13 @@ impl Lcn {
 
     /// Returns the stored Logical Cluster Number.
     pub fn value(&self) -> u64 {
-        self.0
+        self.0.get()
+    }
+}
+
+impl From<u64> for Lcn {
+    fn from(value: u64) -> Self {
+        Self(U64::new(value))
     }
 }
 
@@ -193,32 +205,42 @@ impl Lcn {
 /// or relative to the start of an attribute value.
 #[derive(
     Binary,
-    BinRead,
     Clone,
     Copy,
     Debug,
     Display,
     Eq,
-    From,
+    FromBytes,
+    Immutable,
+    KnownLayout,
     LowerHex,
     Octal,
     Ord,
     PartialEq,
     PartialOrd,
+    Unaligned,
     UpperHex,
 )]
-pub struct Vcn(i64);
+#[repr(transparent)]
+pub struct Vcn(I64<LittleEndian>);
 
 impl Vcn {
     /// Converts this VCN into a byte offset (with respect to the cluster size of the provided [`Ntfs`] filesystem).
     pub fn offset(&self, ntfs: &Ntfs) -> Result<i64> {
         self.0
+            .get()
             .checked_mul(ntfs.cluster_size() as i64)
             .ok_or(NtfsError::VcnTooBig { vcn: *self })
     }
 
     /// Returns the stored Virtual Cluster Number.
     pub fn value(&self) -> i64 {
-        self.0
+        self.0.get()
+    }
+}
+
+impl From<i64> for Vcn {
+    fn from(value: i64) -> Self {
+        Self(I64::new(value))
     }
 }

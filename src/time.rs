@@ -1,8 +1,7 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use binrw::BinRead;
-use derive_more::From;
+use zerocopy::{FromBytes, Immutable, KnownLayout, LittleEndian, Unaligned, U64};
 
 #[cfg(feature = "time")]
 use {crate::error::NtfsError, time::OffsetDateTime};
@@ -22,13 +21,22 @@ const INTERVALS_PER_SECOND: u64 = 10_000_000;
 ///
 /// NTFS (and the Windows NT line of operating systems) represent time as an unsigned 64-bit integer
 /// counting the number of 100-nanosecond intervals since January 1, 1601.
-#[derive(BinRead, Clone, Copy, Debug, Eq, From, Ord, PartialEq, PartialOrd)]
-pub struct NtfsTime(u64);
+#[derive(
+    Clone, Copy, Debug, Eq, FromBytes, Immutable, KnownLayout, Ord, PartialEq, PartialOrd, Unaligned,
+)]
+#[repr(transparent)]
+pub struct NtfsTime(U64<LittleEndian>);
 
 impl NtfsTime {
     /// Returns the stored NT timestamp (number of 100-nanosecond intervals since January 1, 1601).
     pub fn nt_timestamp(&self) -> u64 {
-        self.0
+        self.0.get()
+    }
+}
+
+impl From<u64> for NtfsTime {
+    fn from(value: u64) -> Self {
+        Self(U64::new(value))
     }
 }
 
@@ -45,7 +53,7 @@ impl TryFrom<OffsetDateTime> for NtfsTime {
         let nt_timestamp =
             u64::try_from(intervals_since_windows_epoch).map_err(|_| NtfsError::InvalidTime)?;
 
-        Ok(Self(nt_timestamp))
+        Ok(Self::from(nt_timestamp))
     }
 }
 
@@ -74,7 +82,7 @@ impl TryFrom<SystemTime> for NtfsTime {
         let intervals_since_windows_epoch =
             intervals_since_unix_epoch + EPOCH_DIFFERENCE_IN_INTERVALS;
 
-        Ok(Self(intervals_since_windows_epoch))
+        Ok(Self::from(intervals_since_windows_epoch))
     }
 }
 

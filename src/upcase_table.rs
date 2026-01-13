@@ -1,4 +1,4 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::cmp::Ordering;
@@ -6,12 +6,12 @@ use core::mem;
 
 use alloc::vec;
 use alloc::vec::Vec;
-use binrw::io::{Read, Seek};
 use nt_string::u16strle::U16StrLe;
 
 use crate::attribute::NtfsAttributeType;
 use crate::error::{NtfsError, Result};
 use crate::file::KnownNtfsFileRecordNumber;
+use crate::io::{Read, Seek};
 use crate::ntfs::Ntfs;
 use crate::traits::NtfsReadSeek;
 

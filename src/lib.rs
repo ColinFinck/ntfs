@@ -1,4 +1,4 @@
-// Copyright 2021 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 //! A low-level NTFS filesystem library implemented in Rust.
@@ -53,6 +53,7 @@ mod index;
 mod index_entry;
 mod index_record;
 pub mod indexes;
+pub mod io;
 mod ntfs;
 mod record;
 pub mod structured_values;

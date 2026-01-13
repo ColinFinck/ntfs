@@ -1,19 +1,20 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::mem;
 
 use arrayvec::ArrayVec;
-use binrw::io::{Cursor, Read, Seek};
-use binrw::{BinRead, BinReaderExt};
 use enumn::N;
 use nt_string::u16strle::U16StrLe;
+use zerocopy::{FromBytes, Immutable, KnownLayout, LittleEndian, Unaligned, U32, U64};
 
 use crate::attribute::NtfsAttributeType;
 use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};
 use crate::file_reference::NtfsFileReference;
+use crate::helpers::{read_pod, ReadOnlyCursor};
 use crate::indexes::NtfsIndexEntryKey;
+use crate::io::{Read, Seek};
 use crate::structured_values::{NtfsFileAttributeFlags, NtfsStructuredValue};
 use crate::time::NtfsTime;
 use crate::types::NtfsPosition;
@@ -28,18 +29,18 @@ const FILE_NAME_MIN_SIZE: usize = FILE_NAME_HEADER_SIZE + mem::size_of::<u16>();
 /// Hence, the name occupies up to 510 bytes.
 const NAME_MAX_SIZE: usize = (u8::MAX as usize) * mem::size_of::<u16>();
 
-#[allow(unused)]
-#[derive(BinRead, Clone, Debug)]
+#[derive(Clone, Debug, FromBytes, Immutable, KnownLayout, Unaligned)]
+#[repr(C, packed)]
 struct FileNameHeader {
     parent_directory_reference: NtfsFileReference,
     creation_time: NtfsTime,
     modification_time: NtfsTime,
     mft_record_modification_time: NtfsTime,
     access_time: NtfsTime,
-    allocated_size: u64,
-    data_size: u64,
-    file_attributes: u32,
-    reparse_point_tag: u32,
+    allocated_size: U64<LittleEndian>,
+    data_size: U64<LittleEndian>,
+    file_attributes: U32<LittleEndian>,
+    reparse_point_tag: U32<LittleEndian>,
     name_length: u8,
     namespace: u8,
 }
@@ -85,7 +86,7 @@ pub struct NtfsFileName {
 impl NtfsFileName {
     fn new<T>(r: &mut T, position: NtfsPosition, value_length: u64) -> Result<Self>
     where
-        T: Read + Seek,
+        T: Read,
     {
         if value_length < FILE_NAME_MIN_SIZE as u64 {
             return Err(NtfsError::InvalidStructuredValueSize {
@@ -96,7 +97,7 @@ impl NtfsFileName {
             });
         }
 
-        let header = r.read_le::<FileNameHeader>()?;
+        let header = read_pod::<T, FileNameHeader, FILE_NAME_HEADER_SIZE>(r)?;
 
         let mut file_name = Self {
             header,
@@ -136,7 +137,7 @@ impl NtfsFileName {
     /// [`NtfsDataRun::allocated_size`]: crate::attribute_value::NtfsDataRun::allocated_size
     /// [`NtfsFile::data`]: crate::NtfsFile::data
     pub fn allocated_size(&self) -> u64 {
-        self.header.allocated_size
+        self.header.allocated_size.get()
     }
 
     /// Returns the creation time stored in this $FILE_NAME record.
@@ -166,7 +167,7 @@ impl NtfsFileName {
     /// [`NtfsAttribute::value`]: crate::attribute::NtfsAttribute::value
     /// [`NtfsFile::data`]: crate::file::NtfsFile::data
     pub fn data_size(&self) -> u64 {
-        self.header.data_size
+        self.header.data_size.get()
     }
 
     /// Returns flags that a user can set for a file (Read-Only, Hidden, System, Archive, etc.).
@@ -177,7 +178,7 @@ impl NtfsFileName {
     ///
     /// [`NtfsStandardInformation::file_attributes`]: crate::structured_values::NtfsStandardInformation::file_attributes
     pub fn file_attributes(&self) -> NtfsFileAttributeFlags {
-        NtfsFileAttributeFlags::from_bits_truncate(self.header.file_attributes)
+        NtfsFileAttributeFlags::from_bits_truncate(self.header.file_attributes.get())
     }
 
     /// Returns whether this file is a directory.
@@ -230,7 +231,7 @@ impl NtfsFileName {
 
     fn read_name<T>(&mut self, r: &mut T) -> Result<()>
     where
-        T: Read + Seek,
+        T: Read,
     {
         debug_assert_eq!(self.name.len(), NAME_MAX_SIZE);
 
@@ -288,7 +289,7 @@ impl NtfsIndexEntryKey for NtfsFileName {
     fn key_from_slice(slice: &[u8], position: NtfsPosition) -> Result<Self> {
         let value_length = slice.len() as u64;
 
-        let mut cursor = Cursor::new(slice);
+        let mut cursor = ReadOnlyCursor::new(slice);
         Self::new(&mut cursor, position, value_length)
     }
 }

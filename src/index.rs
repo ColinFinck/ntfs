@@ -1,4 +1,4 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::cmp::Ordering;
@@ -6,7 +6,6 @@ use core::marker::PhantomData;
 
 use alloc::vec;
 use alloc::vec::Vec;
-use binrw::io::{Read, Seek};
 
 use crate::attribute::{NtfsAttributeItem, NtfsAttributeType};
 use crate::error::{NtfsError, Result};
@@ -14,6 +13,7 @@ use crate::index_entry::{
     IndexEntryRange, IndexNodeEntryRanges, NtfsIndexEntry, NtfsIndexEntryFlags,
 };
 use crate::indexes::NtfsIndexEntryType;
+use crate::io::{Read, Seek};
 use crate::structured_values::{NtfsIndexAllocation, NtfsIndexRoot};
 use crate::types::NtfsPosition;
 

@@ -1,13 +1,12 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
-
-use binrw::io::{Cursor, Read, Seek};
-use binrw::BinReaderExt;
 
 use crate::attribute::NtfsAttributeType;
 use crate::attribute_value::{NtfsAttributeValue, NtfsResidentAttributeValue};
 use crate::error::{NtfsError, Result};
 use crate::guid::{NtfsGuid, GUID_SIZE};
+use crate::helpers::{read_pod, ReadOnlyCursor};
+use crate::io::{Read, Seek};
 use crate::structured_values::{
     NtfsStructuredValue, NtfsStructuredValueFromResidentAttributeValue,
 };
@@ -31,7 +30,7 @@ pub struct NtfsObjectId {
 impl NtfsObjectId {
     fn new<T>(r: &mut T, position: NtfsPosition, value_length: u64) -> Result<Self>
     where
-        T: Read + Seek,
+        T: Read,
     {
         if value_length < GUID_SIZE as u64 {
             return Err(NtfsError::InvalidStructuredValueSize {
@@ -42,21 +41,21 @@ impl NtfsObjectId {
             });
         }
 
-        let object_id = r.read_le::<NtfsGuid>()?;
+        let object_id = read_pod::<T, NtfsGuid, GUID_SIZE>(r)?;
 
         let mut birth_volume_id = None;
         if value_length >= 2 * GUID_SIZE as u64 {
-            birth_volume_id = Some(r.read_le::<NtfsGuid>()?);
+            birth_volume_id = Some(read_pod::<T, NtfsGuid, GUID_SIZE>(r)?);
         }
 
         let mut birth_object_id = None;
         if value_length >= 3 * GUID_SIZE as u64 {
-            birth_object_id = Some(r.read_le::<NtfsGuid>()?);
+            birth_object_id = Some(read_pod::<T, NtfsGuid, GUID_SIZE>(r)?);
         }
 
         let mut domain_id = None;
         if value_length >= 4 * GUID_SIZE as u64 {
-            domain_id = Some(r.read_le::<NtfsGuid>()?);
+            domain_id = Some(read_pod::<T, NtfsGuid, GUID_SIZE>(r)?);
         }
 
         Ok(Self {
@@ -108,7 +107,7 @@ impl<'n, 'f> NtfsStructuredValueFromResidentAttributeValue<'n, 'f> for NtfsObjec
         let position = value.data_position();
         let value_length = value.len();
 
-        let mut cursor = Cursor::new(value.data());
+        let mut cursor = ReadOnlyCursor::new(value.data());
         Self::new(&mut cursor, position, value_length)
     }
 }

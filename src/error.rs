@@ -1,4 +1,4 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::ops::Range;
@@ -6,6 +6,7 @@ use core::ops::Range;
 use displaydoc::Display;
 
 use crate::attribute::NtfsAttributeType;
+use crate::io;
 use crate::types::NtfsPosition;
 use crate::types::{Lcn, Vcn};
 
@@ -180,14 +181,14 @@ pub enum NtfsError {
         previous_lcn: Lcn,
     },
     /// I/O error: {0:?}
-    Io(binrw::io::Error),
+    Io(io::Error),
     /// The Logical Cluster Number (LCN) {lcn} is too big to be multiplied by the cluster size
     LcnTooBig { lcn: Lcn },
     /// The index root at byte position {position:#x} is a large index, but no matching index allocation attribute was provided
     MissingIndexAllocation { position: NtfsPosition },
     /// The NTFS file at byte position {position:#x} is not a directory
     NotADirectory { position: NtfsPosition },
-    /// The total sector count is too big to be multiplied by the sector size
+    /// The total sector count {total_sectors} is too big to be multiplied by the sector size
     TotalSectorsTooBig { total_sectors: u64 },
     /// The NTFS Attribute at byte position {position:#x} should not belong to an Attribute List, but it does
     UnexpectedAttributeListAttribute { position: NtfsPosition },
@@ -227,31 +228,20 @@ pub enum NtfsError {
     VcnTooBig { vcn: Vcn },
 }
 
-impl From<binrw::error::Error> for NtfsError {
-    fn from(error: binrw::error::Error) -> Self {
-        if let binrw::error::Error::Io(io_error) = error {
-            Self::Io(io_error)
-        } else {
-            // We don't use any binrw attributes that result in other errors.
-            unreachable!("Got a binrw error of unexpected type: {:?}", error);
-        }
-    }
-}
-
-impl From<binrw::io::Error> for NtfsError {
-    fn from(error: binrw::io::Error) -> Self {
+impl From<io::Error> for NtfsError {
+    fn from(error: io::Error) -> Self {
         Self::Io(error)
     }
 }
 
 // To stay compatible with standardized interfaces (e.g. io::Read, io::Seek),
 // we sometimes need to convert from NtfsError to io::Error.
-impl From<NtfsError> for binrw::io::Error {
+impl From<NtfsError> for io::Error {
     fn from(error: NtfsError) -> Self {
         if let NtfsError::Io(io_error) = error {
             io_error
         } else {
-            binrw::io::Error::new(binrw::io::ErrorKind::Other, error)
+            io::Error::new(io::ErrorKind::Other, error)
         }
     }
 }

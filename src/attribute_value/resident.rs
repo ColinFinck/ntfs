@@ -1,4 +1,4 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 //! This module implements a reader for a value that is already in memory and can therefore be accessed via a slice.
@@ -7,10 +7,9 @@
 //! are always read into a buffer first and then fixed up in memory.
 //! Further accesses to the record data can then happen via slices.
 
-use binrw::io::{Read, Seek, SeekFrom};
-
 use super::seek_contiguous;
 use crate::error::Result;
+use crate::io::{Read, Seek, SeekFrom};
 use crate::traits::NtfsReadSeek;
 use crate::types::NtfsPosition;
 
@@ -101,7 +100,7 @@ impl<'f> NtfsReadSeek for NtfsResidentAttributeValue<'f> {
 
 #[cfg(test)]
 mod tests {
-    use binrw::io::SeekFrom;
+    use crate::io::SeekFrom;
 
     use crate::indexes::NtfsFileNameIndex;
     use crate::ntfs::Ntfs;

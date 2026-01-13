@@ -1,4 +1,4 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::iter::FusedIterator;
@@ -7,9 +7,7 @@ use core::ops::Range;
 use core::{fmt, mem};
 
 use alloc::vec::Vec;
-use binrw::io::{Read, Seek};
 use bitflags::bitflags;
-use byteorder::{ByteOrder, LittleEndian};
 use memoffset::offset_of;
 
 use crate::error::{NtfsError, Result};
@@ -19,6 +17,7 @@ use crate::indexes::{
     NtfsIndexEntryData, NtfsIndexEntryHasData, NtfsIndexEntryHasFileReference, NtfsIndexEntryKey,
     NtfsIndexEntryType,
 };
+use crate::io::{Read, Seek};
 use crate::ntfs::Ntfs;
 use crate::types::NtfsPosition;
 use crate::types::Vcn;
@@ -163,7 +162,7 @@ where
         E: NtfsIndexEntryHasData,
     {
         let start = offset_of!(IndexEntryHeader, data_offset);
-        LittleEndian::read_u16(&self.slice[start..])
+        u16::from_le_bytes(*self.slice[start..].first_chunk().unwrap())
     }
 
     /// Returns the length of the data of this Index Entry (if supported by this Index Entry type).
@@ -172,7 +171,7 @@ where
         E: NtfsIndexEntryHasData,
     {
         let start = offset_of!(IndexEntryHeader, data_length);
-        LittleEndian::read_u16(&self.slice[start..])
+        u16::from_le_bytes(*self.slice[start..].first_chunk().unwrap())
     }
 
     /// Returns an [`NtfsFileReference`] for the file referenced by this Index Entry
@@ -202,7 +201,7 @@ where
     /// [`NtfsIndexEntryFlags::LAST_ENTRY`]).
     pub fn index_entry_length(&self) -> u16 {
         let start = offset_of!(IndexEntryHeader, index_entry_length);
-        LittleEndian::read_u16(&self.slice[start..])
+        u16::from_le_bytes(*self.slice[start..].first_chunk().unwrap())
     }
 
     /// Returns the structured value of the key of this Index Entry,
@@ -234,7 +233,7 @@ where
     /// Returns the length of the key of this Index Entry.
     pub fn key_length(&self) -> u16 {
         let start = offset_of!(IndexEntryHeader, key_length);
-        LittleEndian::read_u16(&self.slice[start..])
+        u16::from_le_bytes(*self.slice[start..].first_chunk().unwrap())
     }
 
     /// Returns the absolute position of this NTFS Index Entry within the filesystem, in bytes.
@@ -263,7 +262,7 @@ where
             size: self.slice.len() as u16
         }));
 
-        let vcn = Vcn::from(LittleEndian::read_i64(slice));
+        let vcn = Vcn::from(i64::from_le_bytes(*slice.first_chunk().unwrap()));
         Some(Ok(vcn))
     }
 

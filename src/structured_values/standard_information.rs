@@ -1,42 +1,45 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use binrw::io::{Cursor, Read, Seek};
-use binrw::{BinRead, BinReaderExt};
+use zerocopy::{FromBytes, Immutable, KnownLayout, LittleEndian, Unaligned, U32, U64};
 
 use crate::attribute::NtfsAttributeType;
 use crate::attribute_value::{NtfsAttributeValue, NtfsResidentAttributeValue};
 use crate::error::{NtfsError, Result};
+use crate::helpers::{read_pod, ReadOnlyCursor};
+use crate::io::{Read, Seek};
 use crate::structured_values::{
     NtfsFileAttributeFlags, NtfsStructuredValue, NtfsStructuredValueFromResidentAttributeValue,
 };
 use crate::time::NtfsTime;
 use crate::types::NtfsPosition;
 
-/// Size of all [`StandardInformationData`] fields plus some reserved bytes.
-const STANDARD_INFORMATION_SIZE_NTFS1: usize = 48;
+/// Size of all [`Ntfs1Fields`] fields.
+const NTFS1_FIELDS_SIZE: usize = 48;
 
-/// Size of all [`StandardInformationData`] plus [`StandardInformationDataNtfs3`] fields.
-const STANDARD_INFORMATION_SIZE_NTFS3: usize = 72;
+/// Size of all [`Ntfs3Fields`] fields.
+const ADDITIONAL_NTFS3_FIELDS_SIZE: usize = 24;
 
-#[derive(BinRead, Clone, Debug)]
-struct StandardInformationDataNtfs1 {
+#[derive(Clone, Debug, FromBytes, Immutable, KnownLayout, Unaligned)]
+#[repr(C, packed)]
+struct Ntfs1Fields {
     creation_time: NtfsTime,
     modification_time: NtfsTime,
     mft_record_modification_time: NtfsTime,
     access_time: NtfsTime,
-    file_attributes: u32,
+    file_attributes: U32<LittleEndian>,
+    maximum_versions: U32<LittleEndian>,
+    version: U32<LittleEndian>,
+    class_id: U32<LittleEndian>,
 }
 
-#[derive(BinRead, Clone, Debug)]
-struct StandardInformationDataNtfs3 {
-    maximum_versions: u32,
-    version: u32,
-    class_id: u32,
-    owner_id: u32,
-    security_id: u32,
-    quota_charged: u64,
-    usn: u64,
+#[derive(Clone, Debug, FromBytes, Immutable, KnownLayout, Unaligned)]
+#[repr(C, packed)]
+struct Ntfs3Fields {
+    owner_id: U32<LittleEndian>,
+    security_id: U32<LittleEndian>,
+    quota_charged: U64<LittleEndian>,
+    usn: U64<LittleEndian>,
 }
 
 /// Structure of a $STANDARD_INFORMATION attribute.
@@ -49,29 +52,29 @@ struct StandardInformationDataNtfs3 {
 /// Reference: <https://flatcap.github.io/linux-ntfs/ntfs/attributes/standard_information.html>
 #[derive(Clone, Debug)]
 pub struct NtfsStandardInformation {
-    ntfs1_data: StandardInformationDataNtfs1,
-    ntfs3_data: Option<StandardInformationDataNtfs3>,
+    ntfs1_data: Ntfs1Fields,
+    ntfs3_data: Option<Ntfs3Fields>,
 }
 
 impl NtfsStandardInformation {
     fn new<T>(r: &mut T, position: NtfsPosition, value_length: u64) -> Result<Self>
     where
-        T: Read + Seek,
+        T: Read,
     {
-        if value_length < STANDARD_INFORMATION_SIZE_NTFS1 as u64 {
+        if value_length < NTFS1_FIELDS_SIZE as u64 {
             return Err(NtfsError::InvalidStructuredValueSize {
                 position,
                 ty: NtfsAttributeType::StandardInformation,
-                expected: STANDARD_INFORMATION_SIZE_NTFS1 as u64,
+                expected: NTFS1_FIELDS_SIZE as u64,
                 actual: value_length,
             });
         }
 
-        let ntfs1_data = r.read_le::<StandardInformationDataNtfs1>()?;
+        let ntfs1_data = read_pod::<T, Ntfs1Fields, NTFS1_FIELDS_SIZE>(r)?;
 
         let mut ntfs3_data = None;
-        if value_length >= STANDARD_INFORMATION_SIZE_NTFS3 as u64 {
-            ntfs3_data = Some(r.read_le::<StandardInformationDataNtfs3>()?);
+        if value_length >= (NTFS1_FIELDS_SIZE + ADDITIONAL_NTFS3_FIELDS_SIZE) as u64 {
+            ntfs3_data = Some(read_pod::<T, Ntfs3Fields, ADDITIONAL_NTFS3_FIELDS_SIZE>(r)?);
         }
 
         Ok(Self {
@@ -85,9 +88,9 @@ impl NtfsStandardInformation {
         self.ntfs1_data.access_time
     }
 
-    /// Returns the Class ID of the file, if stored via NTFS 3.x file information.
-    pub fn class_id(&self) -> Option<u32> {
-        self.ntfs3_data.as_ref().map(|x| x.class_id)
+    /// Returns the Class ID of the file.
+    pub fn class_id(&self) -> u32 {
+        self.ntfs1_data.class_id.get()
     }
 
     /// Returns the time this file was created.
@@ -98,14 +101,14 @@ impl NtfsStandardInformation {
     /// Returns flags that a user can set for a file (Read-Only, Hidden, System, Archive, etc.).
     /// Commonly called "File Attributes" in Windows Explorer.
     pub fn file_attributes(&self) -> NtfsFileAttributeFlags {
-        NtfsFileAttributeFlags::from_bits_truncate(self.ntfs1_data.file_attributes)
+        NtfsFileAttributeFlags::from_bits_truncate(self.ntfs1_data.file_attributes.get())
     }
 
-    /// Returns the maximum allowed versions for this file, if stored via NTFS 3.x file information.
+    /// Returns the maximum allowed versions for this file.
     ///
     /// A value of zero means that versioning is disabled for this file.
-    pub fn maximum_versions(&self) -> Option<u32> {
-        self.ntfs3_data.as_ref().map(|x| x.maximum_versions)
+    pub fn maximum_versions(&self) -> u32 {
+        self.ntfs1_data.maximum_versions.get()
     }
 
     /// Returns the time the MFT record of this file was last modified.
@@ -120,29 +123,29 @@ impl NtfsStandardInformation {
 
     /// Returns the Owner ID of the file, if stored via NTFS 3.x file information.
     pub fn owner_id(&self) -> Option<u32> {
-        self.ntfs3_data.as_ref().map(|x| x.owner_id)
+        self.ntfs3_data.as_ref().map(|x| x.owner_id.get())
     }
 
     /// Returns the quota charged by this file, if stored via NTFS 3.x file information.
     pub fn quota_charged(&self) -> Option<u64> {
-        self.ntfs3_data.as_ref().map(|x| x.quota_charged)
+        self.ntfs3_data.as_ref().map(|x| x.quota_charged.get())
     }
 
     /// Returns the Security ID of the file, if stored via NTFS 3.x file information.
     pub fn security_id(&self) -> Option<u32> {
-        self.ntfs3_data.as_ref().map(|x| x.security_id)
+        self.ntfs3_data.as_ref().map(|x| x.security_id.get())
     }
 
     /// Returns the Update Sequence Number (USN) of the file, if stored via NTFS 3.x file information.
     pub fn usn(&self) -> Option<u64> {
-        self.ntfs3_data.as_ref().map(|x| x.usn)
+        self.ntfs3_data.as_ref().map(|x| x.usn.get())
     }
 
-    /// Returns the version of the file, if stored via NTFS 3.x file information.
+    /// Returns the version of the file.
     ///
     /// This will be zero if versioning is disabled for this file.
-    pub fn version(&self) -> Option<u32> {
-        self.ntfs3_data.as_ref().map(|x| x.version)
+    pub fn version(&self) -> u32 {
+        self.ntfs1_data.version.get()
     }
 }
 
@@ -166,7 +169,7 @@ impl<'n, 'f> NtfsStructuredValueFromResidentAttributeValue<'n, 'f> for NtfsStand
         let position = value.data_position();
         let value_length = value.len();
 
-        let mut cursor = Cursor::new(value.data());
+        let mut cursor = ReadOnlyCursor::new(value.data());
         Self::new(&mut cursor, position, value_length)
     }
 }

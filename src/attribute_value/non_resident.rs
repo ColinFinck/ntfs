@@ -1,4 +1,4 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //
 //! This module implements a reader for a non-resident attribute value (that is not part of an Attribute List).
@@ -8,13 +8,10 @@
 use core::iter::FusedIterator;
 use core::mem;
 
-use binrw::io;
-use binrw::io::Cursor;
-use binrw::io::{Read, Seek, SeekFrom};
-use binrw::BinRead;
-
 use super::seek_contiguous;
 use crate::error::{NtfsError, Result};
+use crate::io;
+use crate::io::{Read, Seek, SeekFrom};
 use crate::ntfs::Ntfs;
 use crate::traits::NtfsReadSeek;
 use crate::types::{Lcn, NtfsPosition, Vcn};
@@ -309,51 +306,47 @@ impl<'n, 'f> NtfsDataRuns<'n, 'f> {
         self.position + self.state.offset
     }
 
-    fn read_variable_length_bytes(
-        &self,
-        cursor: &mut Cursor<&[u8]>,
-        byte_count: u8,
-    ) -> Result<[u8; 8]> {
+    fn validate_byte_count<'a>(&self, data: &'a [u8], byte_count: u8) -> Result<&'a [u8]> {
         const MAX_BYTE_COUNT: u8 = mem::size_of::<u64>() as u8;
 
         if byte_count > MAX_BYTE_COUNT {
             return Err(NtfsError::InvalidByteCountInDataRunHeader {
                 position: self.position(),
-                expected: byte_count,
-                actual: MAX_BYTE_COUNT,
+                expected: MAX_BYTE_COUNT,
+                actual: byte_count,
             });
         }
 
-        let mut buf = [0u8; MAX_BYTE_COUNT as usize];
-        cursor.read_exact(&mut buf[..byte_count as usize])?;
+        let Some(slice) = data.get(..byte_count as usize) else {
+            return Err(NtfsError::InvalidByteCountInDataRunHeader {
+                position: self.position(),
+                expected: byte_count,
+                actual: data.len() as u8,
+            });
+        };
 
-        Ok(buf)
+        Ok(slice)
     }
 
-    fn read_variable_length_signed_integer(
-        &self,
-        cursor: &mut Cursor<&[u8]>,
-        byte_count: u8,
-    ) -> Result<i64> {
-        let buf = self.read_variable_length_bytes(cursor, byte_count)?;
+    fn parse_variable_length_signed_integer(data: &[u8]) -> i64 {
+        let mut buf = [0u8; mem::size_of::<i64>()];
+        buf[..data.len()].copy_from_slice(data);
+
         let mut integer = i64::from_le_bytes(buf);
 
-        // We have read `byte_count` bytes into a zeroed buffer and just interpreted that as an `i64`.
+        // We have read `data.len()` bytes into a zeroed buffer and just interpreted that as an `i64`.
         // Sign-extend `integer` to make it replicate the proper value.
-        let unused_bits = (mem::size_of::<i64>() as u32 - byte_count as u32) * 8;
+        let unused_bits = (mem::size_of::<i64>() as u32 - data.len() as u32) * 8;
         integer = integer.wrapping_shl(unused_bits).wrapping_shr(unused_bits);
 
-        Ok(integer)
+        integer
     }
 
-    fn read_variable_length_unsigned_integer(
-        &self,
-        cursor: &mut Cursor<&[u8]>,
-        byte_count: u8,
-    ) -> Result<u64> {
-        let buf = self.read_variable_length_bytes(cursor, byte_count)?;
-        let integer = u64::from_le_bytes(buf);
-        Ok(integer)
+    fn parse_variable_length_unsigned_integer(data: &[u8]) -> u64 {
+        let mut buf = [0u8; mem::size_of::<u64>()];
+        buf[..data.len()].copy_from_slice(data);
+
+        u64::from_le_bytes(buf)
     }
 }
 
@@ -365,9 +358,12 @@ impl<'n, 'f> Iterator for NtfsDataRuns<'n, 'f> {
             return None;
         }
 
+        let data = &self.data[self.state.offset..];
+        let mut i = 0;
+
         // Read the single header byte.
-        let mut cursor = Cursor::new(&self.data[self.state.offset..]);
-        let header = iter_try!(u8::read(&mut cursor));
+        let header = *data.get(i)?;
+        i += 1;
 
         // A zero byte marks the end of the data runs.
         if header == 0 {
@@ -378,9 +374,9 @@ impl<'n, 'f> Iterator for NtfsDataRuns<'n, 'f> {
 
         // The lower nibble indicates the length of the following cluster count variable length integer.
         let cluster_count_byte_count = header & 0x0f;
-        let cluster_count = iter_try!(
-            self.read_variable_length_unsigned_integer(&mut cursor, cluster_count_byte_count)
-        );
+        let cluster_count_data =
+            iter_try!(self.validate_byte_count(&data[i..], cluster_count_byte_count));
+        let cluster_count = Self::parse_variable_length_unsigned_integer(cluster_count_data);
         if cluster_count == 0 {
             return Some(Err(NtfsError::InvalidClusterCountInDataRunHeader {
                 position: NtfsDataRuns::position(self),
@@ -393,24 +389,25 @@ impl<'n, 'f> Iterator for NtfsDataRuns<'n, 'f> {
                 position: NtfsDataRuns::position(self),
                 cluster_count,
             }));
+        i += cluster_count_byte_count as usize;
 
         // The upper nibble indicates the length of the following VCN variable length integer.
         let vcn_byte_count = (header & 0xf0) >> 4;
-        let vcn = Vcn::from(iter_try!(
-            self.read_variable_length_signed_integer(&mut cursor, vcn_byte_count)
-        ));
+        let vcn_data = iter_try!(self.validate_byte_count(&data[i..], vcn_byte_count));
+        let vcn = Vcn::from(Self::parse_variable_length_signed_integer(vcn_data));
+        i += vcn_byte_count as usize;
 
         // The VCN may either indicate "real" data or a sparse Data Run.
         let position = if vcn.value() != 0 {
             // This Data Run contains "real" data.
             // Turn the read VCN into an absolute LCN.
-            let new_lcn = iter_try!(self.state.previous_lcn.checked_add(vcn).ok_or(
-                NtfsError::InvalidVcnInDataRunHeader {
+            let Some(new_lcn) = self.state.previous_lcn.checked_add(vcn) else {
+                return Some(Err(NtfsError::InvalidVcnInDataRunHeader {
                     position: NtfsDataRuns::position(self),
                     vcn,
                     previous_lcn: self.state.previous_lcn,
-                }
-            ));
+                }));
+            };
             self.state.previous_lcn = new_lcn;
             iter_try!(new_lcn.position(self.ntfs))
         } else {
@@ -420,8 +417,7 @@ impl<'n, 'f> Iterator for NtfsDataRuns<'n, 'f> {
 
         // Only advance after having checked for success.
         // In case of an error, a subsequent call shall output the same error again.
-        let bytes_to_advance = cursor.stream_position().unwrap() as usize;
-        self.state.offset += bytes_to_advance;
+        self.state.offset += i;
 
         let data_run = NtfsDataRun::new(position, allocated_size);
         Some(Ok(data_run))
@@ -723,7 +719,7 @@ impl StreamState {
 
 #[cfg(test)]
 mod tests {
-    use binrw::io::SeekFrom;
+    use crate::io::SeekFrom;
 
     use crate::indexes::NtfsFileNameIndex;
     use crate::ntfs::Ntfs;

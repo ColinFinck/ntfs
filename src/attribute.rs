@@ -1,13 +1,12 @@
-// Copyright 2021-2023 Colin Finck <colin@reactos.org>
+// Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::iter::FusedIterator;
 use core::ops::Range;
 use core::{fmt, mem};
 
-use binrw::io::{Read, Seek};
+use crate::io::{Read, Seek};
 use bitflags::bitflags;
-use byteorder::{ByteOrder, LittleEndian};
 use enumn::N;
 use memoffset::offset_of;
 use nt_string::u16strle::U16StrLe;
@@ -208,7 +207,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
     /// for resident attributes, the actual value.
     pub fn attribute_length(&self) -> u32 {
         let start = self.offset + offset_of!(NtfsAttributeHeader, length);
-        LittleEndian::read_u32(&self.file.record_data()[start..])
+        u32::from_le_bytes(*self.file.record_data()[start..].first_chunk().unwrap())
     }
 
     pub(crate) fn ensure_ty(&self, expected: NtfsAttributeType) -> Result<()> {
@@ -227,15 +226,15 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
     /// Returns flags set for this attribute as specified by [`NtfsAttributeFlags`].
     pub fn flags(&self) -> NtfsAttributeFlags {
         let start = self.offset + offset_of!(NtfsAttributeHeader, flags);
-        NtfsAttributeFlags::from_bits_truncate(LittleEndian::read_u16(
-            &self.file.record_data()[start..],
+        NtfsAttributeFlags::from_bits_truncate(u16::from_le_bytes(
+            *self.file.record_data()[start..].first_chunk().unwrap(),
         ))
     }
 
     /// Returns the identifier of this attribute that is unique within the [`NtfsFile`].
     pub fn instance(&self) -> u16 {
         let start = self.offset + offset_of!(NtfsAttributeHeader, instance);
-        LittleEndian::read_u16(&self.file.record_data()[start..])
+        u16::from_le_bytes(*self.file.record_data()[start..].first_chunk().unwrap())
     }
 
     /// Returns `true` if this is a resident attribute, i.e. one where its value
@@ -266,7 +265,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
 
     fn name_offset(&self) -> u16 {
         let start = self.offset + offset_of!(NtfsAttributeHeader, name_offset);
-        LittleEndian::read_u16(&self.file.record_data()[start..])
+        u16::from_le_bytes(*self.file.record_data()[start..].first_chunk().unwrap())
     }
 
     /// Returns the length of the name of this NTFS Attribute, in bytes.
@@ -309,13 +308,13 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
     fn non_resident_value_data_size(&self) -> u64 {
         debug_assert!(!self.is_resident());
         let start = self.offset + offset_of!(NtfsNonResidentAttributeHeader, data_size);
-        LittleEndian::read_u64(&self.file.record_data()[start..])
+        u64::from_le_bytes(*self.file.record_data()[start..].first_chunk().unwrap())
     }
 
     fn non_resident_value_data_runs_offset(&self) -> u16 {
         debug_assert!(!self.is_resident());
         let start = self.offset + offset_of!(NtfsNonResidentAttributeHeader, data_runs_offset);
-        LittleEndian::read_u16(&self.file.record_data()[start..])
+        u16::from_le_bytes(*self.file.record_data()[start..].first_chunk().unwrap())
     }
 
     pub(crate) fn offset(&self) -> usize {
@@ -366,13 +365,13 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
     fn resident_value_length(&self) -> u32 {
         debug_assert!(self.is_resident());
         let start = self.offset + offset_of!(NtfsResidentAttributeHeader, value_length);
-        LittleEndian::read_u32(&self.file.record_data()[start..])
+        u32::from_le_bytes(*self.file.record_data()[start..].first_chunk().unwrap())
     }
 
     fn resident_value_offset(&self) -> u16 {
         debug_assert!(self.is_resident());
         let start = self.offset + offset_of!(NtfsResidentAttributeHeader, value_offset);
-        LittleEndian::read_u16(&self.file.record_data()[start..])
+        u16::from_le_bytes(*self.file.record_data()[start..].first_chunk().unwrap())
     }
 
     /// Attempts to parse the value data as the given structured value type and returns that.
@@ -394,7 +393,7 @@ impl<'n, 'f> NtfsAttribute<'n, 'f> {
     /// if it's an unknown type.
     pub fn ty(&self) -> Result<NtfsAttributeType> {
         let start = self.offset + offset_of!(NtfsAttributeHeader, ty);
-        let ty = LittleEndian::read_u32(&self.file.record_data()[start..]);
+        let ty = u32::from_le_bytes(*self.file.record_data()[start..].first_chunk().unwrap());
 
         NtfsAttributeType::n(ty).ok_or(NtfsError::UnsupportedAttributeType {
             position: self.position(),
@@ -756,7 +755,7 @@ impl<'n, 'f> Iterator for NtfsAttributesRaw<'n, 'f> {
         let end = start + mem::size_of::<u32>();
         let ty_slice = self.file.record_data().get(start..end)?;
 
-        let ty = LittleEndian::read_u32(ty_slice);
+        let ty = u32::from_le_bytes(*ty_slice.first_chunk().unwrap());
         if ty == NtfsAttributeType::End as u32 {
             return None;
         }
