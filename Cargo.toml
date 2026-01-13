@@ -16,6 +16,7 @@ categories = ["filesystem", "no-std", "os::windows-apis", "parser-implementation
 [dependencies]
 arrayvec = { version = "0.7.6", default-features = false }
 bitflags = "2.10.0"
+chrono = { version = "0.4.42", default-features = false, optional = true }
 derive_more = { version = "2.1.1", default-features = false, features = ["display", "from"] }
 enumn = "0.1.14"
 memoffset = "0.9.1"
@@ -31,7 +32,7 @@ time = { version = "0.3.45", features = ["formatting", "large-dates", "macros"],
 
 [features]
 default = ["std"]
-std = ["arrayvec/std", "nt-string/std", "thiserror/std", "time?/std", "zerocopy/std"]
+std = ["arrayvec/std", "chrono?/std", "nt-string/std", "thiserror/std", "time?/std", "zerocopy/std"]
 
 [[example]]
 name = "ntfs-shell"

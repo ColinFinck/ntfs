@@ -155,7 +155,7 @@ pub enum NtfsError {
         expected: u64,
         actual: u64,
     },
-    #[error("The given time can't be represented as an NtfsTime")]
+    #[error("The given time cannot be represented as the target type")]
     InvalidTime,
     #[error("The 2-byte signature field at byte position {position:#x} should contain {expected:?}, but it contains {actual:?}")]
     InvalidTwoByteSignature {
