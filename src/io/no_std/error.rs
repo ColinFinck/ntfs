@@ -3,7 +3,7 @@
 //
 //! Mostly imported from https://github.com/rust-lang/rust/blob/561364e4d5ccc506f610208a4989e91fdbdc8ca7/library/std/src/io/error.rs
 
-use displaydoc::Display;
+use core::fmt;
 
 /// A specialized [`Result`] type for I/O operations.
 pub type Result<T> = core::result::Result<T, Error>;
@@ -33,7 +33,7 @@ impl Error {
 /// Simplified version of [`std::io::ErrorKind`] for `no_std` environments.
 ///
 /// See its documentation for more details.
-#[derive(Clone, Copy, Debug, Display, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[non_exhaustive]
 pub enum ErrorKind {
     /// A parameter was incorrect.
@@ -44,4 +44,10 @@ pub enum ErrorKind {
     UnexpectedEof,
     /// A custom error that does not fall under any other I/O error kind.
     Other,
+}
+
+impl fmt::Display for ErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
 }
