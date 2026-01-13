@@ -52,7 +52,7 @@ impl<Tz: chrono::TimeZone> TryFrom<chrono::DateTime<Tz>> for NtfsTime {
         let seconds_since_windows_epoch = u64::try_from(seconds_since_windows_epoch)
             .map_err(|_| crate::error::NtfsError::InvalidTime)?;
         let intervals_since_windows_epoch = seconds_since_windows_epoch
-            .checked_mul(INTERVALS_PER_SECOND as u64)
+            .checked_mul(INTERVALS_PER_SECOND)
             .ok_or(crate::error::NtfsError::InvalidTime)?;
         let intervals_since_windows_epoch = intervals_since_windows_epoch
             .checked_add(u64::from(dt.timestamp_subsec_nanos()) / 100)
@@ -117,7 +117,7 @@ impl TryFrom<std::time::SystemTime> for NtfsTime {
             .map_err(|_| crate::error::NtfsError::InvalidTime)?;
         let intervals_since_unix_epoch = duration_since_unix_epoch
             .as_secs()
-            .checked_mul(INTERVALS_PER_SECOND as u64)
+            .checked_mul(INTERVALS_PER_SECOND)
             .ok_or(crate::error::NtfsError::InvalidTime)?;
         let intervals_since_unix_epoch = intervals_since_unix_epoch
             .checked_add(duration_since_unix_epoch.subsec_nanos() as u64 / 100)
