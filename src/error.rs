@@ -249,8 +249,7 @@ impl From<NtfsError> for io::Error {
         if let NtfsError::Io(io_error) = error {
             io_error
         } else {
-            #[allow(clippy::io_other_error)]
-            io::Error::new(io::ErrorKind::Other, error)
+            io::Error::other(error)
         }
     }
 }

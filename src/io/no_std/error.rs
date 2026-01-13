@@ -22,6 +22,13 @@ impl Error {
         Self(kind)
     }
 
+    /// Creates a new `Other` I/O error.
+    ///
+    /// The second parameter is always ignored in this simplified `no_std` version of `Error`.
+    pub fn other<E>(_error: E) -> Error {
+        Self(ErrorKind::Other)
+    }
+
     /// Returns the corresponding [`ErrorKind`] for this error.
     #[inline]
     #[must_use]
