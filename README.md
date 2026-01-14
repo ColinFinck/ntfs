@@ -85,7 +85,7 @@ let mut iter = index.entries();
 
 while let Some(entry) = iter.next(&mut fs) {
     let entry = entry.unwrap();
-    let file_name = entry.key().unwrap();
+    let file_name = entry.key().unwrap().unwrap();
     println!("{}", file_name.name());
 }
 ```
