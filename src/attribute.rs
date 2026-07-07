@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use core::iter::FusedIterator;
+use core::mem::offset_of;
 use core::ops::Range;
 use core::{fmt, mem};
 
 use crate::io::{Read, Seek};
 use bitflags::bitflags;
 use enumn::N;
-use memoffset::offset_of;
 use nt_string::u16strle::U16StrLe;
 use strum_macros::Display;
 

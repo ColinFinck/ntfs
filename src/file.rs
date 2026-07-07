@@ -4,10 +4,10 @@
 use core::cmp::Ordering;
 use core::fmt;
 use core::num::NonZeroU64;
+use core::mem::offset_of;
 
 use alloc::vec;
 use bitflags::bitflags;
-use memoffset::offset_of;
 use nt_string::u16strle::U16StrLe;
 
 use crate::attribute::{

@@ -1,10 +1,10 @@
 // Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use core::mem;
+use core::mem::{self, offset_of};
 
 use alloc::vec::Vec;
-use memoffset::{offset_of, span_of};
+use memoffset::span_of;
 
 use crate::error::{NtfsError, Result};
 use crate::types::NtfsPosition;
