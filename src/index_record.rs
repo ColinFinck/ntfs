@@ -4,7 +4,7 @@
 use core::ops::Range;
 
 use alloc::vec;
-use memoffset::offset_of;
+use core::mem::offset_of;
 
 use crate::attribute_value::NtfsAttributeValue;
 use crate::error::{NtfsError, Result};

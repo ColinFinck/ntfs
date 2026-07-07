@@ -1,9 +1,8 @@
 // Copyright 2021-2026 Colin Finck <colin@reactos.org>
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+use core::mem::offset_of;
 use core::ops::RangeInclusive;
-
-use memoffset::offset_of;
 
 use crate::error::{NtfsError, Result};
 use crate::types::{Lcn, NtfsPosition};

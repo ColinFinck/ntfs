@@ -3,12 +3,12 @@
 
 use core::iter::FusedIterator;
 use core::marker::PhantomData;
+use core::mem::offset_of;
 use core::ops::Range;
 use core::{fmt, mem};
 
 use alloc::vec::Vec;
 use bitflags::bitflags;
-use memoffset::offset_of;
 
 use crate::error::{NtfsError, Result};
 use crate::file::NtfsFile;
