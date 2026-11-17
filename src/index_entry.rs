@@ -284,6 +284,17 @@ where
             });
         }
 
+        // An entry shorter than its own header would truncate the slice below the
+        // header (out-of-bounds access to the header fields later on), and a
+        // length of zero would keep the entry iterator from ever advancing.
+        if (self.index_entry_length() as usize) < INDEX_ENTRY_HEADER_SIZE {
+            return Err(NtfsError::InvalidIndexEntrySize {
+                position: self.position,
+                expected: INDEX_ENTRY_HEADER_SIZE as u16,
+                actual: self.index_entry_length(),
+            });
+        }
+
         if self.index_entry_length() as usize > self.slice.len() {
             return Err(NtfsError::InvalidIndexEntrySize {
                 position: self.position,
