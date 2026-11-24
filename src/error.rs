@@ -189,6 +189,11 @@ pub enum NtfsError {
         vcn: Vcn,
         previous_lcn: Lcn,
     },
+    #[error("The NTFS index at byte position {position:#x} exceeds the maximum supported depth of {max_depth} levels (probable B-tree cycle")]
+    IndexDepthExceeded {
+        position: NtfsPosition,
+        max_depth: usize,
+    },
     #[error("I/O error: {0:?}")]
     Io(io::Error),
     #[error(

@@ -17,6 +17,12 @@ use crate::io::{Read, Seek};
 use crate::structured_values::{NtfsIndexAllocation, NtfsIndexRoot};
 use crate::types::NtfsPosition;
 
+/// Maximum number of B-tree levels we traverse.
+///
+/// This limit protects against corrupted filesystems whose subnode references form a cycle,
+/// which would otherwise lead to endless loops and unbounded memory usage.
+const MAX_INDEX_DEPTH: usize = 64;
+
 /// Helper structure to iterate over all entries of an index or find a specific one.
 ///
 /// The `E` type parameter of [`NtfsIndexEntryType`] specifies the type of the index entries.
@@ -162,6 +168,13 @@ where
                 if let Some(subnode_vcn) = entry.subnode_vcn() {
                     let subnode_vcn = iter_try!(subnode_vcn);
 
+                    if self.inner_iterators.len() >= MAX_INDEX_DEPTH {
+                        return Some(Err(NtfsError::IndexDepthExceeded {
+                            position: self.index.index_root_position,
+                            max_depth: MAX_INDEX_DEPTH,
+                        }));
+                    }
+
                     // Read the subnode from the filesystem and get an iterator for it.
                     let index_allocation_item =
                         iter_try!(self.index.index_allocation_item.as_ref().ok_or(
@@ -263,6 +276,7 @@ where
     {
         // Always (re)start by iterating through the Index Root entry ranges.
         self.inner_iterator = self.index.index_root_entry_ranges.clone();
+        let mut depth = 1;
 
         loop {
             // Get the next entry.
@@ -300,6 +314,14 @@ where
             // it comes lexicographically AFTER what we're looking for.
             // In both cases, we have to continue iterating in the subnode of this entry (if there is any).
             let subnode_vcn = iter_try!(entry.subnode_vcn()?);
+
+            if depth >= MAX_INDEX_DEPTH {
+                return Some(Err(NtfsError::IndexDepthExceeded {
+                    position: self.index.index_root_position,
+                    max_depth: MAX_INDEX_DEPTH,
+                }));
+            }
+            depth += 1;
             let index_allocation_item = iter_try!(self.index.index_allocation_item.as_ref().ok_or(
                 NtfsError::MissingIndexAllocation {
                     position: self.index.index_root_position,
