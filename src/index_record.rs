@@ -106,8 +106,10 @@ impl NtfsIndexRecord {
     }
 
     fn entries_range_and_position(&self) -> (Range<usize>, NtfsPosition) {
-        let start = INDEX_RECORD_HEADER_SIZE as usize + self.index_entries_offset() as usize;
-        let end = INDEX_RECORD_HEADER_SIZE as usize + self.index_data_size() as usize;
+        let start = (INDEX_RECORD_HEADER_SIZE as usize)
+            .saturating_add(self.index_entries_offset() as usize);
+        let end =
+            (INDEX_RECORD_HEADER_SIZE as usize).saturating_add(self.index_data_size() as usize);
         let position = self.record.position() + start;
 
         (start..end, position)
@@ -166,23 +168,32 @@ impl NtfsIndexRecord {
 
         // The total size allocated for this Index Record must not be larger than
         // the size defined for all index records of this index.
-        let total_allocated_size = INDEX_RECORD_HEADER_SIZE + self.index_allocated_size();
-        if total_allocated_size > index_record_size {
-            return Err(NtfsError::InvalidIndexAllocatedSize {
+        let total_allocated_size = INDEX_RECORD_HEADER_SIZE
+            .checked_add(self.index_allocated_size())
+            .filter(|size| *size <= index_record_size)
+            .ok_or(NtfsError::InvalidIndexAllocatedSize {
                 position: self.record.position(),
                 expected: index_record_size,
-                actual: total_allocated_size,
-            });
-        }
+                actual: INDEX_RECORD_HEADER_SIZE.saturating_add(self.index_allocated_size()),
+            })?;
 
         // Furthermore, the total used size for this Index Record must not be
         // larger than the total allocated size.
-        let total_data_size = INDEX_RECORD_HEADER_SIZE + self.index_data_size();
-        if total_data_size > total_allocated_size {
-            return Err(NtfsError::InvalidIndexUsedSize {
+        let total_data_size = INDEX_RECORD_HEADER_SIZE
+            .checked_add(self.index_data_size())
+            .filter(|size| *size <= total_allocated_size)
+            .ok_or(NtfsError::InvalidIndexUsedSize {
                 position: self.record.position(),
                 expected: total_allocated_size,
-                actual: total_data_size,
+                actual: INDEX_RECORD_HEADER_SIZE.saturating_add(self.index_data_size()),
+            })?;
+
+        // The entries must start within the used size.
+        let (entries_range, _position) = self.entries_range_and_position();
+        if entries_range.start > total_data_size as usize {
+            return Err(NtfsError::InvalidIndexEntriesRange {
+                position: self.record.position(),
+                range: entries_range,
             });
         }
 
