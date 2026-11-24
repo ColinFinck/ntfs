@@ -93,6 +93,11 @@ pub enum NtfsError {
         range: Range<usize>,
         size: u16,
     },
+    #[error("The NTFS index node at byte position {position:#x} indicates that its entries are in the range {range:?}, which is invalid")]
+    InvalidIndexEntriesRange {
+        position: NtfsPosition,
+        range: Range<usize>,
+    },
     #[error("The NTFS Index Entry at byte position {position:#x} reports a size of {expected} bytes, but it only has {actual} bytes")]
     InvalidIndexEntrySize {
         position: NtfsPosition,
