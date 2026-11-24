@@ -122,6 +122,8 @@ pub enum NtfsError {
         expected: &'static [u8],
         actual: [u8; 4],
     },
+    #[error("The NTFS Index Record size of {size} bytes is invalid, it needs to be between {min} and {max} bytes")]
+    InvalidIndexRecordSize { size: u32, min: u32, max: u32 },
     #[error("The NTFS Index Record at byte position {position:#x} indicates a used size of {expected} bytes, but only {actual} bytes are allocated")]
     InvalidIndexUsedSize {
         position: NtfsPosition,

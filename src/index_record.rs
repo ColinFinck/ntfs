@@ -28,6 +28,12 @@ struct IndexRecordHeader {
 /// Size of all [`IndexNodeHeader`] fields plus some reserved bytes.
 pub(crate) const INDEX_NODE_HEADER_SIZE: usize = 16;
 
+/// Minimum size of an Index Record.
+const MIN_INDEX_RECORD_SIZE: u32 = INDEX_RECORD_HEADER_SIZE + INDEX_NODE_HEADER_SIZE as u32;
+
+/// Maximum size of an Index Record (64KB, Windows typically uses 4KB).
+const MAX_INDEX_RECORD_SIZE: u32 = 0x10000;
+
 #[repr(C, packed)]
 pub(crate) struct IndexNodeHeader {
     pub(crate) entries_offset: u32,
@@ -64,6 +70,14 @@ impl NtfsIndexRecord {
         T: Read + Seek,
     {
         let data_position = value.data_position();
+
+        if !(MIN_INDEX_RECORD_SIZE..=MAX_INDEX_RECORD_SIZE).contains(&index_record_size) {
+            return Err(NtfsError::InvalidIndexRecordSize {
+                size: index_record_size,
+                min: MIN_INDEX_RECORD_SIZE,
+                max: MAX_INDEX_RECORD_SIZE,
+            });
+        }
 
         let mut data = vec![0; index_record_size as usize];
         value.read_exact(fs, &mut data)?;
