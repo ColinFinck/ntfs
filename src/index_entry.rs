@@ -284,6 +284,16 @@ where
             });
         }
 
+        // Check that reported length is at least the header size, accessing the
+        // header fields would otherwise read out of bounds
+        if (self.index_entry_length() as usize) < INDEX_ENTRY_HEADER_SIZE {
+            return Err(NtfsError::InvalidIndexEntrySize {
+                position: self.position,
+                expected: INDEX_ENTRY_HEADER_SIZE as u16,
+                actual: self.index_entry_length(),
+            });
+        }
+
         if self.index_entry_length() as usize > self.slice.len() {
             return Err(NtfsError::InvalidIndexEntrySize {
                 position: self.position,
@@ -312,7 +322,7 @@ where
     E: NtfsIndexEntryType,
 {
     pub(crate) fn new(data: Vec<u8>, range: Range<usize>, position: NtfsPosition) -> Self {
-        debug_assert!(range.end <= data.len());
+        debug_assert!(range.start <= range.end && range.end <= data.len());
         let entry_type = PhantomData;
 
         Self {
@@ -342,7 +352,10 @@ where
         // Get the current entry.
         let start = self.range.start;
         let position = self.position;
-        let entry = iter_try!(NtfsIndexEntry::<E>::new(&self.data[start..], position));
+        let entry = iter_try!(NtfsIndexEntry::<E>::new(
+            &self.data[start..self.range.end],
+            position
+        ));
         let end = start + entry.index_entry_length() as usize;
 
         if entry.flags().contains(NtfsIndexEntryFlags::LAST_ENTRY) {
@@ -433,3 +446,54 @@ where
 }
 
 impl<'s, E> FusedIterator for NtfsIndexNodeEntries<'s, E> where E: NtfsIndexEntryType {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::indexes::NtfsFileNameIndex;
+
+    fn entry_with_length(index_entry_length: u16, flags: u8) -> [u8; 16] {
+        let mut data = [0u8; 16];
+        data[8..10].copy_from_slice(&index_entry_length.to_le_bytes());
+        data[12] = flags;
+        data
+    }
+
+    #[test]
+    fn test_index_entry_length_smaller_than_header() {
+        // Index Entries with length smaller than header size are rejected to
+        // avoid panic on header field accesses later
+        for length in [0, 8, 11, 15] {
+            let data = entry_with_length(length, 0);
+            let result = NtfsIndexEntry::<NtfsFileNameIndex>::new(&data, NtfsPosition::none());
+            assert!(matches!(
+                result,
+                Err(NtfsError::InvalidIndexEntrySize { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn test_index_node_entries_zero_length() {
+        // Entries of length 0 must yield an error instead of looping forever
+        let data = entry_with_length(0, 0);
+        let mut iter = NtfsIndexNodeEntries::<NtfsFileNameIndex>::new(&data, NtfsPosition::none());
+        assert!(matches!(
+            iter.next(),
+            Some(Err(NtfsError::InvalidIndexEntrySize { .. }))
+        ));
+    }
+
+    #[test]
+    fn test_index_node_entry_ranges_respect_range_end() {
+        // The entry claims 32 bytes, but the node's used range only covers 16 bytes
+        let mut data = alloc::vec![0u8; 32];
+        data[8..10].copy_from_slice(&32u16.to_le_bytes());
+        let mut iter =
+            IndexNodeEntryRanges::<NtfsFileNameIndex>::new(data, 0..16, NtfsPosition::none());
+        assert!(matches!(
+            iter.next(),
+            Some(Err(NtfsError::InvalidIndexEntrySize { .. }))
+        ));
+    }
+}
