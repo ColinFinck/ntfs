@@ -79,8 +79,8 @@ impl<'f> NtfsIndexRoot<'f> {
     }
 
     fn entries_range_and_position(&self) -> (Range<usize>, NtfsPosition) {
-        let start = INDEX_ROOT_HEADER_SIZE + self.index_entries_offset() as usize;
-        let end = INDEX_ROOT_HEADER_SIZE + self.index_data_size() as usize;
+        let start = INDEX_ROOT_HEADER_SIZE.saturating_add(self.index_entries_offset() as usize);
+        let end = INDEX_ROOT_HEADER_SIZE.saturating_add(self.index_data_size() as usize);
         let position = self.position + start;
 
         (start..end, position)
@@ -152,6 +152,13 @@ impl<'f> NtfsIndexRoot<'f> {
             });
         }
 
+        if entries_range.start > entries_range.end {
+            return Err(NtfsError::InvalidIndexEntriesRange {
+                position: self.position,
+                range: entries_range,
+            });
+        }
+
         Ok(())
     }
 }
@@ -177,5 +184,24 @@ impl<'n, 'f> NtfsStructuredValue<'n, 'f> for NtfsIndexRoot<'f> {
 impl<'n, 'f> NtfsStructuredValueFromResidentAttributeValue<'n, 'f> for NtfsIndexRoot<'f> {
     fn from_resident_attribute_value(value: NtfsResidentAttributeValue<'f>) -> Result<Self> {
         Self::new(value.data(), value.data_position())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_index_root_entries_offset_after_used_size() {
+        let mut data = [0u8; 48];
+        let node = INDEX_ROOT_HEADER_SIZE;
+        data[node..node + 4].copy_from_slice(&16u32.to_le_bytes());
+        data[node + 4..node + 8].copy_from_slice(&0u32.to_le_bytes());
+
+        let result = NtfsIndexRoot::new(&data, NtfsPosition::none());
+        assert!(matches!(
+            result,
+            Err(NtfsError::InvalidIndexEntriesRange { .. })
+        ));
     }
 }

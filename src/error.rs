@@ -93,6 +93,11 @@ pub enum NtfsError {
         range: Range<usize>,
         size: u16,
     },
+    #[error("The NTFS index node at byte position {position:#x} indicates that its entries are in the range {range:?}, which is invalid")]
+    InvalidIndexEntriesRange {
+        position: NtfsPosition,
+        range: Range<usize>,
+    },
     #[error("The NTFS Index Entry at byte position {position:#x} reports a size of {expected} bytes, but it only has {actual} bytes")]
     InvalidIndexEntrySize {
         position: NtfsPosition,
@@ -117,6 +122,8 @@ pub enum NtfsError {
         expected: &'static [u8],
         actual: [u8; 4],
     },
+    #[error("The NTFS Index Record size of {size} bytes is invalid, it needs to be between {min} and {max} bytes")]
+    InvalidIndexRecordSize { size: u32, min: u32, max: u32 },
     #[error("The NTFS Index Record at byte position {position:#x} indicates a used size of {expected} bytes, but only {actual} bytes are allocated")]
     InvalidIndexUsedSize {
         position: NtfsPosition,
@@ -181,6 +188,11 @@ pub enum NtfsError {
         position: NtfsPosition,
         vcn: Vcn,
         previous_lcn: Lcn,
+    },
+    #[error("The NTFS index at byte position {position:#x} exceeds the maximum supported depth of {max_depth} levels (probable B-tree cycle")]
+    IndexDepthExceeded {
+        position: NtfsPosition,
+        max_depth: usize,
     },
     #[error("I/O error: {0:?}")]
     Io(io::Error),

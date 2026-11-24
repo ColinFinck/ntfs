@@ -759,7 +759,7 @@ mod tests {
         let mut buf = [0xCCu8; 1001];
         let bytes_read = data_attribute_value.read(&mut testfs1, &mut buf).unwrap();
         assert_eq!(bytes_read, 1000);
-        assert_eq!(&buf[..1000], &[b'1', b'2', b'3', b'4', b'5'].repeat(200));
+        assert_eq!(&buf[..1000], &b"12345".repeat(200));
         assert_eq!(buf[1000], 0xCC);
 
         // The internal position should have stopped directly after the last byte of the file,
